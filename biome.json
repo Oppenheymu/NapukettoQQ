@@ -50,16 +50,31 @@
                         "strictCase": false,
                         "conventions": [
                             {
-                                "selector": { "kind": "typeParameter" },
-                                "formats": ["PascalCase"]
+                                "selector": {
+                                    "kind": "typeParameter"
+                                },
+                                "formats": [
+                                    "PascalCase"
+                                ]
                             },
                             {
-                                "selector": { "kind": "typeMember" },
-                                "formats": ["camelCase", "snake_case"]
+                                "selector": {
+                                    "kind": "typeMember"
+                                },
+                                "formats": [
+                                    "camelCase",
+                                    "snake_case"
+                                ]
                             },
                             {
-                                "selector": { "kind": "objectLiteralMember" },
-                                "formats": ["camelCase", "snake_case", "CONSTANT_CASE"]
+                                "selector": {
+                                    "kind": "objectLiteralMember"
+                                },
+                                "formats": [
+                                    "camelCase",
+                                    "snake_case",
+                                    "CONSTANT_CASE"
+                                ]
                             }
                         ]
                     }
