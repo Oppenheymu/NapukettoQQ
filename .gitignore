@@ -33,3 +33,6 @@ docs
 *.ntvs*
 *.njsproj
 *.sln
+
+# probe scripts (研究工具，结论见 kernel/docs/design.md)
+packages/kernel/scripts/probe/

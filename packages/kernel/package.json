@@ -24,6 +24,7 @@
     },
     "license": "GPL-3.0",
     "dependencies": {
+        "koffi": "^3.1.4",
         "pino": "^10.3.1",
         "pino-pretty": "^13.1.3"
     }
