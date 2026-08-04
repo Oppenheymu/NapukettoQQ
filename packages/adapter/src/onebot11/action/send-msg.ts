@@ -6,8 +6,8 @@
  */
 
 import { z } from "zod";
-import type { ErrorCodeMap } from "../../core/index.js";
 import { BaseAction } from "../../core/index.js";
+import { ob11ErrorCodeMap } from "./error-map.js";
 
 const sendMsgSchema = z.object({
     message_type: z.enum(["group", "private"]).optional(),
@@ -33,14 +33,3 @@ export class SendMsgAction extends BaseAction<SendMsgPayload, { message_id: numb
         return Promise.resolve({ message_id: Date.now() });
     }
 }
-
-/** OB11 错误码映射表（ADR-017：协议层只维护映射，不解析逻辑）。 */
-export const ob11ErrorCodeMap: ErrorCodeMap = {
-    SEND_FAILED: 100,
-    PERMISSION_DENIED: 101,
-    NOT_FOUND: 102,
-    TIMEOUT: 103,
-    NOT_LOGIN: 104,
-    INVALID_PARAM: 105,
-    UNKNOWN: 999,
-};

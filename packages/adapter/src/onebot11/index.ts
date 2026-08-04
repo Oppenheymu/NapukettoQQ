@@ -3,8 +3,8 @@
  * 公共面：类型 + 动作注册表 + 配置 schema + 翻译层（adapter.ts 于 P2 打通 kernel 事件后接入）。
  */
 
+export { ob11ErrorCodeMap } from "./action/error-map.js";
 export { createOb11ActionRegistry } from "./action/index.js";
-export { ob11ErrorCodeMap } from "./action/send-msg.js";
 export type {
     OB11BaseEvent,
     OB11Event,
@@ -38,10 +38,18 @@ export {
     unescapeCqText,
 } from "./helper/index.js";
 export type {
+    CurrentTalkative,
+    FriendInfo,
+    GroupHonorInfo,
     GroupInfo,
+    GroupMemberInfo,
+    HonorMember,
     LoginInfo,
     OB11Message,
     OB11MessageSegment,
     OB11Return,
     Sender,
+    Sex,
+    StrangerInfo,
+    VersionInfo,
 } from "./types/index.js";

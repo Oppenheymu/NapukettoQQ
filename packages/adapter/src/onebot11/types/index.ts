@@ -50,3 +50,93 @@ export interface LoginInfo {
     user_id: number;
     nickname: string;
 }
+
+/** 性别枚举。 */
+export type Sex = "male" | "female" | "unknown";
+
+/** 群成员信息（get_group_member_info 返回，含 go-cqhttp 扩展字段）。 */
+export interface GroupMemberInfo {
+    group_id: number;
+    user_id: number;
+    nickname: string;
+    card?: string;
+    sex?: Sex;
+    age?: number;
+    area?: string;
+    join_time?: number;
+    last_sent_time?: number;
+    level?: string;
+    role: "owner" | "admin" | "member";
+    unfriendly?: boolean;
+    title?: string;
+    title_expire_time?: number;
+    card_changeable?: boolean;
+    /** go-cqhttp 扩展。 */
+    qq_level?: number;
+    group_level?: number;
+    special_title?: string;
+    shut_up_timestamp?: number;
+    is_friend?: boolean;
+    is_bot?: boolean;
+}
+
+/** 好友信息（get_friend_list 返回）。 */
+export interface FriendInfo {
+    user_id: number;
+    nickname: string;
+    remark?: string;
+}
+
+/** 陌生人信息（get_stranger_info 返回）。 */
+export interface StrangerInfo {
+    user_id: number;
+    nickname: string;
+    sex?: Sex;
+    age?: number;
+    /** go-cqhttp 扩展。 */
+    qid?: string;
+    level?: number;
+    login_days?: number;
+    uid?: string;
+}
+
+/** 群荣誉成员项（get_group_honor_info 返回列表项）。 */
+export interface HonorMember {
+    user_id: number;
+    nickname: string;
+    avatar?: string;
+    day_count?: number;
+    description?: string;
+}
+
+/** 当前龙王（可能为 null）。 */
+export interface CurrentTalkative {
+    user_id: number;
+    nickname: string;
+    day_count: number;
+}
+
+/** 群荣誉信息（get_group_honor_info 返回）。 */
+export interface GroupHonorInfo {
+    group_id: number;
+    current_talkative?: CurrentTalkative | null;
+    talkative_list: HonorMember[];
+    performer_list: HonorMember[];
+    legend_list: HonorMember[];
+    strong_newbie_list: HonorMember[];
+    emotion_list: HonorMember[];
+}
+
+/** 版本信息（get_version_info 返回，含 go-cqhttp 扩展字段）。 */
+export interface VersionInfo {
+    app_name: string;
+    app_version: string;
+    protocol_version: "v11";
+    /** go-cqhttp 扩展。 */
+    app_full_name?: string;
+    runtime_version?: string;
+    runtime_os?: string;
+    sign_library?: Record<string, unknown>;
+    configuration?: Record<string, unknown>;
+    walle_version?: string;
+}
