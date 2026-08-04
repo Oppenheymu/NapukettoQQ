@@ -1,9 +1,9 @@
 {
 	"$schema": "https://biomejs.dev/schemas/2.5.6/schema.json",
 	"vcs": {
-		"enabled": false,
+		"enabled": true,
 		"clientKind": "git",
-		"useIgnoreFile": false
+		"useIgnoreFile": true
 	},
 	"files": {
 		"ignoreUnknown": false
@@ -17,7 +17,27 @@
 	"linter": {
 		"enabled": true,
 		"rules": {
-			"preset": "recommended"
+			"preset": "all",
+			"correctness": {
+				"noNodejsModules": "off",
+				"noUnusedVariables": "error",
+				"noUnusedFunctionParameters": "error",
+				"noUnusedImports": "error",
+				"noUnusedPrivateClassMembers": "error"
+			},
+			"suspicious": {
+				"noExplicitAny": "error",
+				"noImplicitAnyLet": "error",
+				"noFallthroughSwitchClause": "error"
+			},
+			"style": {
+				"useImportType": "error",
+				"useExportType": "error"
+			},
+			"nursery": {
+				"preset": "all",
+				"noFloatingPromises": "error"
+			}
 		}
 	},
 	"javascript": {

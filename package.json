@@ -4,6 +4,10 @@
   "description": "",
   "main": "index.js",
   "scripts": {
+    "check": "biome check . && tsc --noEmit",
+    "fix": "biome check --write . && tsc --noEmit",
+    "lint": "biome lint .",
+    "format": "biome format --write .",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
