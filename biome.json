@@ -20,10 +20,17 @@
             "preset": "all",
             "correctness": {
                 "noNodejsModules": "off",
+                "useImportExtensions": "off",
                 "noUnusedVariables": "error",
                 "noUnusedFunctionParameters": "error",
                 "noUnusedImports": "error",
                 "noUnusedPrivateClassMembers": "error"
+            },
+            "performance": {
+                "noBarrelFile": "off"
+            },
+            "complexity": {
+                "useLiteralKeys": "off"
             },
             "suspicious": {
                 "noExplicitAny": "error",
@@ -32,7 +39,12 @@
             },
             "style": {
                 "useImportType": "error",
-                "useExportType": "error"
+                "useExportType": "error",
+                "noProcessEnv": "off",
+                "useErrorCause": "off"
+            },
+            "security": {
+                "noSecrets": "off"
             },
             "nursery": {
                 "preset": "all",

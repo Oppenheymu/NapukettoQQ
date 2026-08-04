@@ -22,7 +22,7 @@
     "devDependencies": {
         "tsdown": "^0.22.14"
     },
-    "license": "ISC",
+    "license": "GPL-3.0",
     "dependencies": {
         "pino": "^10.3.1",
         "pino-pretty": "^13.1.3"
