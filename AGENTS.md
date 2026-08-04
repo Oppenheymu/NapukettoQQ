@@ -46,6 +46,7 @@ pnpm --filter @napuketto/kernel dev   # 单包 watch 构建
 
 - **一个模块一个模块实现**：开工前先读 `docs/architecture.md` 与对应包的 `docs/design.md`，按其中的「实现顺序」推进，不跨模块跳跃；每完成一个模块跑一次 `pnpm check`。
 - **类型层来自运行时探测**：`services/listeners/entities` 的类型通过加载 `wrapper.node` 后的运行时反射 + 实体 JSON 日志观察产出，不是拍脑袋或抄别家。探测脚本放 `packages/kernel/scripts/probe/`。
+- **kernel 无全局单例**（ADR-015 推论）：logger / cache / event-channel 等都是实例化对象，由 `CoreContext` 持有——多账号多进程场景每进程一份，避免跨账号状态污染。
 - **新增协议**（OneBot 12 / Satori）→ 在 `packages/adapter` 内新增 `onebot12/`、`satori/` 目录，复用 core 框架（生命周期/订阅/广播/校验），**不改 network、不改 kernel**。
 - **写代码前先更新对应包的 `docs/design.md`**，设计先行。
 
