@@ -37,22 +37,6 @@ export interface Sender {
     role?: "owner" | "admin" | "member";
 }
 
-/** 消息事件基类。 */
-export interface OB11MessageEvent {
-    time: number;
-    self_id: number;
-    post_type: "message";
-    message_type: "group" | "private";
-    sub_type: string;
-    message_id: number;
-    user_id: number;
-    message: OB11Message;
-    raw_message: string;
-    font: number;
-    sender: Sender;
-    group_id?: number;
-}
-
 /** 群信息（get_group_info 返回）。 */
 export interface GroupInfo {
     group_id: number;

@@ -5,6 +5,22 @@
 
 export { createOb11ActionRegistry } from "./action/index.js";
 export { ob11ErrorCodeMap } from "./action/send-msg.js";
+export type {
+    OB11BaseEvent,
+    OB11Event,
+    OB11FriendRequestEvent,
+    OB11GroupMessageEvent,
+    OB11GroupRequestEvent,
+    OB11HeartbeatMetaEvent,
+    OB11LifecycleMetaEvent,
+    OB11MessageEvent,
+    OB11MetaEvent,
+    OB11NoticeEvent,
+    OB11PostType,
+    OB11PrivateMessageEvent,
+    OB11RequestEvent,
+    OB11Status,
+} from "./event/index.js";
 export type { CqCode, OB11Config } from "./helper/index.js";
 export {
     canonicalToCqMessage,
@@ -25,7 +41,6 @@ export type {
     GroupInfo,
     LoginInfo,
     OB11Message,
-    OB11MessageEvent,
     OB11MessageSegment,
     OB11Return,
     Sender,
