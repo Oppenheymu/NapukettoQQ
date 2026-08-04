@@ -42,7 +42,13 @@
                 "useImportType": "error",
                 "useExportType": "error",
                 "noProcessEnv": "off",
-                "useErrorCause": "off"
+                "useErrorCause": "off",
+                "useNamingConvention": {
+                    "level": "error",
+                    "options": {
+                        "strictCase": false
+                    }
+                }
             },
             "security": {
                 "noSecrets": "off"
