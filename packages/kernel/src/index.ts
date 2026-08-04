@@ -18,3 +18,5 @@ export type { PathOptions } from "./paths.js";
 export { DEFAULT_DATA_ROOT_NAME, PathWrapper, resolveDataRoot } from "./paths.js";
 export type { RawMessage } from "./types/entities.js";
 export type { MsgListener } from "./types/listeners/msg.js";
+export type { CanonicalElement } from "./types/message-element.js";
+export { toCanonicalElements, toSendElements } from "./types/message-element.js";

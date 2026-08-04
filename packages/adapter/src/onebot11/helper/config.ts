@@ -4,6 +4,11 @@
  */
 import { z } from "zod";
 
+/** HTTP 反向服务器默认端口。 */
+const DEFAULT_HTTP_PORT = 3000;
+/** 反向 WS server 默认端口。 */
+const DEFAULT_WS_PORT = 3001;
+
 /** OB11 配置 schema。 */
 export const ob11ConfigSchema = z.object({
     /** HTTP 反向服务器（接收第三方调用）。 */
@@ -11,9 +16,9 @@ export const ob11ConfigSchema = z.object({
         .object({
             enabled: z.boolean().default(false),
             host: z.string().default("127.0.0.1"),
-            port: z.number().int().default(3000),
+            port: z.number().int().default(DEFAULT_HTTP_PORT),
         })
-        .default({ enabled: false, host: "127.0.0.1", port: 3000 }),
+        .default({ enabled: false, host: "127.0.0.1", port: DEFAULT_HTTP_PORT }),
     /** HTTP 正向上报（事件上报到第三方）。 */
     httpPost: z
         .object({
@@ -26,9 +31,9 @@ export const ob11ConfigSchema = z.object({
         .object({
             enabled: z.boolean().default(false),
             host: z.string().default("127.0.0.1"),
-            port: z.number().int().default(3001),
+            port: z.number().int().default(DEFAULT_WS_PORT),
         })
-        .default({ enabled: false, host: "127.0.0.1", port: 3001 }),
+        .default({ enabled: false, host: "127.0.0.1", port: DEFAULT_WS_PORT }),
     /** 正向 WS client（主动连接第三方）。 */
     wsReverse: z
         .object({

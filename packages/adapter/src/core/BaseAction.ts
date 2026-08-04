@@ -67,13 +67,10 @@ export abstract class BaseAction<TPayload, TReturn> {
             const retcode = this.errorCodeMap[typed.code] ?? this.errorCodeMap["UNKNOWN"];
             return { retcode, status: "failed", data: null, message: err.message };
         }
-        let message: string;
         if (err instanceof Error) {
-            message = err.message;
-        } else {
-            message = "未知错误";
+            return this.fail(this.errorCodeMap["UNKNOWN"], err.message);
         }
-        return this.fail(this.errorCodeMap["UNKNOWN"], message);
+        return this.fail(this.errorCodeMap["UNKNOWN"], "未知错误");
     }
 
     private fail(retcode: number, message: string): ActionResult<TReturn> {

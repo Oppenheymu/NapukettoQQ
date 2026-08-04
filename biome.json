@@ -53,28 +53,19 @@
                                 "selector": {
                                     "kind": "typeParameter"
                                 },
-                                "formats": [
-                                    "PascalCase"
-                                ]
+                                "formats": ["PascalCase"]
                             },
                             {
                                 "selector": {
                                     "kind": "typeMember"
                                 },
-                                "formats": [
-                                    "camelCase",
-                                    "snake_case"
-                                ]
+                                "formats": ["camelCase", "snake_case"]
                             },
                             {
                                 "selector": {
                                     "kind": "objectLiteralMember"
                                 },
-                                "formats": [
-                                    "camelCase",
-                                    "snake_case",
-                                    "CONSTANT_CASE"
-                                ]
+                                "formats": ["camelCase", "snake_case", "CONSTANT_CASE"]
                             }
                         ]
                     }
