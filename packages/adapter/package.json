@@ -17,12 +17,17 @@
         "./core": {
             "types": "./dist/core/index.d.mts",
             "import": "./dist/core/index.mjs"
+        },
+        "./onebot11": {
+            "types": "./dist/onebot11/index.d.mts",
+            "import": "./dist/onebot11/index.mjs"
         }
     },
     "tsdown": {
         "entry": [
             "src/index.ts",
-            "src/core/index.ts"
+            "src/core/index.ts",
+            "src/onebot11/index.ts"
         ]
     },
     "scripts": {

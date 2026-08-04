@@ -1,5 +1,6 @@
 /**
- * OneBot 11 helper（占位）
- * 后续在此实现：config.ts（zod schema）/ data.ts（OB11Constructor 翻译）/ cqcode.ts（CQ 码编解码）。
+ * OneBot 11 helper：配置 schema（ADR-012）
  */
-export {};
+
+export type { OB11Config } from "./config.js";
+export { ob11ConfigSchema } from "./config.js";
