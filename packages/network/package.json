@@ -24,7 +24,6 @@
     },
     "license": "ISC",
     "dependencies": {
-        "@napuketto/onebot": "workspace:*",
         "hono": "^4.12.34",
         "ws": "^8.21.1"
     }
