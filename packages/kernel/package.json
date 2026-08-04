@@ -22,5 +22,8 @@
     "devDependencies": {
         "tsdown": "^0.22.14"
     },
-    "license": "ISC"
+    "license": "ISC",
+    "dependencies": {
+        "consola": "^3.4.2"
+    }
 }
