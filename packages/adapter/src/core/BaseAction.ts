@@ -63,7 +63,7 @@ export abstract class BaseAction<TPayload, TReturn> {
     private mapError(err: unknown): ActionResult<TReturn> {
         if (err instanceof Error && "code" in err) {
             const typed = err as Error & { code: KernelErrorCode };
-            // biome-ignore lint/style/useDestructuring: 从断言联合类型访问 code，解构会丢失 err 其余属性
+            //从断言联合类型访问 code，解构会丢失 err 其余属性
             const retcode = this.errorCodeMap[typed.code] ?? this.errorCodeMap["UNKNOWN"];
             return { retcode, status: "failed", data: null, message: err.message };
         }
