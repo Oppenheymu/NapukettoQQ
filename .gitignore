@@ -21,7 +21,7 @@ pnpm-debug.log*
 .eslintcache
 
 # OS / IDE
-docs
+/docs/
 .DS_Store
 .idea/
 .VSCodeCounter
