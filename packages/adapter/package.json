@@ -6,14 +6,24 @@
     "files": [
         "dist"
     ],
-    "main": "./dist/index.js",
-    "module": "./dist/index.js",
-    "types": "./dist/index.d.ts",
+    "main": "./dist/index.mjs",
+    "module": "./dist/index.mjs",
+    "types": "./dist/index.d.mts",
     "exports": {
         ".": {
-            "types": "./dist/index.d.ts",
-            "import": "./dist/index.js"
+            "types": "./dist/index.d.mts",
+            "import": "./dist/index.mjs"
+        },
+        "./core": {
+            "types": "./dist/core/index.d.mts",
+            "import": "./dist/core/index.mjs"
         }
+    },
+    "tsdown": {
+        "entry": [
+            "src/index.ts",
+            "src/core/index.ts"
+        ]
     },
     "scripts": {
         "dev": "tsdown --watch",

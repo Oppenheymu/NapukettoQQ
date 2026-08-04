@@ -1,5 +1,12 @@
 /**
- * @napuketto/adapter 协议适配器框架（占位）
- * 后续在此实现：BaseProtocolAdapter（生命周期骨架）/ BaseAction（zod 校验）/ registry / config。
+ * adapter core 框架入口（ADR-013，可被第三方复用）
  */
-export {};
+
+export { ActionRegistry } from "./action-registry.js";
+export type { ProtocolAdapterLike } from "./adapter-registry.js";
+export { AdapterRegistry } from "./adapter-registry.js";
+export type { ActionResult, ErrorCodeMap } from "./BaseAction.js";
+export { BaseAction } from "./BaseAction.js";
+export type { ProtocolHooks } from "./BaseProtocolAdapter.js";
+export { BaseProtocolAdapter } from "./BaseProtocolAdapter.js";
+export { ProtocolConfig } from "./config.js";

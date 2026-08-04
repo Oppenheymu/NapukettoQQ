@@ -22,6 +22,7 @@
                 "noNodejsModules": "off",
                 "useImportExtensions": "off",
                 "useQwikValidLexicalScope": "off",
+                "noUnresolvedImports": "off",
                 "noUnusedVariables": "error",
                 "noUnusedFunctionParameters": "error",
                 "noUnusedImports": "error",
