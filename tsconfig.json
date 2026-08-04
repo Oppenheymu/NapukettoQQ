@@ -1,0 +1,45 @@
+{
+    "$schema": "https://json.schemastore.org/tsconfig",
+    "compilerOptions": {
+        /* 核心与运行时环境 */
+        "target": "ES2023",
+        "module": "NodeNext",
+        "moduleResolution": "NodeNext",
+        "lib": [
+            "ES2023"
+        ],
+        "types": [
+            "node"
+        ],
+        /* 极严格类型检查 (Type Checking) */
+        "strict": true,
+        "noImplicitAny": true,
+        "strictNullChecks": true,
+        "strictFunctionTypes": true,
+        "strictBindCallApply": true,
+        "strictPropertyInitialization": true,
+        "noImplicitThis": true,
+        "alwaysStrict": true,
+        /* 防爆增强 (推荐的高级安全选项) */
+        // 强制数组/对象索引取值必须包含 undefined (例如 arr[0] 的类型是 T | undefined)
+        "noUncheckedIndexedAccess": true,
+        // 强制声明 optional 属性时，undefined 必须显式声明
+        "exactOptionalPropertyTypes": true,
+        // 禁止未使用的局部变量与参数
+        "noUnusedLocals": true,
+        "noUnusedParameters": true,
+        "noImplicitReturns": true,
+        "noFallthroughCasesInSwitch": true,
+        "noImplicitOverride": true,
+        /* 模块与编译规范 */
+        // 强制要求显式使用 `import type`，禁止无意导入运行时代码
+        "verbatimModuleSyntax": true,
+        "isolatedModules": true,
+        "esModuleInterop": true,
+        "skipLibCheck": true,
+        "forceConsistentCasingInFileNames": true,
+        /* 声明文件生成 (由 tsdown 接管构建，这里开启类型声明) */
+        "declaration": true,
+        "declarationMap": true
+    }
+}

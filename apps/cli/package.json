@@ -26,5 +26,10 @@
     "devDependencies": {
         "tsdown": "^0.22.14"
     },
-    "license": "ISC"
+    "license": "ISC",
+    "dependencies": {
+        "@napuketto/kernel": "workspace:*",
+        "@napuketto/network": "workspace:*",
+        "@napuketto/onebot": "workspace:*"
+    }
 }

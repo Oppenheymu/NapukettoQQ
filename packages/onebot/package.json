@@ -22,5 +22,9 @@
     "devDependencies": {
         "tsdown": "^0.22.14"
     },
-    "license": "ISC"
+    "license": "ISC",
+    "dependencies": {
+        "@napuketto/kernel": "workspace:*",
+        "zod": "^4.4.3"
+    }
 }
