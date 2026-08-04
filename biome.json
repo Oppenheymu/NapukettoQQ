@@ -21,6 +21,7 @@
             "correctness": {
                 "noNodejsModules": "off",
                 "useImportExtensions": "off",
+                "useQwikValidLexicalScope": "off",
                 "noUnusedVariables": "error",
                 "noUnusedFunctionParameters": "error",
                 "noUnusedImports": "error",
