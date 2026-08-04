@@ -22,7 +22,7 @@
     "devDependencies": {
         "tsdown": "^0.22.14"
     },
-    "license": "ISC",
+    "license": "GPL-3.0",
     "dependencies": {
         "hono": "^4.12.34",
         "ws": "^8.21.1"
