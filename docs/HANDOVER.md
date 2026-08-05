@@ -2,7 +2,9 @@
 
 > 新对话开场必读：本文件 + `AGENTS.md` + `docs/architecture.md` + 各包 `docs/design.md` + `/memories/repo/project-status.md`。
 >
-> 工作区干净，HEAD = `a435d89`，`pnpm check` 全绿（83 文件）。
+> 工作区干净，HEAD = `507959d`，`pnpm check` 全绿（151 文件）。
+>
+> ⚠️ **优先事项（用户 2026-08-05 拍板）**：API 已实现六批共 78 个动作，**剩余 API 多为 OIDB 依赖（违反 NAPI 路线）**——**下一步重心转向基础设施**：api/ 聚合层、cache/（ADR-008）、cli config/supervisor、onebot12/satori（详见 §8）。
 
 ---
 
@@ -23,6 +25,14 @@ NapukettoQQ：基于 QQ NT 客户端原生模块（`wrapper.node`）的机器人
 ## 2. 当前进度（commit 链，时间正序）
 
 ```
+507959d feat(adapter,kernel): P2-15 第六批 NapCat API（陌生人信息+csrf+群请求+精华+荣誉 7 个）
+74ed607 feat(adapter,kernel): P2-14 第五批 NapCat API（群文件+资料+点赞+翻译 16 个）
+7dcf94b chore(adapter): 重组 onebot11/action 目录（message/group/friend/system 四分组）
+c7e0d5f feat(adapter,kernel): P2-13 第四批 NapCat API（ticket+群系统+已读别名 7 个）
+655c880 feat(adapter,kernel): P2-12 第三批 NapCat API（合并转发+在线状态+单条转发+下载+进程 9 个）
+bf23cbf feat(adapter,kernel): P2-11 第二批 NapCat API（好友+系统+输入状态 13 个）
+10fc6e6 feat(adapter,kernel): P2-10 第一批 NapCat API（消息+群管 19 个）
+7ece3f7 docs: 交接文档（HANDOVER.md）——全量实现 NapCat API 的规划与清单
 a435d89 chore: biome.json 格式化
 21cb14e feat(loader): boot.cjs QR 登录回退（快速登录失败自动扫码）
 4967f5a feat(kernel): core.login QR 回退（快速登录失败 → QR 登录）
@@ -57,14 +67,22 @@ b2574ec refactor(kernel): 解耦 wrapper-config/wrapper-adapters
 - 装配层：context（CoreContext）/ core（NapukettoCore.create/attachWrapper/login/stop）
 - 登录：lifecycle（quickLogin/initAndStartSession）/ login（QrLoginSession 状态机 + selfInfo）/ core.login QR 回退（快速登录失败 → 二维码写缓存目录）
 - 事件链路：msg-bridge（MsgBridge：原生 listener → NTEventChannel）/ types/listeners/msg
-- apis：MsgApi（sendMessage/recallMessage/fetchMessages/markRead/fetchMsgsByMsgId/setMsgEmojiLike/fetchPttText/setInputStatus）/ GroupApi（列表/详情/成员/uin↔uid + kick/ban/role/card/name/quit/essence/at_all_remain）/ FriendApi（列表 + isBuddy + 好友请求/备注/删除/分类/可疑申请）
-- types：wrapper.ts / services（msg-service/group-service/buddy-service，说明书参考自研描述）/ entities（ChatType/Peer/RawMessage/RawElement + grayTip 结构）/ message-element（toCanonicalElements/toSendElements 双向映射）
+- apis（12 个）：
+  - MsgApi：sendMessage/recallMessage/fetchMessages/markRead/fetchMsgsByMsgId/setMsgEmojiLike/fetchPttText/setInputStatus/sendForwardMessage/fetchForwardMessage/forwardSingleMessage/setOnlineStatus
+  - GroupApi：列表/详情/成员/uin↔uid + kick/ban/role/card/name/quit/essence/at_all_remain
+  - GroupNotifyApi：getSingleScreenNotifies/getGroupShutUpMemberList/handleGroupRequest
+  - FriendApi：列表 + isBuddy + 好友请求/备注/删除/分类/可疑申请
+  - TicketApi：getClientKey/getCookies（jump 跳转解析 set-cookie）+ static getBkn
+  - RichMediaApi：translateWords + 群文件（列表/空间/建夹/删除/重命名/移动/转存）
+  - ProfileApi：setLongNick/setNickName/setHeader/getStrangerInfo
+  - ProfileLikeApi：sendLike；WebApi：getEssenceMsgList/getGroupHonorInfo（qun.qq.com web 接口）
+- types：wrapper.ts / services（msg/group/buddy/ticket/richmedia/profile/profile-like，说明书参考自研描述）/ entities（ChatType/Peer/RawMessage/RawElement + grayTip 结构）/ message-element（toCanonicalElements/toSendElements 双向映射）
 
 ### 3.2 adapter（@napuketto/adapter）
 - core：BaseProtocolAdapter / BaseAction / ActionRegistry / AdapterRegistry / ProtocolConfig
 - onebot11：
   - adapter.ts：NapukettoOneBot11Adapter（收链路 + 发链路 handleRequest + 传输装配 + 心跳）
-  - action/：**34 个动作真实化**（消息 11：send_msg/send_private_msg/send_group_msg/delete_msg/get_msg/双历史/mark_read/emoji_like/fetch_ptt_text/set_input_status；查询 6；群管 10；好友 6：set_friend_add_request/set_friend_remark/delete_friend/get_friends_with_category/双可疑申请；系统 6：get_status/get_version_info/clean_cache/can_send_image/can_send_record/get_robot_uin_range）+ error-map
+  - action/：**78 个动作，已重组为 message/group/friend/system 四分组**（每个子目录独立文件，导入路径 core=../../../core、error-map=../error-map）+ error-map
   - helper/：config（ob11ConfigSchema）/ cqcode（CQ 码编解码）/ data（canonical↔OB11 翻译）/ translate（Group/GroupMember→OB11）/ message-unique（雪花 msgId↔int32 + peer 记录）/ message-info（get_msg 返回结构）/ message-event（消息事件翻译）/ notice（grayTip→OB11 notice）
   - transport.ts：assembleOb11Transports（HTTP/WS server+client + Bearer/access_token 鉴权）
   - event/：message/notice/request/meta 四类事件模型齐全
@@ -140,11 +158,9 @@ NT QQ 的系统事件（撤回/群变动/禁言）通过**消息的灰色提示�
 
 ---
 
-## 5. 下一步重点：全量实现 NapCat API（用户拍板）
+## 5. NapCat API 全量实现（六批已完成）
 
-## 5. 下一步重点：全量实现 NapCat API（用户拍板）
-
-### 5.1 现状
+### 5.1 现状（六批全部完成）
 
 ✅ **第一批已实现（P2-10，2026-08-05）**：消息类 9 个（send_private_msg / send_group_msg / delete_msg / get_msg / get_group_msg_history / get_friend_msg_history / mark_msg_as_read / set_msg_emoji_like / fetch_ptt_text）+ 群管类 10 个（set_group_kick / ban / whole_ban / admin / card / name / leave / set_essence_msg / delete_essence_msg / get_group_at_all_remain）。**set_group_special_title 未实现**（NapCat 走 OIDB 自定义包，违反 NAPI 路线，待评估 sendSsoCmdReqByContend）。实现细节见 kernel design §8.12 + adapter design §8.10。
 
@@ -253,10 +269,13 @@ friend_poke / group_poke（sendPoke）
 get_mini_app_ark / send_packet / get_ai_record（高级，最后）
 ```
 
-### 5.3 实现策略（建议分批）
-1. **第一批（消息 + 群管，最常用）**：把已探测的 MsgService/GroupService 方法面转化为动作。kernel apis/msg.ts 已覆盖 send/recall/fetch，需补：`getMsgsByMsgId`（get_msg）、`getMsgs`（历史）、`multiForwardMsg`（合并转发）、`setMsgEmojiLikes`、`translatePtt2Text`、`setStatus`、`setMemberShutUp`、`modifyMemberRole`、`modifyMemberCardName`、`modifyGroupName`、`kickMemberV2`、`quitGroupV2`、`setGroupShutUp`、`addGroupEssence` 等。
-2. **第二批（好友 + 系统）**：BuddyService 已探测（approvalFriendRequest/setBuddyRemark/delBuddy）；系统类本地组装（get_status/get_version_info/clean_cache）。
-3. **第三批（探测新 service）**：TicketService（get_cookies/get_credentials/get_clientkey）、ProfileService（get_stranger_info/set_qq_profile）、FileService（文件类）、RichMediaService（get_image/get_record）——先用 NapCat 公开类型作说明书写接口，再进程内探测校准。
+### 5.3 实现策略（六批已全部完成，以下为历史记录）
+1. ✅ **第一批（消息 + 群管，P2-10）**：MsgService/GroupService 方法面 → 19 个动作。
+2. ✅ **第二批（好友 + 系统，P2-11）**：BuddyService + 本地组装 → 13 个动作。
+3. ✅ **第三批（合并转发 + 在线状态等，P2-12）**：MsgService 补方法面 → 9 个动作。
+4. ✅ **第四批（ticket + 群系统 + 已读别名，P2-13）**：TicketService/GroupService → 7 个动作。
+5. ✅ **第五批（群文件 + 资料 + 点赞 + 翻译，P2-14）**：RichMedia/Profile/ProfileLike → 16 个动作。
+6. ✅ **第六批（陌生人 + csrf + 群请求 + 精华 + 荣誉，P2-15）**：Profile + WebApi → 7 个动作。
 
 ### 5.4 动作注册模式（照抄现有）
 ```ts
@@ -313,16 +332,26 @@ node apps/cli/dist/index.mjs --help     # cli 冒烟（不拉起 QQ）
 
 ---
 
-## 8. 遗留事项（下次开工直接做）
+## 8. 遗留事项（下次开工直接做，**按优先级排序**）
 
-1. ✅ **API 全量实现第一批**（消息 + 群管，P2-10 已完成）。
-2. ✅ **API 第二批**（好友 + 系统 + set_input_status，P2-11 已完成）。
-3. ✅ **API 第三批**（合并转发 + 单条转发 + 在线状态 + download_file + bot_exit/set_restart，P2-12 已完成）。
-4. ✅ **API 第四批**（get_clientkey/get_cookies/set_group_add_request/get_group_system_msg/get_group_shut_list/mark 已读别名，P2-13 已完成）。
-5. ✅ **API 第五批**（群文件 9 + 资料 3 + send_like + translate_en2zh + get_image/get_record 简化版，P2-14 已完成）。
-6. ✅ **API 第六批**（get_stranger_info/get_csrf_token/get_credentials/get_group_add_request/get_group_ignored_notifies/get_essence_msg_list/get_group_honor_info，P2-15 已完成）。
-7. **API 剩余**（OIDB 依赖或需探测）：set_group_sign / send_group_sign / get_rkey / 闪传 / 戳一戳 / ocr_image（NodeMiscService）/ upload_group_file / upload_private_file（FileApi 辅助）/ get_group_file_url / get_private_file_url / get_online_clients（getOnLineDev void）——**多为 OIDB 违反 NAPI 路线，暂不实现**。
-8. **api/ 聚合层**（adapter design §6 第 4 项）：目前动作直接注入 apis，设计上是 onebot11/api/ 聚合 + 缓存。
-9. **cache/**（ADR-008）：群/成员/好友缓存，翻译层只读消费。GroupService.getAllMemberList 已探测（result.infos Map）。
-10. cli config 子命令 + supervisor 多账号（P6）。
-11. onebot12 / satori 空壳填充。
+> ⚠️ **用户拍板**：API 已实现六批 78 个动作，剩余多为 OIDB 依赖（违反 NAPI 路线）。**下一步重心 = 基础设施**。
+
+### 8.1 基础设施（优先，用户点名"赶紧提上日程"）
+
+1. **api/ 聚合层**（adapter design §6 第 4 项，P2-16 候选）：目前动作直接注入 12 个 kernel apis 实例，设计上是 `onebot11/api/` 聚合 + 缓存。目标：`OneBotApi` 单类持有（msg/group/friend/ticket/richmedia/profile/profilelike/webApi），动作只依赖一个聚合对象，boot.cjs 装配简化。
+2. **cache/**（ADR-008，kernel §6）：群/成员/好友缓存，翻译层只读消费。
+   - 现状：GroupService.getAllMemberList 已探测（result.infos Map）；getGroupMemberInfo 每次 forceFetch=true 直查（耗原生调用）。
+   - 目标：`cache/` 模块——订阅原生事件主动维护 + 查询缺失惰性回填；翻译层只读 `getMember(groupId, uid)`；`toOb11GroupMemberInfo` 改读缓存（P2-3 注释"接 kernel cache 判定 owner/admin"落地）。
+   - 依赖：需注册 GroupService listener（`types/listeners/group.ts` + NTEventChannel<GroupListener, "Group">）。
+3. **cli config 子命令 + supervisor 多账号**（P6）：commander 已支持 -q/-d/--qq-path；补 `config init/list/apply` + `supervisor`（accounts.json 批量拉起子进程，进程隔离）。
+4. **onebot12 / satori 空壳填充**（P5）：adapter 包内 `onebot12/`、`satori/` 目录复用 core 框架（生命周期/订阅/广播/校验），只写薄映射；subpath exports 已配好。
+
+### 8.2 API 剩余（OIDB 依赖或需探测，暂缓）
+
+- **OIDB 违反 NAPI 路线**（不做）：set_group_sign / send_group_sign / get_rkey / 闪传 / 戳一戳 / upload_group_file / upload_private_file / get_group_file_url / get_private_file_url / set_group_special_title。
+- **需探测后评估**：ocr_image（NodeMiscService.wantWinScreenOCR）/ get_online_clients（getOnLineDev 返回 void）/ get_emoji_likes（getMsgEmojiLikesList 已探测，可做）。
+
+### 8.3 其他备忘
+
+- 动作注册表 deps 已扩到 12 个 api + system（appVersion/cleanCache/cacheDir/exit/restart）——做 8.1-1 时注意 boot.cjs 与 adapter.ts 的装配点。
+- biome.json override 已积累：probe.ts / notice.ts / action/index.ts / ticket.ts / webapi.ts——新增 web 接口或位运算文件时照抄。
