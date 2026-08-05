@@ -1,0 +1,64 @@
+/**
+ * MsgBridge：消息事件桥（P2-2，2026-08-05）
+ *
+ * 职责：把 msg service 的原生回调（onRecvMsg 等）推入类型化事件通道
+ * `NTEventChannel<MsgListener, "Msg">`。每个 Service 只注册一次原生监听
+ * （ADR-003），缓存维护与协议翻译都订阅 channel。
+ *
+ * 用法：
+ *   const channel = new NTEventChannel<MsgListener, "Msg">("Msg");
+ *   const bridge = new MsgBridge(session, channel);
+ *   bridge.register();   // addKernelMsgListener（普通 JS 对象，NAPI 反射）
+ *   // 协议层订阅：channel.on("Msg/onRecvMsg", handler)
+ *   bridge.unregister(); // 停止时清理
+ */
+import { kernelError } from "./errors.js";
+import type { NTEventChannel } from "./event-channel.js";
+import type { MsgListener } from "./types/listeners/msg.js";
+import type { NodeIKernelMsgService } from "./types/services/msg-service.js";
+import type { NodeIQQNTWrapperSession } from "./types/wrapper.js";
+
+/** 消息事件通道的固定类型（事件名前缀 "Msg"）。 */
+export type MsgEventChannel = NTEventChannel<MsgListener, "Msg">;
+
+/**
+ * 消息事件桥：注册原生监听 → 回调 emit 到 channel。
+ * 无全局单例（ADR-015 推论）——每进程每 session 实例化一份。
+ */
+export class MsgBridge {
+    private readonly service: NodeIKernelMsgService;
+    private readonly channel: MsgEventChannel;
+    private listenerId: number | null = null;
+
+    constructor(session: NodeIQQNTWrapperSession, channel: MsgEventChannel) {
+        const service = session.getMsgService() as unknown as NodeIKernelMsgService | null;
+        if (service === null || service === undefined) {
+            throw kernelError("getMsgService() 返回空（session 未 init）", "INVALID_STATE");
+        }
+        this.service = service;
+        this.channel = channel;
+    }
+
+    /** 注册原生监听（幂等）。 */
+    register(): void {
+        if (this.listenerId !== null) {
+            return;
+        }
+        // listener 为普通 JS 对象（NAPI 反射读取方法回调）
+        const listener: MsgListener = {
+            onRecvMsg: (msg) => this.channel.emit("Msg/onRecvMsg", msg),
+            onRecvMsgReadReport: (reports) => this.channel.emit("Msg/onRecvMsgReadReport", reports),
+            onRecvMsgReceipt: (receipts) => this.channel.emit("Msg/onRecvMsgReceipt", receipts),
+        };
+        this.listenerId = this.service.addKernelMsgListener(listener);
+    }
+
+    /** 注销原生监听（幂等）。 */
+    unregister(): void {
+        if (this.listenerId === null) {
+            return;
+        }
+        this.service.removeKernelMsgListener(this.listenerId);
+        this.listenerId = null;
+    }
+}

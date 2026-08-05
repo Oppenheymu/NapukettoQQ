@@ -5,7 +5,15 @@
  * 契约（接口签名是外部系统的事实，我们自研描述其形状，零复制实现）。
  * 只收录 apis/msg 当前需要的方法；其余 200+ 方法按需探测后补齐。
  */
-import type { Peer, RawMessage } from "../entities.js";
+import type {
+    FaceElement,
+    Peer,
+    PicElement,
+    PttElement,
+    RawMessage,
+    ReplyElement,
+    TextElement,
+} from "../entities.js";
 
 /** 原生通用返回：result 非 0 即失败（errMsg 附原因）。 */
 export interface GeneralCallResult {
@@ -37,48 +45,6 @@ export const ElementType = {
     CALENDAR: 19,
 } as const;
 export type ElementType = (typeof ElementType)[keyof typeof ElementType];
-
-/** 文本元素（at 用 atType + atUid 表达）。 */
-export interface TextElement {
-    content: string;
-    atType?: number; // 1=全体 2=单人 4=我
-    atUid?: string;
-}
-
-/** 图片元素（发送时 picPath 必须）。 */
-export interface PicElement {
-    picPath: string;
-    picType?: number;
-    picWidth?: number;
-    picHeight?: number;
-    md5?: string;
-    fileName?: string;
-    sourcePath?: string;
-    thumbPath?: string;
-}
-
-/** 语音元素（silk，filePath 必须）。 */
-export interface PttElement {
-    filePath?: string;
-    md5?: string;
-    fileName?: string;
-    duration?: number;
-}
-
-/** 表情元素。 */
-export interface FaceElement {
-    faceIndex: number;
-    faceType?: number;
-}
-
-/** 回复元素（引用消息）。 */
-export interface ReplyElement {
-    replayMsgId: string;
-    replayMsgSeq: string;
-    replayMsgTime: string;
-    senderUid?: string;
-    senderUin?: string;
-}
 
 /** 发送消息元素（session 发送用，elementType + 各子元素互斥）。 */
 export interface SendMessageElement {

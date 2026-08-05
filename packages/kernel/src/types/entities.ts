@@ -22,11 +22,76 @@ export interface Peer {
     guildId?: string;
 }
 
+/** 文本元素（at 用 atType + atUid 表达）。 */
+export interface TextElement {
+    content: string;
+    atType?: number; // 1=全体 2=单人 4=我
+    atUid?: string;
+}
+
+/** 图片元素（发送时 picPath 必须；接收含 url）。 */
+export interface PicElement {
+    picPath?: string;
+    picUrl?: string;
+    picType?: number;
+    picWidth?: number;
+    picHeight?: number;
+    md5?: string;
+    fileName?: string;
+    sourcePath?: string;
+    thumbPath?: string;
+}
+
+/** 语音元素（silk）。 */
+export interface PttElement {
+    filePath?: string;
+    md5?: string;
+    fileName?: string;
+    duration?: number;
+}
+
+/** 表情元素。 */
+export interface FaceElement {
+    faceIndex: number;
+    faceType?: number;
+}
+
+/** 回复元素（引用消息）。 */
+export interface ReplyElement {
+    replayMsgId: string;
+    replayMsgSeq?: string;
+    replayMsgTime?: string;
+    senderUid?: string;
+    senderUin?: string;
+}
+
+/** 视频元素。 */
+export interface VideoElement {
+    filePath?: string;
+    videoUrl?: string;
+    fileName?: string;
+    fileSize?: string;
+}
+
+/** 文件元素。 */
+export interface FileElement {
+    filePath?: string;
+    fileName?: string;
+    fileSize?: string;
+    fileUuid?: string;
+}
+
 /** 消息元素（RawMessage.elements 成员，elementType + 子元素互斥）。 */
 export interface RawElement {
     elementType: number;
     elementId?: string;
-    [key: string]: unknown;
+    textElement?: TextElement;
+    picElement?: PicElement;
+    pttElement?: PttElement;
+    faceElement?: FaceElement;
+    replyElement?: ReplyElement;
+    videoElement?: VideoElement;
+    fileElement?: FileElement;
 }
 
 /** QQ 消息（RawMessage，说明书参考字段，探测后校准）。 */

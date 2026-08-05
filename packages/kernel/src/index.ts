@@ -22,6 +22,8 @@ export type { LoginResult } from "./lifecycle.js";
 export { initAndStartSession, quickLogin } from "./lifecycle.js";
 export type { LoggerOptions, LogLevel } from "./logger.js";
 export { createLogger } from "./logger.js";
+export type { MsgEventChannel } from "./msg-bridge.js";
+export { MsgBridge } from "./msg-bridge.js";
 export type { PathOptions } from "./paths.js";
 export { DEFAULT_DATA_ROOT_NAME, PathWrapper, resolveDataRoot } from "./paths.js";
 export { probeRuntime } from "./probe.js";
@@ -32,11 +34,11 @@ export type { MsgListener } from "./types/listeners/msg.js";
 export type { CanonicalElement } from "./types/message-element.js";
 export { toCanonicalElements, toSendElements } from "./types/message-element.js";
 export type {
-    ElementType,
     GeneralCallResult,
     NodeIKernelMsgService,
     SendMessageElement,
 } from "./types/services/msg-service.js";
+export { ElementType } from "./types/services/msg-service.js";
 export type {
     DesktopPathConfig,
     DeviceInfo,

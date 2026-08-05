@@ -2,7 +2,7 @@
 
 > 职责：**唯一原生交互层 + 唯一共享状态层**。协议层只认识 kernel，不认识 QQ。
 > 对应 ADR：001 / 003 / 006 / 007 / 008 / 009 / 010 / 012 / 016 / 017 / 018
-> 状态：P0-1 已完成（errors / paths / logger / config，2026-08-04，见 §8.3）；P0-2 已完成（event-channel + 占位 Listener 类型，2026-08-04，见 §4.1）；P1-1 已完成（wrapper-version + wrapper-loader，2026-08-05，见 §8.4）；P1-2 探测完成（RTTI 继承树 + service 类名/方法签名大全，2026-08-05，见 §8.5）；**P1-3 路线定稿：NAPI 范式重构（2026-08-05，见 §8.6）——wrapper-loader 从 koffi 改为 NAPI bootstrap，loader 包负责注入引导，业务层全走 NAPI；startNapuketto 装配入口 + smoke-test 已补（2026-08-05）；全链路实测打通（注入→IAT hook→boot JS→89 exports→startNapuketto OK）。** P1-4 设计定稿：QQ 进程内探测 + session 复用（2026-08-05，见 §8.7）；P1-5 装配层完成（core + context，2026-08-05，见 §8.8）；**P2-1 apis/msg 实现（2026-08-05，见 §8.9）——sendMessage / recallMessage / fetchMessages / markRead + canonical→NT 发送元素映射（text/at/face/image/voice/reply 核心五类）。**
+> 状态：P0-1 已完成（errors / paths / logger / config，2026-08-04，见 §8.3）；P0-2 已完成（event-channel + 占位 Listener 类型，2026-08-04，见 §4.1）；P1-1 已完成（wrapper-version + wrapper-loader，2026-08-05，见 §8.4）；P1-2 探测完成（RTTI 继承树 + service 类名/方法签名大全，2026-08-05，见 §8.5）；**P1-3 路线定稿：NAPI 范式重构（2026-08-05，见 §8.6）——wrapper-loader 从 koffi 改为 NAPI bootstrap，loader 包负责注入引导，业务层全走 NAPI；startNapuketto 装配入口 + smoke-test 已补（2026-08-05）；全链路实测打通（注入→IAT hook→boot JS→89 exports→startNapuketto OK）。** P1-4 设计定稿：QQ 进程内探测 + session 复用（2026-08-05，见 §8.7）；P1-5 装配层完成（core + context，2026-08-05，见 §8.8）；**P2-1 apis/msg 实现（2026-08-05，见 §8.9）——sendMessage / recallMessage / fetchMessages / markRead + canonical→NT 发送元素映射（text/at/face/image/voice/reply 核心五类）。** P2-2 消息事件链路完成（MsgBridge + toCanonicalElements，2026-08-05，见 §8.10）。
 
 ---
 
@@ -310,6 +310,28 @@ class MsgApi {
 
 **canonical → NT 发送元素**：`toSendElements` 实现 text（含 at）/ face / image / voice / reply 五类核心映射（ElementType 枚举 1/6/2/4/7），file/video/forward/json/xml 标记 TODO（P2-2 探测后补）。
 
+### 8.10 消息事件链路（2026-08-05 实现，P2-2）
+
+**MsgBridge（msg-bridge.ts）**：消息事件桥——注册原生 listener → 推入事件通道。
+
+```ts
+class MsgBridge {
+    constructor(session: NodeIQQNTWrapperSession, channel: NTEventChannel<MsgListener, "Msg">);
+    register(): void;    // addKernelMsgListener（普通 JS 对象）→ 回调 emit 到 channel
+    unregister(): void;  // removeKernelMsgListener
+}
+```
+
+- listener 为普通 JS 对象（NAPI 反射），`onRecvMsg` 等回调 emit 到 `NTEventChannel`（事件名 `Msg/onRecvMsg`）。
+- 每个 Service 只注册一次原生监听；缓存维护与协议翻译都订阅 channel（ADR-003 设计）。
+
+**toCanonicalElements（接收方向）**：RawMessage.elements → CanonicalElement[]，与 toSendElements 对称：
+
+- TEXT(1)：textElement.content → text；atType 1/2/4 → at（all / atUid）
+- PIC(2) → image（picPath）；FACE(6) → face（faceIndex）；PTT(4) → voice（filePath）
+- REPLY(7) → reply（replayMsgId）；FILE(3) → file；VIDEO(5) → video
+- 其余 → unknown（不抛错，接收方向宽容）
+
 ### 8.1 路径布局（ADR-016）
 
 数据（日志/配置/缓存）放**用户数据目录**而非程序目录（程序目录可能只读；多账号需要分离）：
@@ -364,6 +386,8 @@ function resolveWrapperPath(installDir: string, version: string): string;
 7. `login.ts`（QR 状态机 + selfInfo；快速登录已可用，见 lifecycle.quickLogin）
 8. ⏳ `apis/`（**msg 完成**（sendMessage/recallMessage/fetchMessages/markRead，2026-08-05，见 §8.9）；group/friend/user/file/system 待做）
 9. `cache/`（随 apis 一起演进）
+
+**事件链路（P2-2，2026-08-05 完成）**：MsgBridge（原生 listener → NTEventChannel）+ toCanonicalElements（接收方向映射）——消息「收到 → 广播」半链路打通，adapter 侧订阅即用。
 
 ## 10. 待验证事项
 

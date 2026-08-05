@@ -1,18 +1,32 @@
 /**
- * Listener 接口层（运行时探测产物，ADR-003 / ADR-006）
+ * Listener 接口层（运行时探测产物 + 公开资料作说明书，ADR-003 / ADR-006）
  *
- * ⚠️ 占位：以下方法签名为「待探测」占位，探测脚本（scripts/probe/）加载
- * wrapper.node 后按运行时反射产出真实签名（P1 目标），勿以本文件为准。
- * 事件名约定 `${Service}/${method}`，由 event-channel 从本接口编译期推导。
+ * ⚠️ 部分方法签名为自研描述（NapCat 公开类型作说明书理解 QQ wrapper 契约），
+ * 待下一次进程内探测（probe.ts）校准。事件名约定 `${Service}/${method}`，
+ * 由 event-channel 从本接口编译期推导。
  */
 import type { RawMessage } from "../entities.js";
 
-/** 消息服务（MsgService）的原生回调监听接口。 */
-export interface MsgListener {
-    /** 收到新消息（占位签名，待探测）。 */
-    onRecvMsg: (msg: RawMessage) => void;
-    /** 消息已读上报（占位签名，待探测）。 */
-    onRecvMsgReadReport: (peers: Array<{ peer: unknown; readSeq: string }>) => void;
-    /** 消息回执（占位签名，待探测）。 */
-    onRecvMsgReceipt: (receipt: { msgId: string; readSeq: string }) => void;
+/** 消息已读上报（peer + 已读 seq）。 */
+export interface MsgReadReportItem {
+    peer: unknown;
+    readSeq: string;
 }
+
+/** 消息回执（msgId + 已读 seq）。 */
+export interface MsgReceipt {
+    msgId: string;
+    readSeq: string;
+}
+
+/** 消息服务（MsgService）的原生回调监听接口。
+ * 用 type 别名（非 interface）：需满足 ListenerShape（Record<string, unknown>）
+ * 约束——interface 无隐式索引签名不兼容；type 对象类型天然满足。 */
+export type MsgListener = {
+    /** 收到新消息。 */
+    onRecvMsg: (msg: RawMessage) => void;
+    /** 消息已读上报。 */
+    onRecvMsgReadReport: (reports: MsgReadReportItem[]) => void;
+    /** 消息回执。 */
+    onRecvMsgReceipt: (receipts: MsgReceipt[]) => void;
+};

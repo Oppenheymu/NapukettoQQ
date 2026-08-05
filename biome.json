@@ -47,6 +47,8 @@
                 "useErrorCause": "off",
                 "noExcessiveClassesPerFile": "off",
                 "useConsistentMethodSignatures": "off",
+                "useExportsLast": "off",
+                "useConsistentTypeDefinitions": "off",
                 "useNamingConvention": {
                     "level": "error",
                     "options": {
