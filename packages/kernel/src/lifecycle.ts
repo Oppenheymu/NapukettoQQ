@@ -5,43 +5,23 @@
  *  1. engine.initWithDeskTopConfig（appid/qua/版本）
  *  2. loginService.initConfig + addKernelLoginListener
  *  3. getLoginList() → quickLoginWithUin(uin)（或 QR 登录）
- *  4. 登录成功 → genSessionConfig → session.init(config, 3 adapter, listener)
- *  5. session.startNT(0) → 等 onSessionInitComplete === 0 → Ready
+ *  4. 登录成功 → genSessionConfig → session.init(config, 3 adapter, listener) → startNT(0)
+ *  5. 等 init 完成信号（onOpentelemetryInit(is_init) 为主，onSessionInitComplete 为辅）
  *
- * 关键：session 用 `new wrapper.NodeIQQNTWrapperSession()` 创建（不是 getNTWrapperSession
- * ——后者返回空 session）；adapters 用 `new wrapper.NodeIXxxAdapter({...})` 包装。
+ * 关键（2026-08-05 实测修正）：
+ *  - session 用 `new wrapper.NodeIQQNTWrapperSession()` 创建；exports 不含 NodeI*Adapter/Listener
+ *    构造器（89 键实测无）——adapter 与 listener 一律传普通 JS 对象（NAPI 反射读取方法回调）。
+ *
+ * 模块边界（2026-08-05 解耦）：
+ *  - 配置装配（buildEngineConfig / buildLoginConfig / buildSessionConfig）→ wrapper-config.ts
+ *  - NAPI 回调适配器（GlobalAdapter / DependsAdapter / DispatcherAdapter / listener 工厂）→ wrapper-adapters.ts
+ *  - 本文件只保留流程编排：快速登录 + session 初始化 + init 完成信号等待。
  */
 
-import { hostname } from "node:os";
-import process from "node:process";
 import { kernelError } from "./errors.js";
-import type {
-    DeviceInfo,
-    EnginInitDesktopConfig,
-    NodeIKernelLoginListener,
-    NodeIKernelSessionListener,
-    WrapperSessionInitConfig,
-} from "./types/wrapper.js";
-import { PlatformType as PlatformTypeValue, VendorType } from "./types/wrapper.js";
+import type { NodeIKernelSessionListener, WrapperSessionInitConfig } from "./types/wrapper.js";
+import { DependsAdapter, DispatcherAdapter } from "./wrapper-adapters.js";
 import type { WrapperContext } from "./wrapper-loader.js";
-
-/** 系统信息（NapCat 用 fixed 值即可，真实环境探测后补）。 */
-function systemInfo(): { platVer: string; osVersion: string; devType: string } {
-    return {
-        platVer: "Windows 10.0.22631",
-        osVersion: "Windows 10 Pro",
-        devType: "Windows",
-    };
-}
-
-/** Windows 兜底 appid/qua（NapCat appid.json 9.9.31 缺失时）。 */
-function resolveAppidQua(fullVersion: string): { appid: string; qua: string } {
-    // 预留：后续可从 appid.json 表扩展
-    return {
-        appid: "537237765",
-        qua: `V1_WIN_NQ_${fullVersion}_${fullVersion.split("-")[1] ?? ""}_GW_B`,
-    };
-}
 
 /** 等待条件满足（轮询，带超时）。 */
 function waitFor(predicate: () => boolean, timeoutMs: number, intervalMs = 500): Promise<boolean> {
@@ -64,106 +44,6 @@ function waitFor(predicate: () => boolean, timeoutMs: number, intervalMs = 500):
 
 /** session init 默认超时（毫秒）。 */
 const DEFAULT_INIT_TIMEOUT_MS = 15_000;
-
-/** 生成 engine 桌面配置（NapCat shell 同款字段）。 */
-export function buildEngineConfig(
-    fullVersion: string,
-    dataPathGlobal: string,
-): EnginInitDesktopConfig {
-    const { osVersion } = systemInfo();
-    const { qua } = resolveAppidQua(fullVersion);
-    return {
-        base_path_prefix: "",
-        platform_type: PlatformTypeValue.KWINDOWS,
-        app_type: 4,
-        app_version: fullVersion,
-        os_version: osVersion,
-        use_xlog: true,
-        qua,
-        global_path_config: {
-            desktopGlobalPath: dataPathGlobal,
-        },
-        thumb_config: { maxSide: 324, minSide: 48, longLimit: 6, density: 2 },
-    };
-}
-
-/** 生成登录初始化配置。 */
-export function buildLoginConfig(
-    appid: string,
-    fullVersion: string,
-    commonPath: string,
-): Record<string, unknown> {
-    const { platVer } = systemInfo();
-    return {
-        machineId: "",
-        appid,
-        platVer,
-        commonPath,
-        clientVer: fullVersion,
-        hostName: hostname(),
-    };
-}
-
-/** buildSessionConfig 参数。 */
-export interface SessionConfigOptions {
-    appid: string;
-    fullVersion: string;
-    selfUin: string;
-    selfUid: string;
-    accountPath: string;
-    downloadPath: string;
-}
-
-/** 生成 session 初始化配置（登录成功后调用）。 */
-export function buildSessionConfig(options: SessionConfigOptions): WrapperSessionInitConfig {
-    const { appid, fullVersion, selfUin, selfUid, accountPath, downloadPath } = options;
-    const { platVer, osVersion, devType } = systemInfo();
-    const deviceInfo: DeviceInfo = {
-        guid: "", // TODO: 从 LoginService 获取（NapCat: getMachineId）
-        buildVer: fullVersion,
-        localId: 2052,
-        devName: hostname(),
-        devType,
-        vendorName: "",
-        osVer: osVersion,
-        vendorOsName: devType,
-        setMute: false,
-        vendorType: VendorType.KNOSETONIOS,
-    };
-    return {
-        selfUin,
-        selfUid,
-        desktopPathConfig: {
-            account_path: accountPath,
-        },
-        clientVer: fullVersion,
-        a2: "",
-        d2: "",
-        d2Key: "",
-        machineId: "",
-        platform: PlatformTypeValue.KWINDOWS,
-        platVer,
-        appid,
-        rdeliveryConfig: {
-            appKey: "",
-            systemId: 0,
-            appId: "",
-            logicEnvironment: "",
-            platform: PlatformTypeValue.KWINDOWS,
-            language: "",
-            sdkVersion: "",
-            userId: "",
-            appVersion: "",
-            osVersion: "",
-            bundleId: "",
-            serverUrl: "",
-            fixedAfterHitKeys: [""],
-        },
-        defaultFileDownloadPath: downloadPath,
-        deviceInfo,
-        deviceConfig: '{"appearance":{"isSplitViewMode":true},"msg":{}}',
-    };
-}
 
 /** 登录结果（QR 或快速登录）。 */
 export interface LoginResult {
@@ -220,7 +100,7 @@ export async function quickLogin(
     };
 }
 
-/** session 初始化（4 参全为 NAPI 包装对象，等 onSessionInitComplete）。 */
+/** session 初始化（4 参全为普通 JS 对象，等 init 完成信号）。 */
 export async function initAndStartSession(
     ctx: WrapperContext,
     config: WrapperSessionInitConfig,
@@ -231,29 +111,38 @@ export async function initAndStartSession(
     if (session === null || session === undefined) {
         throw kernelError("session 未创建", "INVALID_STATE");
     }
-    const wrapper = ctx.exports;
 
-    // adapter 用 wrapper 的 NAPI 构造器包装（不是裸对象）
-    const depends = new wrapper.NodeIDependsAdapter({});
-    const dispatcher = new wrapper.NodeIDispatcherAdapter({});
-    const sessionListener = new wrapper.NodeIKernelSessionListener(listener);
+    // adapter / listener 全部用普通 JS 对象（实测 exports 89 键无 NodeI*Adapter/Listener
+    // 构造器；NAPI 反射读取对象方法回调——NapCat 同款机制，自研实现）。
+    const depends = new DependsAdapter();
+    const dispatcher = new DispatcherAdapter();
 
-    // 等 init 完成
+    // 等 init 完成：以 onOpentelemetryInit(is_init===true) 为主（NapCat shell 机制），
+    // onSessionInitComplete(0) 为辅；非 0 即失败。
     const initComplete = new Promise<void>((resolve, reject) => {
-        const orig = listener.onSessionInitComplete;
+        const onOpentelemetry = listener.onOpentelemetryInit;
+        listener.onOpentelemetryInit = (info) => {
+            if (info.is_init) {
+                resolve();
+            }
+            if (typeof onOpentelemetry === "function") {
+                onOpentelemetry(info);
+            }
+        };
+        const onInitComplete = listener.onSessionInitComplete;
         listener.onSessionInitComplete = (r) => {
             if (r === 0 || r === "0") {
                 resolve();
             } else {
                 reject(kernelError(`session init 失败: ${String(r)}`, "UNKNOWN"));
             }
-            if (typeof orig === "function") {
-                orig(r);
+            if (typeof onInitComplete === "function") {
+                onInitComplete(r);
             }
         };
     });
 
-    session.init(config, depends, dispatcher, sessionListener);
+    session.init(config, depends, dispatcher, listener);
     try {
         session.startNT(0);
     } catch {
@@ -264,31 +153,11 @@ export async function initAndStartSession(
         }
     }
 
-    const done = await Promise.race([
-        initComplete,
-        waitFor(() => false, opts.timeoutMs ?? DEFAULT_INIT_TIMEOUT_MS),
+    const ok = await Promise.race([
+        initComplete.then(() => true),
+        waitFor(() => false, opts.timeoutMs ?? DEFAULT_INIT_TIMEOUT_MS).then(() => false),
     ]);
-    if (!done) {
+    if (!ok) {
         throw kernelError("session init 超时", "TIMEOUT");
     }
-}
-
-/** 生成会话监听器（日志版，init 完成日志）。 */
-export function createLifecycleSessionListener(): NodeIKernelSessionListener {
-    const log = (msg: string, ...rest: unknown[]): void => {
-        process.stdout.write(`[napuketto:session] ${msg} ${rest.map(String).join(" ")}\n`);
-    };
-    return {
-        onNTSessionCreate: (sessionId) => log("onNTSessionCreate", sessionId),
-        onGProSessionCreate: (sessionId) => log("onGProSessionCreate", sessionId),
-        onSessionInitComplete: (sessionId) => log("onSessionInitComplete", sessionId),
-        onOpentelemetryInit: (info) => log("onOpentelemetryInit", info),
-        onUserOnlineResult: (result) => log("onUserOnlineResult", result),
-        onGetSelfTinyId: (result) => log("onGetSelfTinyId", result),
-    };
-}
-
-/** 创建登录监听器（当前登录器需要时用）。 */
-export function createLoginListener(): NodeIKernelLoginListener {
-    return {} as NodeIKernelLoginListener;
 }

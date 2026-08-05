@@ -14,9 +14,6 @@ import { kernelError } from "./errors.js";
 import { getMainSession } from "./session-resolver.js";
 import type {
     EnginInitDesktopConfig,
-    NodeIDependsAdapter,
-    NodeIDispatcherAdapter,
-    NodeIGlobalAdapter,
     NodeIKernelSessionListener,
     NodeIQQNTWrapperEngine,
     NodeIQQNTWrapperSession,
@@ -24,35 +21,16 @@ import type {
     WrapperSessionInitConfig,
 } from "./types/wrapper.js";
 import { PlatformType } from "./types/wrapper.js";
-
-/** NodeIGlobalAdapter 空实现（engine.initWithDeskTopConfig 第二参）。 */
-class GlobalAdapter implements NodeIGlobalAdapter {}
-
-/** NodeIDependsAdapter 空实现（session.init 第二参）。 */
-class DependsAdapter implements NodeIDependsAdapter {}
-
-/** NodeIDispatcherAdapter 空实现（session.init 第三参）。 */
-class DispatcherAdapter implements NodeIDispatcherAdapter {}
+import {
+    createSessionListener,
+    DependsAdapter,
+    DispatcherAdapter,
+    GlobalAdapter,
+} from "./wrapper-adapters.js";
 
 // ---------------------------------------------------------------
 // startNapuketto 内部辅助（非 export，boot 装配用）
 // ---------------------------------------------------------------
-
-/** 日志版 session 监听器（boot 阶段默认，login 模块可覆盖）。 */
-function createBootListener(): NodeIKernelSessionListener {
-    // pino logger 此时可能未初始化（kernel 主配置未装配），先走 stdout
-    const log = (msg: string, ...rest: unknown[]): void => {
-        process.stdout.write(`[napuketto:session] ${msg} ${rest.map(String).join(" ")}\n`);
-    };
-    return {
-        onNTSessionCreate: (sessionId) => log("onNTSessionCreate", sessionId),
-        onGProSessionCreate: (sessionId) => log("onGProSessionCreate", sessionId),
-        onSessionInitComplete: (sessionId) => log("onSessionInitComplete", sessionId),
-        onOpentelemetryInit: (info) => log("onOpentelemetryInit", info),
-        onUserOnlineResult: (result) => log("onUserOnlineResult", result),
-        onGetSelfTinyId: (result) => log("onGetSelfTinyId", result),
-    };
-}
 
 /** 默认 engine 配置（KWINDOWS + 版本号，字段待首个真实联调确认）。 */
 function defaultEngineConfig(env: BootEnv): EnginInitDesktopConfig {
@@ -181,10 +159,20 @@ export function startNapuketto(options: StartNapukettoOptions): WrapperContext {
     const ctx = createWrapper(wrapperExports, versionInfo);
     initEngine(ctx, engineConfig ?? defaultEngineConfig(env ?? {}));
 
-    // 优先使用 QQ 已 init 的 session（拦截 new 捕获）
+    // loginService：优先 QQ 捕获实例，否则 new（NapCat shell 模式）
+    if (qqLoginService !== undefined && qqLoginService !== null) {
+        ctx.loginService = qqLoginService;
+    } else {
+        try {
+            ctx.loginService = new ctx.exports.NodeIKernelLoginService();
+        } catch {
+            ctx.loginService = null;
+        }
+    }
+
+    // session：优先 QQ 已 init 的 session（拦截 new 捕获）
     if (qqSession !== undefined && qqSession !== null) {
         ctx.session = qqSession;
-        ctx.loginService = qqLoginService ?? null;
     } else {
         const main = getMainSession(ctx);
         if (main === null) {
@@ -193,7 +181,7 @@ export function startNapuketto(options: StartNapukettoOptions): WrapperContext {
     }
 
     if (sessionConfig !== undefined) {
-        initSession(ctx, sessionConfig, createBootListener());
+        initSession(ctx, sessionConfig, createSessionListener());
         startSession(ctx);
     }
     return ctx;

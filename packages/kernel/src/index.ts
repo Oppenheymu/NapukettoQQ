@@ -14,15 +14,7 @@ export { isKernelError, KERNEL_ERROR_CODES, KernelError, kernelError } from "./e
 export type { ListenerEvents } from "./event-channel.js";
 export { NTEventChannel } from "./event-channel.js";
 export type { LoginResult } from "./lifecycle.js";
-export {
-    buildEngineConfig,
-    buildLoginConfig,
-    buildSessionConfig,
-    createLifecycleSessionListener,
-    createLoginListener,
-    initAndStartSession,
-    quickLogin,
-} from "./lifecycle.js";
+export { initAndStartSession, quickLogin } from "./lifecycle.js";
 export type { LoggerOptions, LogLevel } from "./logger.js";
 export { createLogger } from "./logger.js";
 export type { PathOptions } from "./paths.js";
@@ -52,6 +44,17 @@ export type {
     WrapperNodeApi,
     WrapperSessionInitConfig,
 } from "./types/wrapper.js";
+export {
+    createLoginListener,
+    createSessionListener,
+    createSessionListener as createLifecycleSessionListener,
+} from "./wrapper-adapters.js";
+export type { SessionConfigOptions } from "./wrapper-config.js";
+export {
+    buildEngineConfig,
+    buildLoginConfig,
+    buildSessionConfig,
+} from "./wrapper-config.js";
 export type {
     BootEnv,
     QQVersionContext,
