@@ -22,4 +22,10 @@ export {
     segmentsToCqMessage,
 } from "./data.js";
 export { MessageUnique } from "./message-unique.js";
+export {
+    collectGrayTipUids,
+    hasGrayTip,
+    type NoticeTranslateContext,
+    toOb11NoticeEvent,
+} from "./notice.js";
 export { toOb11GroupInfo, toOb11GroupMemberInfo } from "./translate.js";

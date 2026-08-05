@@ -81,6 +81,78 @@ export interface FileElement {
     fileUuid?: string;
 }
 
+/** 灰色提示子类型（系统事件类型，QQ wrapper 契约）。 */
+export const GrayTipSubType = {
+    REVOKE: 1, // 撤回
+    PROCLAMATION: 2, // 群公告
+    GROUP: 4, // 群成员变动（TipGroupElement）
+    BUDDY: 5, // 好友变动
+    FEED: 6,
+    ESSENCE: 7, // 精华消息
+    GROUP_NOTIFY: 8, // 群通知
+    BUDDY_NOTIFY: 9,
+    FILE: 10,
+    JSON: 17,
+} as const;
+export type GrayTipSubType = (typeof GrayTipSubType)[keyof typeof GrayTipSubType];
+
+/** 群成员变动类型（TipGroupElement.type）。 */
+export const TipGroupElementType = {
+    MEMBER_ADD: 1, // 入群
+    DISBANDED: 2, // 群解散
+    QUIT: 3, // 退群
+    CREATED: 4, // 建群
+    GROUP_NAME_MODIFIED: 5, // 群名修改
+    BLOCK: 6,
+    UNBLOCK: 7,
+    SHUT_UP: 8, // 禁言
+} as const;
+export type TipGroupElementType = (typeof TipGroupElementType)[keyof typeof TipGroupElementType];
+
+/** 撤回元素（revokeElement）。 */
+export interface GrayTipRevokeElement {
+    operatorUid: string;
+    operatorNick?: string;
+    operatorRole?: string;
+    isSelfOperate?: boolean;
+    wording?: string;
+}
+
+/** AIOP 操作元素（戳一戳等，aioOpGrayTipElement）。 */
+export interface TipAioOpGrayTipElement {
+    operateType?: number;
+    peerUid?: string;
+    fromGrpCodeOfTmpChat?: string;
+}
+
+/** 群成员变动元素（groupElement 内的 TipGroupElement）。 */
+export interface TipGroupElement {
+    type?: TipGroupElementType;
+    groupName?: string;
+    memberUid?: string;
+    memberNick?: string;
+    memberRemark?: string;
+    adminUid?: string;
+    adminNick?: string;
+    adminRemark?: string;
+    shutUp?: {
+        curTime?: string;
+        duration?: string; // 禁言秒数
+        admin?: { uid?: string; card?: string; name?: string; role?: number };
+        member?: { uid?: string; card?: string; name?: string; role?: number };
+    };
+}
+
+/** 灰色提示元素（elementType=8，系统事件载体）。 */
+export interface GrayTipElement {
+    subElementType?: GrayTipSubType;
+    revokeElement?: GrayTipRevokeElement;
+    groupElement?: TipGroupElement;
+    aioOpGrayTipElement?: TipAioOpGrayTipElement;
+    xmlElement?: { busiId?: string; content?: string; templId?: string };
+    jsonGrayTipElement?: { busiId?: string; jsonStr?: string };
+}
+
 /** 消息元素（RawMessage.elements 成员，elementType + 子元素互斥）。 */
 export interface RawElement {
     elementType: number;
@@ -92,6 +164,7 @@ export interface RawElement {
     replyElement?: ReplyElement;
     videoElement?: VideoElement;
     fileElement?: FileElement;
+    grayTipElement?: GrayTipElement;
 }
 
 /** QQ 消息（RawMessage，说明书参考字段，探测后校准）。 */

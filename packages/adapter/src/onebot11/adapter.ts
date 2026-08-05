@@ -27,6 +27,7 @@ import type { GroupSender } from "./event/message.js";
 import type { OB11Config } from "./helper/index.js";
 import { canonicalToCqMessage, canonicalToSegments, ob11ConfigSchema } from "./helper/index.js";
 import { MessageUnique } from "./helper/message-unique.js";
+import { collectGrayTipUids, hasGrayTip, toOb11NoticeEvent } from "./helper/notice.js";
 import type { Ob11TransportSet } from "./transport.js";
 import { assembleOb11Transports } from "./transport.js";
 import type { Sender } from "./types/index.js";
@@ -122,6 +123,7 @@ export class NapukettoOneBot11Adapter extends BaseProtocolAdapter<OB11Config> {
 
     private readonly msgChannel: MsgEventChannel;
     private readonly selfUin: string;
+    private readonly groupApi: GroupApi;
     private readonly messageUnique = new MessageUnique();
     private readonly registry: ActionRegistry;
     private unsubscribe: (() => void) | null = null;
@@ -143,6 +145,7 @@ export class NapukettoOneBot11Adapter extends BaseProtocolAdapter<OB11Config> {
         });
         this.msgChannel = opts.msgChannel;
         this.selfUin = opts.selfUin;
+        this.groupApi = opts.groupApi;
         this.registry = createOb11ActionRegistry({
             sendMsg: {
                 msgApi: opts.msgApi,
@@ -226,8 +229,28 @@ export class NapukettoOneBot11Adapter extends BaseProtocolAdapter<OB11Config> {
             return;
         }
         this.unsubscribe = this.msgChannel.on("Msg/onRecvMsg", (msg) => {
+            // grayTip（系统事件）→ notice；否则 → 消息事件
+            if (hasGrayTip(msg)) {
+                this.broadcastNotice(msg).catch(() => {
+                    // notice 翻译失败静默（grayTip 解析宽容）
+                });
+                return;
+            }
             this.broadcastEvent(toOb11MessageEvent(msg, this.selfUin, this.messageUnique));
         });
+    }
+
+    /** 广播 grayTip → notice 事件（批量 uidToUin 后翻译，纯函数）。 */
+    private async broadcastNotice(msg: RawMessage): Promise<void> {
+        const uids = collectGrayTipUids(msg);
+        let uidToUin = new Map<string, string>();
+        if (uids.length > 0) {
+            uidToUin = await this.groupApi.uidToUin(uids);
+        }
+        const notice = toOb11NoticeEvent(msg, { selfUin: this.selfUin, uidToUin });
+        if (notice !== null) {
+            this.broadcastEvent(notice);
+        }
     }
 
     /** 退订（幂等）。 */
