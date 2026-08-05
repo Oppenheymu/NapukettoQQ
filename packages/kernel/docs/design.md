@@ -238,7 +238,20 @@ boot.cjs（QQ 主进程，hook 截获 wrapper.node exports）
 - 正确链路：`NodeIQQNTStartupSessionWrapper.create()` → `start()` → `getSessionIdList()` 返回 **Map** `{nt: "nt_3", gpro: "gpro_3"}` → `getNTWrapperSession("nt_3")` 拿到主 session（已 init/已登录，60+ get*Service + 事件回调齐全）。
 - **主 session 复用已打通**（probe-late 实测）：`getMainSession(ctx)` 固化进 wrapper-loader。
 
+**⚠️ 重大修正（2026-08-05 深夜，参考 NapCatQQ shell 模式确认）**：
+- **getNTWrapperSession(nt_x) 返回的是空 session**（未 init，核心 service 全 null）——那些是 startup.create() 创建的实例，不是 QQ 登录用的 session。
+- **NapCat shell 模式（与我们注入方案最接近）的正确流程**（`src/shell/napcat.ts`）：
+  1. `new wrapper.NodeIQQNTWrapperEngine()` + `engine.initWithDeskTopConfig(config, new wrapper.NodeIGlobalAdapter(...))`
+  2. `new wrapper.NodeIKernelLoginService()` + `loginService.initConfig({appid, clientVer, commonPath, ...})`
+  3. `loginService.addKernelLoginListener(new wrapper.NodeIKernelLoginListener(...))` → `getLoginList()` → `quickLoginWithUin(uin)`（或 QR 登录）
+  4. **登录成功后**：`genSessionConfig(appid, version, uin, uid, dataPath)` 生成 `WrapperSessionInitConfig`（a2/d2 留空）
+  5. `session.init(config, new wrapper.NodeIDependsAdapter(...), new wrapper.NodeIDispatcherAdapter(...), new wrapper.NodeIKernelSessionListener(listener))`
+  6. `session.startNT(0)` → 等 `onSessionInitComplete === 0` → **Ready！**
+- **adapters 必须用 `new wrapper.NodeIXxxAdapter({...})` 包装**（NAPI 构造器），不是裸对象。
+- appid/qua：NapCat 从 `appid.json` 查表，9.9.31 兜底 `appid=537237765`、`qua=V1_WIN_NQ_<ver>_<build>_GW_B`。
+
 **实现**：
+- `kernel/src/lifecycle.ts`：完整启动编排（engine → loginService → 登录 → session.init → startNT）
 - `kernel/src/probe.ts`：`probeRuntime(ctx)` —— 反射 dump session/service 方法到 `NAPUTO_CFG_DIR/napuketto-probe.json`（不引入日志依赖，直接 fs 写）。
 - `wrapper-loader.ts` 增 `getMainSession(ctx)`：startup.create → start → getSessionIdList → getNTWrapperSession(nt_xxx)，失败回退 create。
 - `boot.cjs` 探测模式：`NAPUTO_PROBE=1` 时 startNapuketto 后调 `kernel.probeRuntime`。

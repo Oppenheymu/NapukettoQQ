@@ -12,8 +12,8 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import process from "node:process";
+import { getMainSession } from "./session-resolver.js";
 import type { WrapperContext } from "./wrapper-loader.js";
-import { getMainSession } from "./wrapper-loader.js";
 
 /** 反射枚举一个对象原型链上的方法名（去重、去构造器）。 */
 function listMethods(obj: unknown): string[] {
@@ -164,10 +164,85 @@ function probeEngineCalls(ctx: WrapperContext): Record<string, unknown> {
     return out;
 }
 
+/** 探测 LoginService 实例（QQ 已登录凭据入口）。 */
+function probeLoginService(ctx: WrapperContext): Record<string, unknown> | null {
+    const ctor = ctx.exports.NodeIKernelLoginService as unknown as {
+        get?: () => unknown;
+    } | null;
+    if (ctor === null || typeof ctor.get !== "function") return null;
+    const inst = tryCall(ctor, "get");
+    if (!(inst.ok && inst.value)) {
+        return { get: inst.error ?? "null/undefined" };
+    }
+    const out: Record<string, unknown> = {
+        methods: listMethods(inst.value),
+        ownKeys: Object.getOwnPropertyNames(inst.value).slice(0, 30),
+    };
+    // 尝试关键登录信息 getter（无参）
+    const probes = [
+        "getAccountInfo",
+        "getLoginInfo",
+        "getA2",
+        "getTicket",
+        "getUin",
+        "getUid",
+        "getSelfUin",
+    ];
+    for (const m of probes) {
+        if (typeof (inst.value as Record<string, unknown>)[m] === "function") {
+            out[m] = tryShape(inst.value, m);
+        }
+    }
+    return out;
+}
+
+/** 枚举候选 sessionId（nt_0..nt_9 / gpro_0..gpro_9）找 QQ 已 init 的 session。 */
+function enumerateSessionIds(ctx: WrapperContext): Record<string, unknown> {
+    const S = ctx.exports.NodeIQQNTWrapperSession;
+    const enumFn = (S as unknown as Record<string, unknown>)["getNTWrapperSession"];
+    const out: Record<string, unknown> = {};
+    if (typeof enumFn !== "function") {
+        return out;
+    }
+    const ids: string[] = [];
+    for (let i = 0; i < 10; i += 1) {
+        ids.push(`nt_${i}`, `gpro_${i}`);
+    }
+    for (const id of ids) {
+        try {
+            const value = (enumFn as (...args: unknown[]) => unknown).call(S, id);
+            if (!value) continue;
+            const rec = value as Record<string, unknown>;
+            // getter 存在性
+            const hasGetter = typeof rec["getMsgService"] === "function";
+            // 实际调用结果（关键：service 是否已 init）
+            let msgService: unknown = null;
+            let msgError: string | null = null;
+            try {
+                msgService = (rec["getMsgService"] as () => unknown).call(value);
+            } catch (e) {
+                msgError = e instanceof Error ? e.message : String(e);
+            }
+            out[id] = {
+                hasMsgServiceGetter: hasGetter,
+                msgServiceOk: msgService !== null && msgService !== undefined,
+                msgServiceMethods: msgService ? listMethods(msgService).length : 0,
+                msgError,
+                methods: listMethods(value),
+            };
+        } catch {
+            // 忽略单次失败
+        }
+    }
+    return out;
+}
+
 /** 探测 startup session 链路：create() → start() → getSessionIdList → getNTWrapperSession。 */
 function probeStartup(ctx: WrapperContext): Record<string, unknown> | null {
-    const startup = ctx.exports.NodeIQQNTStartupSessionWrapper;
-    if (!startup) return null;
+    const startup = ctx.exports.NodeIQQNTStartupSessionWrapper as unknown as {
+        create?: () => unknown;
+    } | null;
+    if (startup === null || typeof startup.create !== "function") return null;
     const out: Record<string, unknown> = { staticMethods: listMethods(startup) };
     const created = tryCall(startup, "create");
     out["create"] = created.ok
@@ -214,10 +289,12 @@ function probeStartup(ctx: WrapperContext): Record<string, unknown> | null {
                     };
                 }
             }
+            out["enumSessionIds"] = enumerateSessionIds(ctx);
             return out;
         }
     }
-    // 尝试候选 sessionId 名取主 session（无 Map 数据时兜底）
+    out["enumSessionIds"] = enumerateSessionIds(ctx);
+    // 兜底：候选名字（无 Map 数据时）
     const S = ctx.exports.NodeIQQNTWrapperSession;
     const candidates = ["main", "primary", "session1", "default", ""];
     const getResults: Record<string, unknown> = {};
@@ -300,6 +377,7 @@ export function probeRuntime(
         engineMethods: listMethods(ctx.engine),
         exportCtors: probeExportCtors(ctx),
         engineCalls: probeEngineCalls(ctx),
+        loginService: probeLoginService(ctx),
         startup: probeStartup(ctx),
         ...probeSession(ctx),
     };

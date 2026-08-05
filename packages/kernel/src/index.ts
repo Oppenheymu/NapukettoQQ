@@ -13,11 +13,22 @@ export type { KernelErrorCode } from "./errors.js";
 export { isKernelError, KERNEL_ERROR_CODES, KernelError, kernelError } from "./errors.js";
 export type { ListenerEvents } from "./event-channel.js";
 export { NTEventChannel } from "./event-channel.js";
+export type { LoginResult } from "./lifecycle.js";
+export {
+    buildEngineConfig,
+    buildLoginConfig,
+    buildSessionConfig,
+    createLifecycleSessionListener,
+    createLoginListener,
+    initAndStartSession,
+    quickLogin,
+} from "./lifecycle.js";
 export type { LoggerOptions, LogLevel } from "./logger.js";
 export { createLogger } from "./logger.js";
 export type { PathOptions } from "./paths.js";
 export { DEFAULT_DATA_ROOT_NAME, PathWrapper, resolveDataRoot } from "./paths.js";
 export { probeRuntime } from "./probe.js";
+export { getExistingSession, getMainSession } from "./session-resolver.js";
 export type { RawMessage } from "./types/entities.js";
 export type { MsgListener } from "./types/listeners/msg.js";
 export type { CanonicalElement } from "./types/message-element.js";
@@ -50,8 +61,6 @@ export type {
 export {
     createSession,
     createWrapper,
-    getExistingSession,
-    getMainSession,
     initEngine,
     initSession,
     startNapuketto,

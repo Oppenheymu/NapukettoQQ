@@ -11,13 +11,13 @@
 
 import process from "node:process";
 import { kernelError } from "./errors.js";
+import { getMainSession } from "./session-resolver.js";
 import type {
     EnginInitDesktopConfig,
     NodeIDependsAdapter,
     NodeIDispatcherAdapter,
     NodeIGlobalAdapter,
     NodeIKernelSessionListener,
-    NodeIQQNTStartupSessionWrapper,
     NodeIQQNTWrapperEngine,
     NodeIQQNTWrapperSession,
     WrapperNodeApi,
@@ -75,57 +75,6 @@ function defaultEngineConfig(env: BootEnv): EnginInitDesktopConfig {
     };
 }
 
-/** 从 getSessionIdList 的 Map 提取主 sessionId（nt_ 前缀优先）。 */
-function findMainSessionId(ids: Map<unknown, unknown>): string | null {
-    for (const [k, v] of ids) {
-        if (typeof v === "string") {
-            if (v.startsWith("nt_")) {
-                return v;
-            }
-        } else if (typeof k === "string" && k.startsWith("nt_")) {
-            return k;
-        }
-    }
-    for (const [, v] of ids) {
-        if (typeof v === "string") {
-            return v;
-        }
-    }
-    for (const k of ids.keys()) {
-        if (typeof k === "string") {
-            return k;
-        }
-    }
-    return null;
-}
-
-/** 通过 getNTWrapperSession 拿主 session（内部辅助）。 */
-function resolveMainSession(
-    created: { start?: () => void; getSessionIdList?: () => unknown },
-    getNTWrapperSession: (id: string) => NodeIQQNTWrapperSession,
-): NodeIQQNTWrapperSession | null {
-    if (typeof created.start === "function") {
-        created.start();
-    }
-    if (typeof created.getSessionIdList !== "function") {
-        return null;
-    }
-    const ids = created.getSessionIdList();
-    if (!(ids instanceof Map)) {
-        return null;
-    }
-    const mainId = findMainSessionId(ids);
-    if (mainId === null) {
-        return null;
-    }
-    const session = getNTWrapperSession(mainId);
-    const maybe = session as NodeIQQNTWrapperSession | null | undefined;
-    if (maybe !== null && maybe !== undefined && typeof maybe.getMsgService === "function") {
-        return maybe;
-    }
-    return null;
-}
-
 // ---------------------------------------------------------------
 // 导出区（useExportsLast：export 全部在文件末尾）
 // ---------------------------------------------------------------
@@ -144,8 +93,10 @@ export interface WrapperContext {
     engine: NodeIQQNTWrapperEngine;
     /** 版本信息（供登录握手等使用）。 */
     versionInfo: QQVersionContext;
-    /** 会话（createSession 后填充）。 */
+    /** 会话（QQ 拦截捕获 / createSession 后填充）。 */
     session: NodeIQQNTWrapperSession | null;
+    /** QQ 的 loginService 实例（拦截 new 捕获，可为 null）。 */
+    loginService: unknown;
 }
 
 /**
@@ -156,18 +107,20 @@ export function createWrapper(
     exports: WrapperNodeApi,
     versionInfo: QQVersionContext,
 ): WrapperContext {
-    const engineCtor = exports.NodeIQQNTWrapperEngine;
-    if (!engineCtor || typeof engineCtor.get !== "function") {
+    const engineMaybe = exports.NodeIQQNTWrapperEngine as unknown as {
+        get?: () => NodeIQQNTWrapperEngine;
+    } | null;
+    if (engineMaybe === null || typeof engineMaybe.get !== "function") {
         throw kernelError(
             "wrapper.node exports 无效（缺少 NodeIQQNTWrapperEngine）",
             "INVALID_PARAM",
         );
     }
-    const engine = engineCtor.get();
+    const engine = engineMaybe.get();
     if (!engine || typeof engine.initWithDeskTopConfig !== "function") {
         throw kernelError("NodeIQQNTWrapperEngine.get() 返回对象无效", "INVALID_PARAM");
     }
-    return { exports, engine, versionInfo, session: null };
+    return { exports, engine, versionInfo, session: null, loginService: null };
 }
 
 /** engine 初始化（NapCat 语义：先 engine 后 session）。config 为普通 JS 对象。 */
@@ -175,77 +128,18 @@ export function initEngine(ctx: WrapperContext, config: EnginInitDesktopConfig):
     ctx.engine.initWithDeskTopConfig(config, new GlobalAdapter());
 }
 
-/** 创建会话：优先 startupSession.create()，失败回退 session.create()。 */
+/** 创建会话：`new wrapper.NodeIQQNTWrapperSession()`（NapCat shell 模式确认）。
+ * 注：不用 startup.create()/getNTWrapperSession——那些返回未 init 的空 session。 */
 export function createSession(ctx: WrapperContext): NodeIQQNTWrapperSession {
     const S = ctx.exports.NodeIQQNTWrapperSession;
-    const startup = ctx.exports.NodeIQQNTStartupSessionWrapper;
     let session: NodeIQQNTWrapperSession;
     try {
-        if (typeof startup.create === "function") {
-            session = startup.create() as unknown as NodeIQQNTWrapperSession;
-        } else {
-            session = S.create();
-        }
+        session = new S();
     } catch {
-        session = S.create();
+        session = new S();
     }
     ctx.session = session;
     return session;
-}
-
-/**
- * 复用 QQ 已有 session（P1-4：QQ 已登录，直接拿单例避免重复 init）。
- * 优先 `NodeIQQNTWrapperSession.get()`；返回 null 时回退 createSession。
- */
-export function getExistingSession(ctx: WrapperContext): NodeIQQNTWrapperSession | null {
-    try {
-        const S = ctx.exports.NodeIQQNTWrapperSession;
-        if (typeof S.get === "function") {
-            const got = S.get();
-            if (got && typeof got.getMsgService === "function") {
-                ctx.session = got;
-                return got;
-            }
-        }
-    } catch {
-        // 复用失败，回退 create
-    }
-    return null;
-}
-
-/**
- * 复用 QQ 主 session（P1-4 实测链路，2026-08-05）：
- * `NodeIQQNTStartupSessionWrapper.create()` → `start()` → `getSessionIdList()`（Map
- * {nt:"nt_3", gpro:"gpro_3"}）→ `NodeIQQNTWrapperSession.getNTWrapperSession("nt_3")`
- * 拿到主 session（QQ 已 init/已登录，60+ get*Service 齐全）。
- * 失败回退 createSession。返回 null 表示复用失败且未创建新 session。
- */
-export function getMainSession(ctx: WrapperContext): NodeIQQNTWrapperSession | null {
-    try {
-        const startup = ctx.exports.NodeIQQNTStartupSessionWrapper;
-        const S = ctx.exports.NodeIQQNTWrapperSession;
-        const startupMaybe = startup as NodeIQQNTStartupSessionWrapper | null | undefined;
-        if (
-            startupMaybe === null ||
-            startupMaybe === undefined ||
-            typeof startupMaybe.create !== "function" ||
-            typeof S.getNTWrapperSession !== "function"
-        ) {
-            return null;
-        }
-        const created = startup.create();
-        if (!created) {
-            return null;
-        }
-        const session = resolveMainSession(created, (id) => S.getNTWrapperSession(id));
-        if (session !== null) {
-            ctx.session = session;
-        }
-        return session;
-    } catch {
-        // 复用失败，回退 create
-    }
-    return null;
 }
 
 /** session 初始化（4 参全为 JS 对象，NAPI 自动转换）。 */
@@ -268,21 +162,35 @@ export function startSession(ctx: WrapperContext): void {
 }
 
 /**
- * boot 装配入口：createWrapper → initEngine → createSession，
- * 若提供 sessionConfig 则继续 initSession → startSession。
+ * boot 装配入口：createWrapper → initEngine → session。
+ *
+ * **session 来源优先级（2026-08-05 修正，NapCat 机制确认）**：
+ *  1. qqSession（boot.cjs 拦截 `new` 窃取的 QQ 已 init session）——**首选**
+ *  2. getMainSession（startup.create → getNTWrapperSession）
+ *  3. createSession（自己 create，空 session）
  *
  * 由 loader runtime/boot.cjs 在 QQ 主进程内调用（import kernel dist 后）。
  * 返回 WrapperContext；失败抛 KernelError。
  */
 export function startNapuketto(options: StartNapukettoOptions): WrapperContext {
-    const { env, engineConfig, sessionConfig, wrapperExports } = options;
+    const { env, engineConfig, sessionConfig, wrapperExports, qqSession, qqLoginService } = options;
     const versionInfo: QQVersionContext = {
         fullVersion: env?.qqVersion ?? "",
         buildVersion: env?.qqVersion ?? "",
     };
     const ctx = createWrapper(wrapperExports, versionInfo);
     initEngine(ctx, engineConfig ?? defaultEngineConfig(env ?? {}));
-    createSession(ctx);
+
+    // 优先使用 QQ 已 init 的 session（拦截 new 捕获）
+    if (qqSession !== undefined && qqSession !== null) {
+        ctx.session = qqSession;
+        ctx.loginService = qqLoginService ?? null;
+    } else {
+        const main = getMainSession(ctx);
+        if (main === null) {
+            createSession(ctx);
+        }
+    }
 
     if (sessionConfig !== undefined) {
         initSession(ctx, sessionConfig, createBootListener());
@@ -313,4 +221,8 @@ export interface StartNapukettoOptions {
     engineConfig?: EnginInitDesktopConfig;
     /** 覆盖 session 配置（联调用，提供则自动 init+start）。 */
     sessionConfig?: WrapperSessionInitConfig;
+    /** QQ 已 init 的 session（boot.cjs 拦截 new 捕获，NapCat 机制）。 */
+    qqSession?: NodeIQQNTWrapperSession | null;
+    /** QQ 的 loginService 实例（boot.cjs 拦截 new 捕获）。 */
+    qqLoginService?: unknown;
 }
