@@ -174,9 +174,11 @@ export interface NodeIKernelLoginService {
     addKernelLoginListener(listener: unknown): number;
     removeKernelLoginListener(listener: number): void;
     initConfig(config: unknown): void;
+    connect(): void;
     getLoginList(): Promise<{ result: number; LocalLoginInfoList: unknown[] }>;
     quickLoginWithUin(uin: string): Promise<unknown>;
     getQRCodePicture(): boolean;
+    getMsfStatus(): number;
 }
 
 /** NodeIKernelLoginService 构造器（含静态 get）。 */

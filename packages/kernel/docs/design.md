@@ -332,6 +332,28 @@ class MsgBridge {
 - REPLY(7) → reply（replayMsgId）；FILE(3) → file；VIDEO(5) → video
 - 其余 → unknown（不抛错，接收方向宽容）
 
+### 8.11 登录状态机（2026-08-05 实现，§9 第 7 项）
+
+**login.ts：QrLoginSession**（QR 登录流程编排 + 状态机 + selfInfo）。
+
+```
+QrLoginSession.start():
+  loginService.initConfig（已由 core.login 做）
+  → addKernelLoginListener（普通 JS 对象，注册回调）
+  → loginService.connect()
+  → 有 -q 账号：quickLoginWithUin；无：getQRCodePicture() 触发二维码
+  → 回调驱动状态机：未登录 → 扫码中（onQRCodeGetPicture）→ 已扫码（onQRCodeSessionUserScaned）
+    → 已登录（onQRCodeLoginSucceed，填 selfInfo）
+  → 二维码过期（onQRCodeSessionFailed errType=1 errCode=3）→ refresh() 重新 getQRCodePicture
+
+QrLoginSession.refresh(): 手动/过期刷新二维码
+QrLoginSession.onQrCode(cb): 订阅二维码图片（png base64 + url）
+QrLoginSession.onStateChange(cb): 订阅状态变化
+LoginState = "idle" | "waiting_scan" | "scanned" | "logged_in" | "failed"
+```
+
+**selfInfo**：登录成功后填 `{ uin, uid, nick }`；供 get_login_info 与协议层 meta 事件用。协议层订阅登录事件做生命周期 meta（P2-8 接入 adapter）。
+
 ### 8.1 路径布局（ADR-016）
 
 数据（日志/配置/缓存）放**用户数据目录**而非程序目录（程序目录可能只读；多账号需要分离）：

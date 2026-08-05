@@ -24,6 +24,8 @@ export type { LoginResult } from "./lifecycle.js";
 export { initAndStartSession, quickLogin } from "./lifecycle.js";
 export type { LoggerOptions, LogLevel } from "./logger.js";
 export { createLogger } from "./logger.js";
+export type { LoginListItem, LoginState, QrCodeData, SelfInfo } from "./login.js";
+export { QrLoginSession } from "./login.js";
 export type { MsgEventChannel } from "./msg-bridge.js";
 export { MsgBridge } from "./msg-bridge.js";
 export type { PathOptions } from "./paths.js";
