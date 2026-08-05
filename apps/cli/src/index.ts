@@ -8,9 +8,10 @@
  */
 
 import process from "node:process";
+import { resolveDataRoot } from "@napuketto/kernel";
 import { Command } from "commander";
 import { runSingleAccount } from "./boot.js";
-import { cmdConfigApply, cmdConfigInit, cmdConfigList } from "./config-cmds.js";
+import { cmdConfigApply, cmdConfigInit, cmdConfigList, loadCliConfig } from "./config-cmds.js";
 import { runSupervisor } from "./supervisor.js";
 
 /** commander collect：累积 -q 多值。 */
@@ -114,12 +115,28 @@ async function runSingleAccountBranch(
     await runSingleAccount(bootOptions);
 }
 
-/** 注册主命令 action（-q 单账号 / 多 -q supervisor）。 */
+/** 无 -q 时：读全局配置 accounts → 有则 supervisor 拉起；无则打印帮助。 */
+async function autoSupervisorOrHelp(program: Command, opts: { dataDir?: string }): Promise<void> {
+    try {
+        const dataRoot = resolveDataRoot(opts.dataDir);
+        const config = await loadCliConfig(dataRoot);
+        if (config.accounts.length > 0) {
+            await runSupervisor(withDataDir(opts.dataDir));
+            return;
+        }
+    } catch {
+        // 配置读取失败忽略，走帮助
+    }
+    program.help();
+}
+
+/** 注册主命令 action（-q 单账号 / 多 -q supervisor / 无 -q 自动读配置）。 */
 function registerMainAction(program: Command): void {
     program.action(async (opts: { qq?: string[]; dataDir?: string; qqPath?: string }) => {
         const qqs = opts.qq ?? [];
         if (qqs.length === 0) {
-            program.help(); // commander help 终止进程
+            await autoSupervisorOrHelp(program, opts);
+            return;
         }
         try {
             if (qqs.length === 1) {
