@@ -2,7 +2,7 @@
 
 > 职责：**协议适配器容器**——一个共享的适配器框架（core），外加 OneBot 11 / OneBot 12 / Satori 三套协议语义。
 > 对应 ADR：002 / 003 / 008 / 009 / 013 / 014 / 017
-> 状态：core 框架已实现（BaseAction / ActionRegistry / AdapterRegistry / ProtocolConfig / BaseProtocolAdapter，2026-08-04，见 §8）；onebot11 第一梯队已实现（types / helper/config / action/send_msg，2026-08-04，见 §8.1）；onebot11 helper 翻译层已实现（cqcode/data，2026-08-04，见 §8.2）；onebot11 事件模型已实现（message/notice/request/meta，2026-08-05，见 §8.3）；onebot11 动作骨架扩充已实现（error-map + 6 个查询动作 + types 补全，2026-08-05，见 §8.4）；**onebot11 adapter.ts 已实现（2026-08-05，见 §8.5）——订阅 kernel 消息事件 → OB11 消息事件 → network 广播（消息收链路打通）**；**P2-3 请求分发 + send_msg 真实化 + MessageUnique（2026-08-05，见 §8.6）——收发闭环打通**。**§9 实现顺序 5-6 已同步更新。**
+> 状态：core 框架已实现（BaseAction / ActionRegistry / AdapterRegistry / ProtocolConfig / BaseProtocolAdapter，2026-08-04，见 §8）；onebot11 第一梯队已实现（types / helper/config / action/send_msg，2026-08-04，见 §8.1）；onebot11 helper 翻译层已实现（cqcode/data，2026-08-04，见 §8.2）；onebot11 事件模型已实现（message/notice/request/meta，2026-08-05，见 §8.3）；onebot11 动作骨架扩充已实现（error-map + 6 个查询动作 + types 补全，2026-08-05，见 §8.4）；**onebot11 adapter.ts 已实现（2026-08-05，见 §8.5）——订阅 kernel 消息事件 → OB11 消息事件 → network 广播（消息收链路打通）**；**P2-3 请求分发 + send_msg 真实化 + MessageUnique（2026-08-05，见 §8.6）——收发闭环打通**；**P2-4 查询动作真实化（2026-08-05，见 §8.7）——apis/group + apis/friend + 6 查询动作接 kernel**；**P2-5 传输接入（2026-08-05，见 §8.8）——HTTP/WS server+client + 鉴权 + 心跳 meta 事件**。**§9 实现顺序 5-6 已同步更新。**
 
 ---
 

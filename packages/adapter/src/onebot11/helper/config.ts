@@ -8,6 +8,8 @@ import { z } from "zod";
 const DEFAULT_HTTP_PORT = 3000;
 /** 反向 WS server 默认端口。 */
 const DEFAULT_WS_PORT = 3001;
+/** 心跳 meta 事件默认间隔（毫秒）。 */
+const DEFAULT_HEARTBEAT_INTERVAL_MS = 3000;
 
 /** OB11 配置 schema。 */
 export const ob11ConfigSchema = z.object({
@@ -43,6 +45,8 @@ export const ob11ConfigSchema = z.object({
         .default({ enabled: false }),
     /** 鉴权 token（HTTP/WS 校验）。 */
     token: z.string().optional(),
+    /** 心跳 meta 事件间隔（毫秒），0 关闭心跳。 */
+    heartbeatInterval: z.number().int().default(DEFAULT_HEARTBEAT_INTERVAL_MS),
 });
 
 /** OB11 配置类型（由 schema 推导）。 */

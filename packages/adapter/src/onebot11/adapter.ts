@@ -27,6 +27,8 @@ import type { GroupSender } from "./event/message.js";
 import type { OB11Config } from "./helper/index.js";
 import { canonicalToCqMessage, canonicalToSegments, ob11ConfigSchema } from "./helper/index.js";
 import { MessageUnique } from "./helper/message-unique.js";
+import type { Ob11TransportSet } from "./transport.js";
+import { assembleOb11Transports } from "./transport.js";
 import type { Sender } from "./types/index.js";
 
 /** 毫秒 → 秒（Unix 时间戳）。 */
@@ -123,22 +125,18 @@ export class NapukettoOneBot11Adapter extends BaseProtocolAdapter<OB11Config> {
     private readonly messageUnique = new MessageUnique();
     private readonly registry: ActionRegistry;
     private unsubscribe: (() => void) | null = null;
+    private transports: Ob11TransportSet | null = null;
+    private heartbeatTimer: NodeJS.Timeout | null = null;
 
     constructor(opts: OneBot11AdapterOptions) {
         super({
             config: opts.config,
             broadcaster: opts.broadcaster,
             hooks: {
-                onStart: () => {
-                    this.subscribe();
-                    return Promise.resolve();
-                },
-                onStop: () => {
-                    this.unsubscribeAll();
-                    return Promise.resolve();
-                },
+                onStart: (config) => this.startTransports(config as OB11Config),
+                onStop: () => this.stopAll(),
                 onReload: () => {
-                    // 事件订阅无配置依赖，重载无需重建
+                    // P2-6：配置热更新重建传输
                     return Promise.resolve();
                 },
             },
@@ -155,6 +153,71 @@ export class NapukettoOneBot11Adapter extends BaseProtocolAdapter<OB11Config> {
             friendApi: opts.friendApi,
             self: { uin: opts.selfUin, nickname: opts.selfNickname ?? "" },
         });
+    }
+
+    /** 启动传输：装配（HTTP/WS）+ 打开 server/client + 广播 lifecycle enable + 起心跳。 */
+    private async startTransports(config: OB11Config): Promise<void> {
+        const broadcaster = this.getBroadcaster();
+        if (broadcaster !== undefined) {
+            this.transports = assembleOb11Transports({
+                config,
+                broadcaster,
+                handleRequest: (req, respond) => {
+                    this.handleRequest(req, respond).catch((err: unknown) => {
+                        let message = String(err);
+                        if (err instanceof Error) {
+                            // biome-ignore lint/style/useDestructuring: err 为 unknown 运行时窄化，解构不适用
+                            message = err.message;
+                        }
+                        respond({ status: "failed", retcode: 999, data: null, message });
+                    });
+                },
+            });
+            // 打开 server + 正向 client
+            await Promise.all(this.transports.servers.map((s) => s.open()));
+            await Promise.all(this.transports.transports.map((t) => t.open()));
+        }
+        this.subscribe();
+        // lifecycle: enable
+        this.broadcastEvent({
+            time: Math.floor(Date.now() / MS_TO_SEC),
+            self_id: Number(this.selfUin),
+            post_type: "meta_event",
+            meta_event_type: "lifecycle",
+            sub_type: "enable",
+        });
+        // 心跳
+        this.startHeartbeat(config.heartbeatInterval);
+    }
+
+    /** 心跳 meta 事件（interval 毫秒，0 关闭）。 */
+    private startHeartbeat(intervalMs: number): void {
+        if (intervalMs <= 0) {
+            return;
+        }
+        this.heartbeatTimer = setInterval(() => {
+            this.broadcastEvent({
+                time: Math.floor(Date.now() / MS_TO_SEC),
+                self_id: Number(this.selfUin),
+                post_type: "meta_event",
+                meta_event_type: "heartbeat",
+                interval: intervalMs,
+                status: { online: true, good: true },
+            });
+        }, intervalMs);
+    }
+
+    /** 停止：心跳 + 传输 + 退订。 */
+    private async stopAll(): Promise<void> {
+        if (this.heartbeatTimer !== null) {
+            clearInterval(this.heartbeatTimer);
+            this.heartbeatTimer = null;
+        }
+        this.unsubscribeAll();
+        if (this.transports !== null) {
+            await this.transports.close();
+            this.transports = null;
+        }
     }
 
     /** 订阅 kernel 消息事件（幂等）。 */

@@ -73,4 +73,9 @@ export abstract class BaseProtocolAdapter<TConfig> {
     protected broadcastEvent<T>(event: T): void {
         this.broadcaster?.emit(event);
     }
+
+    /** 获取广播器（传输装配等内部使用；未传入返回 undefined）。 */
+    protected getBroadcaster(): EventBroadcaster | undefined {
+        return this.broadcaster;
+    }
 }
