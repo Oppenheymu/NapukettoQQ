@@ -50,6 +50,12 @@ export interface OneBot11AdapterOptions {
     appVersion?: string;
     /** 缓存清理回调（clean_cache 用，装配方注入）。 */
     cleanCache?: () => Promise<void>;
+    /** 缓存目录（download_file 保存路径，装配方注入）。 */
+    cacheDir?: string;
+    /** 进程退出回调（bot_exit 用，装配方注入）。 */
+    exit?: () => Promise<void>;
+    /** 进程重启回调（set_restart 用，装配方注入）。 */
+    restart?: () => Promise<void>;
 }
 
 /** OneBot 11 协议适配器。 */
@@ -82,11 +88,26 @@ export class NapukettoOneBot11Adapter extends BaseProtocolAdapter<OB11Config> {
         this.msgChannel = opts.msgChannel;
         this.selfUin = opts.selfUin;
         this.groupApi = opts.groupApi;
-        const system: { appVersion: string; cleanCache?: () => Promise<void> } = {
+        const system: {
+            appVersion: string;
+            cleanCache?: () => Promise<void>;
+            cacheDir?: string;
+            exit?: () => Promise<void>;
+            restart?: () => Promise<void>;
+        } = {
             appVersion: opts.appVersion ?? "unknown",
         };
         if (opts.cleanCache !== undefined) {
             system.cleanCache = opts.cleanCache;
+        }
+        if (opts.cacheDir !== undefined) {
+            system.cacheDir = opts.cacheDir;
+        }
+        if (opts.exit !== undefined) {
+            system.exit = opts.exit;
+        }
+        if (opts.restart !== undefined) {
+            system.restart = opts.restart;
         }
         this.registry = createOb11ActionRegistry({
             sendMsg: {

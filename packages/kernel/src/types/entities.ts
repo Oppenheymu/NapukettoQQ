@@ -167,6 +167,12 @@ export interface RawElement {
     videoElement?: VideoElement;
     fileElement?: FileElement;
     grayTipElement?: GrayTipElement;
+    /** 合并转发元素（elementType=16 MULTI_FORWARD）。 */
+    multiForwardMsgElement?: {
+        resId: string;
+        fileName: string;
+        xmlContent: string;
+    };
 }
 
 /** QQ 消息（RawMessage，说明书参考字段，探测后校准）。 */

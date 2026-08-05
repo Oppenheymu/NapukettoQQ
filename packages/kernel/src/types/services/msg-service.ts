@@ -93,4 +93,33 @@ export interface NodeIKernelMsgService {
     translatePtt2Text(msgId: string, peer: Peer, msgElement: unknown): Promise<GeneralCallResult>;
     /** 输入状态（set_input_status；eventType=1 输入中，0 停止）。 */
     sendShowInputStatusReq(chatType: number, eventType: number, toUid: string): Promise<unknown>;
+    /** 合并转发组装（send_group/private_forward_msg；返回 MULTI_FORWARD 元素）。 */
+    buildMultiForwardMsg(req: {
+        srcMsgIds: string[];
+        srcContact: Peer;
+    }): Promise<GeneralCallResult & { rspInfo?: { elements?: SendMessageElement[] } }>;
+    /** 获取合并转发内容（get_forward_msg；resId 取自 multiForwardMsgElement）。 */
+    getMultiMsg(
+        peer: Peer,
+        msgId: string,
+        resId: string,
+    ): Promise<GeneralCallResult & { msgList?: RawMessage[] }>;
+    /** 单条转发（forward_group/friend_single_msg；msgIds 源、dstPeers 目标）。 */
+    forwardMsg(
+        msgIds: string[],
+        peer: Peer,
+        dstPeers: Peer[],
+        commentElements: unknown,
+    ): Promise<GeneralCallResult>;
+    /** 设置在线状态（set_online_status；customStatus 为自定义状态）。 */
+    setStatus(args: {
+        status: number;
+        extStatus: number;
+        batteryStatus: number;
+        customStatus?: {
+            faceId: string;
+            wording: string;
+            faceType: string;
+        };
+    }): Promise<GeneralCallResult>;
 }

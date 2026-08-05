@@ -142,4 +142,73 @@ export class MsgApi {
     async setInputStatus(target: Peer, eventType: number): Promise<void> {
         await this.service.sendShowInputStatusReq(target.chatType, eventType, target.peerUid);
     }
+
+    /**
+     * 发送合并转发（send_group/private_forward_msg）。
+     * buildMultiForwardMsg 组装 MULTI_FORWARD 元素 → 直接作 sendMsg 元素发送。
+     */
+    async sendForwardMessage(
+        target: Peer,
+        sourcePeer: Peer,
+        srcMsgIds: string[],
+    ): Promise<{ msgId: string }> {
+        if (srcMsgIds.length === 0) {
+            throw kernelError("sendForwardMessage 需要至少一条源消息", "INVALID_PARAM");
+        }
+        const built = await this.service.buildMultiForwardMsg({
+            srcMsgIds,
+            srcContact: sourcePeer,
+        });
+        unwrapResult("buildMultiForwardMsg", built);
+        const elements = built.rspInfo?.elements;
+        if (elements === undefined || elements.length === 0) {
+            throw kernelError("合并转发组装失败：无元素", "UNKNOWN");
+        }
+        const msgId = this.service.generateMsgUniqueId(target.chatType, String(Date.now()));
+        const raw = await this.service.sendMsg(msgId, target, elements, new Map());
+        unwrapResult("sendMsg", raw);
+        return { msgId };
+    }
+
+    /** 获取合并转发内容（get_forward_msg；resId 取自 multiForwardMsgElement）。 */
+    async fetchForwardMessage(peer: Peer, msgId: string): Promise<RawMessage[]> {
+        const msgs = await this.fetchMsgsByMsgId(peer, [msgId]);
+        const [first] = msgs;
+        if (first === undefined) {
+            throw kernelError("消息不存在", "NOT_FOUND");
+        }
+        const forward = first.elements.find(
+            (el) => el.multiForwardMsgElement !== undefined,
+        )?.multiForwardMsgElement;
+        if (forward === undefined || forward.resId === "") {
+            throw kernelError("消息不包含合并转发内容", "NOT_FOUND");
+        }
+        const raw = await this.service.getMultiMsg(peer, msgId, forward.resId);
+        unwrapResult("getMultiMsg", raw);
+        return raw.msgList ?? [];
+    }
+
+    /** 单条转发（forward_group/friend_single_msg；srcMsgIds 源、dstPeer 目标）。 */
+    async forwardSingleMessage(
+        sourcePeer: Peer,
+        srcMsgIds: string[],
+        dstPeer: Peer,
+    ): Promise<void> {
+        if (srcMsgIds.length === 0) {
+            throw kernelError("forwardSingleMessage 需要至少一条源消息", "INVALID_PARAM");
+        }
+        const raw = await this.service.forwardMsg(srcMsgIds, sourcePeer, [dstPeer], undefined);
+        unwrapResult("forwardMsg", raw);
+    }
+
+    /** 设置在线状态（set_online_status；customStatus 为自定义状态）。 */
+    async setOnlineStatus(opts: {
+        status: number;
+        extStatus: number;
+        batteryStatus: number;
+        customStatus?: { faceId: string; wording: string; faceType: string };
+    }): Promise<void> {
+        const raw = await this.service.setStatus(opts);
+        unwrapResult("setStatus", raw);
+    }
 }

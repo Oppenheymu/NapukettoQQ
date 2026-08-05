@@ -85,6 +85,17 @@ async function startProtocols(kernel, ctx, loginResult, logger) {
                 });
                 paths.clearCache();
             },
+            // download_file：缓存目录
+            cacheDir: path.join(process.env.NAPUTO_CFG_DIR || ".", "cache"),
+            // bot_exit / set_restart：进程控制（退出 QQ 主进程由 launcher 观察）
+            exit: async () => {
+                logger("bootstrap: bot_exit 触发，退出 QQ 主进程");
+                process.exit(0);
+            },
+            restart: async () => {
+                logger("bootstrap: set_restart 触发，退出 QQ 主进程（由 launcher 重启）");
+                process.exit(0);
+            },
         });
         await ob11.start();
         logger("bootstrap: onebot11 adapter started");

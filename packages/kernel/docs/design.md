@@ -433,6 +433,26 @@ function resolveWrapperPath(installDir: string, version: string): string;
 
 **跳过**（依赖未探测 service ★）：send_like / set_online_status / set_diy_online_status（UserApi.setSelfOnlineStatus——实际是 setStatus 属 MsgService 但 NapCat 走 UserApi 包装，待探测）；get_cookies / get_clientkey / get_rkey（TicketService 从 QQ 本地数据读取，非 service 调用）；get_stranger_info / set_qq_profile（ProfileService）；get_online_clients（getOnLineDev 返回 void，需探测）。
 
+### 8.14 P2-12 第三批 NapCat API 方法面（2026-08-05 设计 + 实现）
+
+**目标**：HANDOVER.md §5.3 第三批（合并转发 + 在线状态 + 单条转发 + download_file + 进程控制）。**全部基于已探测的 MsgService 方法面，无需新探测。已实现并 pnpm check 全绿（124 文件）。**
+
+**MsgService 补方法**（`types/services/msg-service.ts`）：
+- `buildMultiForwardMsg({ srcMsgIds, srcContact })` → `{ rspInfo: { elements } }`（合并转发组装，返回 MULTI_FORWARD 元素）
+- `getMultiMsg(peer, msgId, resId)` → `{ msgList }`（get_forward_msg 取合并内容；resId 取自 multiForwardMsgElement）
+- `forwardMsg(msgIds, peer, dstPeers, commentElements)`（单条转发）
+- `setStatus({ status, extStatus, batteryStatus, customStatus? })`（set_online_status / set_diy_online_status）
+
+**entities 补**：`RawElement` 加 `multiForwardMsgElement?: { resId; fileName; xmlContent }`。
+
+**MsgApi 补**：
+- `sendForwardMessage(target, sourcePeer, srcMsgIds)`：buildMultiForwardMsg → rspInfo.elements 直接作 sendMsg 元素 → `{ msgId }`（元素本身已是 MULTI_FORWARD，无需 toSendElements）
+- `fetchForwardMessage(peer, msgId)`：fetchMsgsByMsgId → 找 multiForwardMsgElement → getMultiMsg(peer, msgId, resId) → RawMessage[]；找不到 resId 抛 NOT_FOUND
+- `forwardSingleMessage(srcPeer, srcMsgIds, dstPeer)`：forwardMsg(srcMsgIds, srcPeer, [dstPeer], undefined)
+- `setOnlineStatus(opts)`：setStatus（customStatus 可选）
+
+**跳过**（依赖未探测 service ★）：send_like（UserApi.like）/ get_cookies / get_clientkey / get_rkey（TicketService）/ get_online_clients（getOnLineDev 返回 void）/ ocr_image / get_image / get_record（RichMediaService）/ 文件类（FileService）。
+
 ### 8.3 P0-1 实现记录（2026-08-04）
 
 `errors.ts` / `paths.ts` / `logger.ts` / `config.ts` 已实现，通过 `pnpm check` + 运行时冒烟测试（26 项）。关键决策：

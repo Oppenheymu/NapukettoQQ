@@ -11,8 +11,12 @@ import { CleanCacheAction } from "./clean-cache.js";
 import { DeleteEssenceMsgAction } from "./delete-essence-msg.js";
 import { DeleteFriendAction } from "./delete-friend.js";
 import { DeleteMsgAction } from "./delete-msg.js";
+import type { DownloadFileDeps } from "./download-file.js";
+import { DownloadFileAction } from "./download-file.js";
 import { FetchPttTextAction } from "./fetch-ptt-text.js";
+import { ForwardFriendSingleMsgAction, ForwardGroupSingleMsgAction } from "./forward-single-msg.js";
 import { GetDoubtFriendsAddRequestAction } from "./get-doubt-friends-add-request.js";
+import { GetForwardMsgAction } from "./get-forward-msg.js";
 import { GetFriendListAction } from "./get-friend-list.js";
 import { GetFriendMsgHistoryAction } from "./get-friend-msg-history.js";
 import { GetFriendsWithCategoryAction } from "./get-friends-with-category.js";
@@ -28,10 +32,14 @@ import { GetRobotUinRangeAction } from "./get-robot-uin-range.js";
 import { GetStatusAction } from "./get-status.js";
 import { GetVersionInfoAction } from "./get-version-info.js";
 import { MarkMsgAsReadAction } from "./mark-msg-as-read.js";
+import type { ProcessControlDeps } from "./process-control.js";
+import { BotExitAction, SetRestartAction } from "./process-control.js";
+import { SendGroupForwardMsgAction, SendPrivateForwardMsgAction } from "./send-forward-msg.js";
 import { SendGroupMsgAction } from "./send-group-msg.js";
 import type { SendMsgDeps } from "./send-msg.js";
 import { SendMsgAction } from "./send-msg.js";
 import { SendPrivateMsgAction } from "./send-private-msg.js";
+import { SetDiyOnlineStatusAction } from "./set-diy-online-status.js";
 import { SetDoubtFriendsAddRequestAction } from "./set-doubt-friends-add-request.js";
 import { SetEssenceMsgAction } from "./set-essence-msg.js";
 import { SetFriendAddRequestAction } from "./set-friend-add-request.js";
@@ -45,6 +53,7 @@ import { SetGroupNameAction } from "./set-group-name.js";
 import { SetGroupWholeBanAction } from "./set-group-whole-ban.js";
 import { SetInputStatusAction } from "./set-input-status.js";
 import { SetMsgEmojiLikeAction } from "./set-msg-emoji-like.js";
+import { SetOnlineStatusAction } from "./set-online-status.js";
 
 /** 动作注册表依赖（各动作所需的 kernel API 由装配方注入）。 */
 export interface Ob11ActionDeps {
@@ -56,10 +65,13 @@ export interface Ob11ActionDeps {
     friendApi: FriendApi;
     /** 登录身份（get_login_info 用）。 */
     self: { uin: string; nickname: string };
-    /** 系统类本地信息（get_version_info / clean_cache 用）。 */
+    /** 系统类本地信息（get_version_info / clean_cache / download_file / 进程控制用）。 */
     system: {
         appVersion: string;
         cleanCache?: () => Promise<void>;
+        cacheDir?: string;
+        exit?: () => Promise<void>;
+        restart?: () => Promise<void>;
     };
 }
 
@@ -67,11 +79,23 @@ export interface Ob11ActionDeps {
 export function createOb11ActionRegistry(deps: Ob11ActionDeps): ActionRegistry {
     const registry = new ActionRegistry();
     registerMsgActions(registry, deps);
+    registerForwardActions(registry, deps);
     registerQueryActions(registry, deps);
     registerGroupActions(registry, deps);
     registerFriendActions(registry, deps);
     registerSystemActions(registry, deps);
     return registry;
+}
+
+/** 合并转发 / 单条转发 / 在线状态（P2-12）。 */
+function registerForwardActions(registry: ActionRegistry, deps: Ob11ActionDeps): void {
+    registry.register(new SendGroupForwardMsgAction(deps.sendMsg));
+    registry.register(new SendPrivateForwardMsgAction(deps.sendMsg));
+    registry.register(new GetForwardMsgAction(deps.sendMsg));
+    registry.register(new ForwardGroupSingleMsgAction(deps.sendMsg));
+    registry.register(new ForwardFriendSingleMsgAction(deps.sendMsg));
+    registry.register(new SetOnlineStatusAction(deps.sendMsg.msgApi));
+    registry.register(new SetDiyOnlineStatusAction(deps.sendMsg.msgApi));
 }
 
 /** 消息类动作（P2-3 / P2-10 / P2-11）。 */
@@ -143,7 +167,7 @@ function registerFriendActions(registry: ActionRegistry, deps: Ob11ActionDeps): 
     registry.register(new SetDoubtFriendsAddRequestAction(deps.friendApi));
 }
 
-/** 系统类动作（P2-11）。 */
+/** 系统类动作（P2-11 / P2-12）。 */
 function registerSystemActions(registry: ActionRegistry, deps: Ob11ActionDeps): void {
     registry.register(new GetStatusAction());
     registry.register(new GetVersionInfoAction({ appVersion: deps.system.appVersion }));
@@ -155,4 +179,18 @@ function registerSystemActions(registry: ActionRegistry, deps: Ob11ActionDeps): 
     registry.register(new CanSendImageAction());
     registry.register(new CanSendRecordAction());
     registry.register(new GetRobotUinRangeAction());
+    const downloadDeps: DownloadFileDeps = {};
+    if (deps.system.cacheDir !== undefined) {
+        downloadDeps.cacheDir = deps.system.cacheDir;
+    }
+    registry.register(new DownloadFileAction(downloadDeps));
+    const processDeps: ProcessControlDeps = {};
+    if (deps.system.exit !== undefined) {
+        processDeps.exit = deps.system.exit;
+    }
+    if (deps.system.restart !== undefined) {
+        processDeps.restart = deps.system.restart;
+    }
+    registry.register(new BotExitAction(processDeps));
+    registry.register(new SetRestartAction(processDeps));
 }

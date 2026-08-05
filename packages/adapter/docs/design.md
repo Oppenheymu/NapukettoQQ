@@ -339,6 +339,27 @@ adapter onStart：装配传输 → 打开 server/client → 广播 lifecycle ena
 
 **boot.cjs 补协议装配**（loader runtime）：登录成功后动态 import adapter/network 入口（launcher 环境变量 NAPUTO_ADAPTER_ENTRY / NAPUTO_NETWORK_ENTRY）→ 创建 MsgChannel + MsgBridge + MsgApi/GroupApi/FriendApi + EventBroadcaster + NapukettoOneBot11Adapter → start。
 
+### 8.12 P2-12 第三批动作（合并转发 + 在线状态 + 单条转发 + 文件下载 + 进程，2026-08-05 设计 + 实现）
+
+**目标**：HANDOVER.md §5.3 第三批。kernel 方法面见 kernel design §8.14。**已实现并 pnpm check 全绿（124 文件）+ 全量构建通过。**
+
+**合并转发（3 个）**：
+- `send_group_forward_msg` / `send_private_forward_msg`：messages 每项 `{ id }`（node 元素）→ 经 MessageUnique 反查源 msgId+peer → 目标 peer（群直通 / 私聊 uinToUid）→ `sendForwardMessage`
+- `get_forward_msg`：message_id/id → 反查 → `fetchForwardMessage` → 每条 toOb11MessageInfo → `{ messages }`
+
+**单条转发（2 个）**：`forward_group_single_msg` / `forward_friend_single_msg`：message_id 反查源 + group_id/user_id 目标 → `forwardSingleMessage`
+
+**在线状态（2 个）**：`set_online_status`（status/ext_status/battery_status）→ setOnlineStatus；`set_diy_online_status`（wording/face_id）→ customStatus
+
+**文件下载 + 进程（3 个）**：
+- `download_file`：url → fetch 下载 → 存 deps.system.cacheDir → `{ file }`（file 路径）
+- `bot_exit`：deps.system.exit 回调（boot.cjs 注入 process.exit）→ 默认抛错提示未配置
+- `set_restart`：deps.system.restart 回调（默认等同 bot_exit，重启交给装配方）
+
+**deps 扩展**：`system` 加 `cacheDir?: string` / `exit?: () => Promise<void>` / `restart?: () => Promise<void>`；adapter 构造选项加 `cacheDir?` / `exit?` / `restart?`；boot.cjs 装配 cacheDir=paths.cacheDir、exit/restart=进程回调。
+
+**跳过**（依赖未探测 service ★）：send_like / get_cookies / get_clientkey / get_rkey / get_online_clients / ocr_image / get_image / get_record / 文件类。
+
 ### 8.11 P2-11 第二批动作（好友 + 系统 + 消息剩余，2026-08-05 设计 + 实现）
 
 **目标**：HANDOVER.md §5.3 第二批。kernel 方法面见 kernel design §8.13。**已实现并 pnpm check 全绿（117 文件）+ 全量构建通过。**

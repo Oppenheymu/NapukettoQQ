@@ -45,7 +45,7 @@ b2574ec refactor(kernel): 解耦 wrapper-config/wrapper-adapters
 96748f4 feat(kernel): NAPI 路线重构 + loader 包
 ```
 
-**进度坐标**：kernel design.md §9 完成 8/9（login 完成，剩 cache/、apis 的 user/file/system）；**完整启动链路打通**（cli → 定位 QQ → BootMain 注入 → boot.cjs 内 kernel 装配 + 快速登录/QR 回退 → adapter/network 协议装配 → HTTP/WS 监听 + 心跳）；**消息收发 + 6 查询动作 + notice 事件 + meta 事件 + QR 登录全部真实可用**；**第一批（消息 9 + 群管 10）+ 第二批（好友 6 + 系统 6 + 输入状态 1）NapCat API 已实现**。NapCat 对齐度 ≈ 50%。
+**进度坐标**：kernel design.md §9 完成 8/9（login 完成，剩 cache/、apis 的 user/file/system）；**完整启动链路打通**（cli → 定位 QQ → BootMain 注入 → boot.cjs 内 kernel 装配 + 快速登录/QR 回退 → adapter/network 协议装配 → HTTP/WS 监听 + 心跳）；**消息收发 + 6 查询动作 + notice 事件 + meta 事件 + QR 登录全部真实可用**；**第一、二、三批 NapCat API 已实现**。NapCat 对齐度 ≈ 55%。
 
 ---
 
@@ -138,7 +138,9 @@ NT QQ 的系统事件（撤回/群变动/禁言）通过**消息的灰色提示�
 
 ✅ **第二批已实现（P2-11，2026-08-05）**：好友类 6 个（set_friend_add_request / set_friend_remark / delete_friend / get_friends_with_category / get_doubt_friends_add_request / set_doubt_friends_add_request）+ 系统类 6 个（get_status / get_version_info / clean_cache / can_send_image / can_send_record / get_robot_uin_range）+ 消息类 1 个（set_input_status）。实现细节见 kernel design §8.13 + adapter design §8.11。
 
-已实现动作总数 8 + 19 + 13 = **40 个**。
+✅ **第三批已实现（P2-12，2026-08-05）**：合并转发 3 个（send_group_forward_msg / send_private_forward_msg / get_forward_msg）+ 单条转发 2 个（forward_group_single_msg / forward_friend_single_msg）+ 在线状态 2 个（set_online_status / set_diy_online_status）+ download_file + 进程控制 2 个（bot_exit / set_restart）。实现细节见 kernel design §8.14 + adapter design §8.12。
+
+已实现动作总数 8 + 19 + 13 + 9 = **49 个**。
 
 ### 5.2 NapCat 动作全集（ActionName 清单，约 130+，来源 napcat-onebot/action/router.ts）
 按 service 分组（**★ = 依赖未探测的 service**）：
@@ -297,9 +299,10 @@ node apps/cli/dist/index.mjs --help     # cli 冒烟（不拉起 QQ）
 
 1. ✅ **API 全量实现第一批**（消息 + 群管，P2-10 已完成）。
 2. ✅ **API 第二批**（好友 + 系统 + set_input_status，P2-11 已完成）。
-3. **API 第三批**：消息类剩余（send_like ★ / set_online_status / set_diy_online_status / get_online_clients / 合并转发 send_group_forward_msg/get_forward_msg）+ 系统类 ticket（get_cookies / get_clientkey / get_rkey ★ 需探测 TicketService/ProfileService/UserApi）+ 文件类（FileService ★）。**send_like/set_online_status 在 NapCat 走 UserApi（setSelfOnlineStatus/like），需先探测 user service 方法面**。
-4. **api/ 聚合层**（adapter design §6 第 4 项）：目前动作直接注入 apis，设计上是 onebot11/api/ 聚合 + 缓存。
-5. **cache/**（ADR-008）：群/成员/好友缓存，翻译层只读消费。GroupService.getAllMemberList 已探测（result.infos Map）。
-6. **set_group_special_title**：OIDB 依赖（违反 NAPI 路线），待评估 `sendSsoCmdReqByContend(cmd, param)` 可行性。
-7. cli config 子命令 + supervisor 多账号（P6）。
-8. onebot12 / satori 空壳填充。
+3. ✅ **API 第三批**（合并转发 + 单条转发 + 在线状态 + download_file + bot_exit/set_restart，P2-12 已完成）。
+4. **API 第四批**（依赖未探测 service ★）：send_like（UserApi.like）/ set_online_clients（getOnLineDev 返回 void）/ get_cookies / get_clientkey / get_rkey（TicketService）/ ocr_image / get_image / get_record（RichMediaService）/ set_qq_profile / set_qq_avatar（ProfileService）/ 文件类全套（FileService）。**开工前需先探测 user/ticket/profile/file/richmedia service 方法面**（probe.ts 反射）。
+5. **api/ 聚合层**（adapter design §6 第 4 项）：目前动作直接注入 apis，设计上是 onebot11/api/ 聚合 + 缓存。
+6. **cache/**（ADR-008）：群/成员/好友缓存，翻译层只读消费。GroupService.getAllMemberList 已探测（result.infos Map）。
+7. **set_group_special_title**：OIDB 依赖（违反 NAPI 路线），待评估 `sendSsoCmdReqByContend(cmd, param)` 可行性。
+8. cli config 子命令 + supervisor 多账号（P6）。
+9. onebot12 / satori 空壳填充。
