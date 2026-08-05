@@ -16,6 +16,7 @@ export type KernelErrorCode =
     | "TIMEOUT" // 操作超时（含文件预测超时）
     | "NOT_LOGIN" // 未登录或已掉线
     | "INVALID_PARAM" // 参数非法（原生拒绝 / 配置校验失败）
+    | "INVALID_STATE" // 状态非法（如 session 未创建即 startNT）
     | "UNKNOWN"; // 兜底
 
 /**
@@ -29,6 +30,7 @@ export const KERNEL_ERROR_CODES = [
     "TIMEOUT",
     "NOT_LOGIN",
     "INVALID_PARAM",
+    "INVALID_STATE",
     "UNKNOWN",
 ] as const;
 

@@ -16,13 +16,19 @@ NapukettoQQ：基于 QQ NT 客户端原生模块（`wrapper.node`）的机器人
    @napuketto/media     无内部依赖
    @napuketto/network   无内部依赖（协议无关传输原语）
    @napuketto/adapter   kernel + network + media（协议适配器容器：core 框架 + onebot11/onebot12/satori）
-   apps/cli             kernel + adapter
+   @napuketto/loader    kernel（boot 引导）+ 无其他（唯一 C++ 组件：注入 + 引导，绝不裸调 C++ ABI）
+   apps/cli             kernel + adapter + loader
    ```
 
 3. **kernel 是唯一原生交互层**：只有 `packages/kernel` 允许 `process.dlopen`、访问 `wrapper.node`、注册原生 listener。其他包只能调 kernel 的语义化 API、订阅事件通道、读缓存。
 4. **network 协议无关**：`@napuketto/network` 不得 import 任何协议包（adapter 等），事件类型必须泛型化。
 5. **不做的事**：framework 模式（QQNT 插件）、webui、NapCat 的 Proxy 事件老方案、无理由的 `any`。
 6. **media 严格解耦**：`@napuketto/media` 只被协议层（adapter）依赖，kernel 不背媒体依赖。
+7. **技术路线（2026-08-05 定稿）**：
+   - 采用 **NAPI 范式**：wrapper.node 在 QQ 定制版 Electron 主进程内由 preload 注册为合法 NAPI exports（实测：纯 Node / 普通 Electron 均 "Module did not self-register"）。
+   - `@napuketto/loader` 注入 hook DLL 把 boot JS 引导进 QQ 主进程，截获 wrapper.node 的 `module.exports`，业务层全部走 NAPI 对象调用。
+   - **绝对禁止**：koffi、手算 vtable 槽位、内存偏移/memcpy 结构体、绕过 NAPI 的 thiscall 裸调；**禁止修改 QQ 安装目录**（package.json / asar / 原生文件）。
+   - 逆向（Ghidra / probe）仅用于理解机制，产物不进入正式代码；`scripts/probe/` 的旧 koffi 脚本仅作历史参考。
 
 ## 工作流
 

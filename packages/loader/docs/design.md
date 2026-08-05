@@ -1,0 +1,105 @@
+# @napuketto/loader 设计
+
+> 职责：**把 Napuketto 业务代码引导进 QQ 定制版 Electron 主进程**，并从 `wrapper.node` 的 NAPI 注册中截获合法的 `module.exports`。这是 NapukettoQQ 的唯一 C++ 组件，但**只做注入与引导，绝不裸调 C++ ABI**。
+> 对应路线：ADR 决策「路线 A（进程注入 Loader），排除路线 B（改 QQ package.json）」。
+
+---
+
+## 0. 为什么需要 C++ 组件（事实链，2026-08-05 实测）
+
+1. `wrapper.node` **不是标准 NAPI self-register 模块**：PE 导入表为空（全延迟加载）、导出表 33 个符号全是 MSVC mangled 名、无 `nm_register_func`。
+2. 纯 Node `process.dlopen` → `Module did not self-register`（实测失败）。
+3. 普通 Electron v43 `process.dlopen` → 同样失败（实测）。
+4. **QQ.exe（定制 Electron）能注册**：`[preload] succeeded. wrapper.node` / `[preload] register done. wrapper.node`（实测 QQ stdout）。
+5. QQ 是打包应用，**Electron 禁用 NODE_OPTIONS**：`Most NODE_OPTIONs are not supported in packaged apps`（实测 stderr）——不能用 `NODE_OPTIONS=--require` 注入 JS。
+6. QQ.exe 导出 `napi_module_register` 与 `uv_dlopen`（GetProcAddress 实测可拿）——注入方案的锚点。
+
+结论：必须由 C++ hook DLL 注入 QQ 主进程，把 boot JS 引导进 Electron 运行时；业务层 100% 走 NAPI，不碰 C++ ABI。
+
+## 1. 边界
+
+- **做**：定位 QQ 安装目录 → stage 依赖 → 拉起 QQ.exe → 注入 hook DLL → hook DLL 引导 boot JS → boot JS 截获 wrapper.node exports 并启动 kernel。
+- **不做**：任何 vtable / 内存偏移 / 结构体手写；不修改 QQ 安装目录任何文件（路线 B 封杀）；不做 WebUI。
+- **C++ 只做两件事**：注入（DLL 进主进程）+ 引导（执行 boot JS）。其余全部是 TS/JS。
+
+## 2. 目录结构
+
+```
+packages/loader/
+├── package.json            # @napuketto/loader（含 C++ 构建脚本）
+├── tsconfig.json
+├── docs/design.md          # 本文件
+├── native/                 # C++ 源码（自研，参考通用注入技术，非 NapCat 代码）
+│   ├── CMakeLists.txt      # 或 Makefile（winlibs 兼容）
+│   ├── bootmain.cpp        # NapukettoBootMain.exe：启动 QQ + 注入
+│   ├── hookdll.cpp         # NapukettoWinBootHook.dll：注入后引导 boot JS
+│   └── minhook/            # 可选：inline hook 依赖（MinHook 开源库）
+├── src/                    # TS 编排层
+│   ├── index.ts
+│   ├── locate-qq.ts        # 注册表/常见路径定位 QQ.exe + 版本目录（复用 kernel wrapper-version）
+│   ├── stage.ts            # stage wrapper.node 依赖到临时目录（DLL 搜索限制规避）
+│   ├── launcher.ts         # 设置环境变量 + spawn QQ.exe + 注入 hook DLL
+│   └── types.ts            # 引导参数（boot JS 路径、kernel 入口等）
+├── runtime/                # 注入后运行的 JS（构建产物复制到这里）
+│   ├── boot.cjs            # hook process.dlopen → 截获 exports → 启动 kernel
+│   └── (kernel dist 由环境变量 NAPUKETTO_KERNEL_ENTRY 指向)
+└── scripts/
+    └── build-native.mjs    # 调 clang-cl/g++ 编译 C++ 产物到 dist/
+```
+
+## 3. 注入链路（自研方案）
+
+```
+apps/cli 启动
+  → loader.launcher.ts：解析参数（QQ 路径、kernel 入口、配置目录）
+  → stage.ts：wrapper.node + 私有依赖复制到临时目录（DLL 搜索限制）
+  → 设置环境变量：
+      NAPUKETTO_BOOT_JS  = runtime/boot.cjs 的绝对路径
+      NAPUKETTO_KERNEL_ENTRY = kernel dist 入口（.mjs）
+      NAPUKETTO_CFG_DIR   = 配置目录
+  → spawn QQ.exe（继承环境变量）
+  → bootmain.exe（C++）：等 QQ.exe 主进程就绪 → CreateRemoteThread + LoadLibraryA 注入 hookdll.dll
+  → hookdll.dll（C++，DllMain）：
+      a) 轮询 GetProcAddress(GetModuleHandleA(NULL), "napi_module_register") 直到非空（Electron node 就绪）
+      b) 构造 napi_module 结构（nm_filename="napuketto_boot.node"），注册进 node 的 NAPI 注册表
+      c) 用 node 模块加载机制触发 require("napuketto_boot.node") → 我们的 NAPI 初始化函数拿到 napi_env
+      d) 初始化函数里 napi_run_script 执行 NAPUKETTO_BOOT_JS 内容（或 require boot.cjs）
+  → boot.cjs（JS，运行在 QQ 主进程）：
+      a) hook process.dlopen：filename 含 wrapper.node 时截获 module.exports
+      b) 若 wrapper.node 已被 QQ preload 注册（C++ 层），轮询 require(wrapperPath) 拿 exports
+      c) import(NAPUKETTO_KERNEL_ENTRY) 启动 kernel：engine.init → session.init → startNT → 事件/API
+```
+
+> 注：步骤 (c)「触发 require」的精确机制以实测为准——优先尝试 hook `uv_dlopen` 让 node 走标准 NAPI 加载路径；备选是 inline hook `GetProcAddress` 拦截 `nm_register_func` 查询。详见 §5「待实测」。
+
+## 4. 与 kernel 的边界
+
+- `loader` 依赖 `@napuketto/kernel`（runtime/boot.cjs 里 import kernel 入口）。
+- `kernel` **不依赖 loader**：kernel 只暴露「给定 NAPI exports 即可初始化」的纯函数（`createWrapper(exports)`）。
+- `apps/cli` 依赖两者：编排「定位 QQ → 注入 → 引导 → 等待登录」。
+
+## 5. 待实测项（C++ 工具链就绪后逐项验证）
+
+- [ ] hookdll 能否拿到 QQ.exe 主进程句柄并注入成功
+- [ ] `napi_module_register` 注册自研模块后如何触发 require（uv_dlopen hook / GetProcAddress hook / 轮询方案）
+- [ ] boot.cjs 截获 wrapper.node exports 的时机与完整性
+- [ ] engine.initWithDeskTopConfig 在 NAPI 下的真实调用（JS 对象 → napi 自动转换）
+- [ ] session.init 4 参（config / depends / dispatcher / listener 均为 TS 对象）
+
+## 6. 依赖方向更新（写进根 AGENTS.md 第 2 条）
+
+```
+@napuketto/kernel    无内部依赖（仅 pino）
+@napuketto/media     无内部依赖
+@napuketto/network   无内部依赖
+@napuketto/adapter   kernel + network + media
+@napuketto/loader    kernel（boot 引导）+ 无其他
+apps/cli             kernel + adapter + loader
+```
+
+## 7. 红线重申
+
+- **绝对禁止**：koffi、vtable 槽位、手算内存偏移、memcpy 结构体、绕过 NAPI 的 thiscall。
+- **绝对禁止**：修改 QQ 安装目录（package.json / asar / 任何原生文件）。
+- **允许**：DLL 注入、环境变量、临时目录 stage（都是运行时行为，不污染宿主安装）。
+- 所有逆向（Ghidra / probe）仅用于理解机制，产物不进入正式代码。

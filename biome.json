@@ -6,7 +6,8 @@
         "useIgnoreFile": true
     },
     "files": {
-        "ignoreUnknown": false
+        "ignoreUnknown": false,
+        "includes": ["**/src/**/*.{ts,tsx,mts,cts,js,mjs,cjs,jsx}"]
     },
     "formatter": {
         "enabled": true,
@@ -44,6 +45,8 @@
                 "useExportType": "error",
                 "noProcessEnv": "off",
                 "useErrorCause": "off",
+                "noExcessiveClassesPerFile": "off",
+                "useConsistentMethodSignatures": "off",
                 "useNamingConvention": {
                     "level": "error",
                     "options": {
@@ -59,7 +62,7 @@
                                 "selector": {
                                     "kind": "typeMember"
                                 },
-                                "formats": ["camelCase", "snake_case"]
+                                "formats": ["camelCase", "snake_case", "PascalCase"]
                             },
                             {
                                 "selector": {

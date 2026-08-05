@@ -15,5 +15,6 @@ export const ob11ErrorCodeMap: ErrorCodeMap = {
     TIMEOUT: 103,
     NOT_LOGIN: 104,
     INVALID_PARAM: 105,
+    INVALID_STATE: 106,
     UNKNOWN: 999,
 };

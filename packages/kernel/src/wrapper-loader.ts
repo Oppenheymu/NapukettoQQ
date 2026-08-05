@@ -1,151 +1,119 @@
 /**
- * wrapper.node 加载器（P1 核心，ADR-018）
+ * wrapper 引导（NAPI 范式，2026-08-05 重构，替代旧 koffi 方案）
  *
- * 已实测确认（2026-08-05，QQ 9.9.31-49919）：
- * - wrapper.node 是 **C++ ABI 模块**（非 N-API）：导出 INTSessionShell / IGProSessionShell
- *   的 MSVC mangled 工厂符号，不能用 process.dlopen 当 Node 模块用，必须经 koffi 按符号调用。
- * - Node 进程内 SetDefaultDllDirectories 限制了 DLL 搜索（不含 PATH/cwd）→ 必须把
- *   wrapper.node 及其私有依赖（libvips/libglib/libgobject/crypto/ssl/broadcast_ipc/
- *   QQNT.dll/ffmpeg.dll）复制到同一临时目录再加载（已验证可行）。
- * - `INTSessionShell::CreateNTSessionShell(std::string const&)` 返回
- *   `shared_ptr<INTCSessionShellBase>`；std::string 为 MSVC x64 布局（SSO 32 字节）。
+ * 事实（实测）：wrapper.node 不是标准 NAPI self-register 模块，只能在 QQ 定制版
+ * Electron 主进程里由 preload 注册。@napuketto/loader 注入 hook DLL 后，boot.cjs
+ * 在 QQ 主进程内截获 `process.dlopen` 的 `module.exports`，然后调用本模块初始化。
+ *
+ * 本模块**不再**使用 koffi / vtable / 内存偏移——所有对象由 QQ 的 NAPI 层自动构建。
+ * 业务层拿到的都是真实 JS 对象：engine.initWithDeskTopConfig(config, adapter) 等。
  */
 
-import { copyFileSync, existsSync, mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
-import koffi from "koffi";
 import { kernelError } from "./errors.js";
-import type { QQVersionInfo } from "./wrapper-version.js";
+import type {
+    EnginInitDesktopConfig,
+    NodeIDependsAdapter,
+    NodeIDispatcherAdapter,
+    NodeIGlobalAdapter,
+    NodeIKernelSessionListener,
+    NodeIQQNTWrapperEngine,
+    NodeIQQNTWrapperSession,
+    WrapperNodeApi,
+    WrapperSessionInitConfig,
+} from "./types/wrapper.js";
 
-/** wrapper.node 私有依赖（与 wrapper.node 同目录或 versions 根目录，9.9.31 实测）。 */
-const WRAPPER_DEPS = [
-    "libvips-42.dll",
-    "libglib-2.0-0.dll",
-    "libgobject-2.0-0.dll",
-    "crypto.dll",
-    "ssl.dll",
-    "broadcast_ipc.dll",
-];
+/** NodeIGlobalAdapter 空实现（engine.initWithDeskTopConfig 第二参）。 */
+class GlobalAdapter implements NodeIGlobalAdapter {}
 
-/** QQNT.dll 依赖（在 versions 根目录，其依赖 ffmpeg.dll 同目录）。 */
-const QQNT_DEPS = ["QQNT.dll", "ffmpeg.dll"];
+/** NodeIDependsAdapter 空实现（session.init 第二参）。 */
+class DependsAdapter implements NodeIDependsAdapter {}
 
-/** MSVC SSO 内联 buffer 长度。 */
-const SSO_BUFFER_SIZE = 16;
-/** SSO 最大内容长度（<16）。 */
-const SSO_MAX_LEN = 15;
-/** 对象首字段 vtable 偏移。 */
-const VTABLE_OFFSET = 0;
+/** NodeIDispatcherAdapter 空实现（session.init 第三参）。 */
+class DispatcherAdapter implements NodeIDispatcherAdapter {}
 
-/** MSVC x64 std::string 布局（SSO：16 字节内联 buffer + size + res）。 */
-const StdString = koffi.struct("StdString", {
-    buf: koffi.array("char", SSO_BUFFER_SIZE),
-    size: "uint64",
-    res: "uint64",
-});
-
-/** shared_ptr 布局：ptr + refcount。 */
-const SharedPtr = koffi.struct("SharedPtr", {
-    ptr: koffi.pointer("void"),
-    ref: koffi.pointer("void"),
-});
-
-/** C++ mangled 符号：INTSessionShell::CreateNTSessionShell(std::string const&) -> shared_ptr。 */
-const CREATE_SESSION_SYMBOL =
-    "?CreateNTSessionShell@INTSessionShell@wrapper@nt@@SA?AV?$shared_ptr@VINTCSessionShellBase@ntc@nt@@@__qq@std@@AEBV?$basic_string@DU?$char_traits@D@__qq@std@@V?$allocator@D@23@@56@@Z";
-
-/** 构造 MSVC SSO 短字符串（<16 字节内联 buffer）。 */
-function makeStdString(text: string): { buf: number[]; size: bigint; res: bigint } {
-    const bytes = Buffer.from(text, "utf8");
-    const buf = new Array<number>(SSO_BUFFER_SIZE).fill(0);
-    for (let i = 0; i < Math.min(bytes.length, SSO_MAX_LEN); i += 1) {
-        buf[i] = bytes[i] ?? 0;
-    }
-    return { buf, size: BigInt(bytes.length), res: BigInt(SSO_MAX_LEN) };
+/** QQ 版本信息（登录握手用）。 */
+export interface QQVersionContext {
+    fullVersion: string;
+    buildVersion: string;
 }
 
-/** 复制 wrapper.node 与依赖到临时目录（Node DLL 搜索限制的规避方案）。 */
-function stageWrapper(versionInfo: QQVersionInfo): { dir: string; wrapperPath: string } {
-    const dir = mkdtempSync(join(tmpdir(), "napuketto-wrapper-"));
-    const appDir = dirname(versionInfo.wrapperPath);
-    // wrapperPath = <install>/versions/<version>/resources/app/wrapper.node
-    // QQNT.dll 在 <install>/versions/<version>/（向上 2 层）
-    const versionDir = dirname(dirname(appDir));
-    const staged: [string, string][] = [
-        [versionInfo.wrapperPath, "wrapper.node"],
-        ...WRAPPER_DEPS.map((name) => [join(appDir, name), name] as [string, string]),
-        ...QQNT_DEPS.map((name) => [join(versionDir, name), name] as [string, string]),
-    ];
-    for (const [src, name] of staged) {
-        if (!existsSync(src)) {
-            throw kernelError(`wrapper 依赖缺失: ${src}`, "NOT_FOUND");
-        }
-        copyFileSync(src, join(dir, name));
-    }
-    return { dir, wrapperPath: join(dir, "wrapper.node") };
-}
-
-/** 会话句柄：session 对象指针（BigInt 地址）+ vtable 地址。 */
-export interface NTSessionHandle {
-    /** session 对象地址。 */
-    ptr: bigint;
-    /** vtable 地址（对象首 8 字节）。 */
-    vtable: bigint;
-}
-
-/** 已加载的 wrapper.node 上下文。 */
+/** 已引导的 wrapper 上下文（运行在 QQ Electron 主进程内）。 */
 export interface WrapperContext {
-    /** 版本信息。 */
-    versionInfo: QQVersionInfo;
-    /** 创建 session 的绑定函数（内部使用）。 */
-    createSessionInternal: (config: string) => NTSessionHandle;
-    /** 释放临时目录等资源（进程退出前调用）。 */
-    dispose: () => void;
+    /** wrapper.node 的 NAPI 顶层导出。 */
+    exports: WrapperNodeApi;
+    /** engine 单例（get() 已调用）。 */
+    engine: NodeIQQNTWrapperEngine;
+    /** 版本信息（供登录握手等使用）。 */
+    versionInfo: QQVersionContext;
+    /** 会话（createSession 后填充）。 */
+    session: NodeIQQNTWrapperSession | null;
 }
 
 /**
- * 加载 wrapper.node（复制依赖 → koffi.load → 绑定 session 工厂）。
- * 失败抛 KernelError；成功后调用方持有 WrapperContext，退出前 dispose()。
+ * 从 loader 截获的 NAPI exports 创建 wrapper 上下文。
+ * 在 QQ 主进程内调用（boot.cjs → kernel 入口）。
  */
-export function loadWrapperNode(versionInfo: QQVersionInfo): WrapperContext {
-    const staged = stageWrapper(versionInfo);
-    let lib: ReturnType<typeof koffi.load>;
-    try {
-        lib = koffi.load(staged.wrapperPath);
-    } catch (cause) {
-        throw kernelError(`wrapper.node 加载失败: ${staged.wrapperPath}`, "UNKNOWN", { cause });
+export function createWrapper(
+    exports: WrapperNodeApi,
+    versionInfo: QQVersionContext,
+): WrapperContext {
+    if (!exports || typeof exports.NodeIQQNTWrapperEngine !== "object") {
+        throw kernelError(
+            "wrapper.node exports 无效（缺少 NodeIQQNTWrapperEngine）",
+            "INVALID_PARAM",
+        );
     }
-
-    let createSessionFn: (name: unknown) => { ptr: unknown; ref: unknown };
-    try {
-        createSessionFn = lib.func(CREATE_SESSION_SYMBOL, SharedPtr, [koffi.pointer(StdString)]);
-    } catch (cause) {
-        throw kernelError("CreateNTSessionShell 符号绑定失败", "UNKNOWN", { cause });
+    if (typeof exports.NodeIQQNTWrapperEngine.get !== "function") {
+        throw kernelError(
+            "NodeIQQNTWrapperEngine.get 缺失（wrapper.node 未注册完整）",
+            "INVALID_PARAM",
+        );
     }
+    const engine = exports.NodeIQQNTWrapperEngine.get();
+    if (!engine || typeof engine.initWithDeskTopConfig !== "function") {
+        throw kernelError("NodeIQQNTWrapperEngine.get() 返回对象无效", "INVALID_PARAM");
+    }
+    return { exports, engine, versionInfo, session: null };
+}
 
-    let disposed = false;
-    return {
-        versionInfo,
-        createSessionInternal(config) {
-            const result = createSessionFn(makeStdString(config));
-            if (result.ptr === null || result.ptr === undefined) {
-                throw kernelError("CreateNTSessionShell 返回空 session", "UNKNOWN");
-            }
-            const ptr = BigInt(result.ptr.toString());
-            const vtable = BigInt(koffi.decode(ptr, VTABLE_OFFSET, "uint64").toString());
-            return { ptr, vtable };
-        },
-        dispose() {
-            if (disposed) {
-                return;
-            }
-            disposed = true;
-            try {
-                rmSync(staged.dir, { recursive: true, force: true });
-            } catch {
-                // wrapper.node 仍被进程持有，忽略清理失败
-            }
-        },
-    };
+/** engine 初始化（NapCat 语义：先 engine 后 session）。config 为普通 JS 对象。 */
+export function initEngine(ctx: WrapperContext, config: EnginInitDesktopConfig): void {
+    ctx.engine.initWithDeskTopConfig(config, new GlobalAdapter());
+}
+
+/** 创建会话：优先 startupSession.create()，失败回退 session.create()。 */
+export function createSession(ctx: WrapperContext): NodeIQQNTWrapperSession {
+    const S = ctx.exports.NodeIQQNTWrapperSession;
+    const startup = ctx.exports.NodeIQQNTStartupSessionWrapper;
+    let session: NodeIQQNTWrapperSession;
+    try {
+        if (typeof startup.create === "function") {
+            session = startup.create() as unknown as NodeIQQNTWrapperSession;
+        } else {
+            session = S.create();
+        }
+    } catch {
+        session = S.create();
+    }
+    ctx.session = session;
+    return session;
+}
+
+/** session 初始化（4 参全为 JS 对象，NAPI 自动转换）。 */
+export function initSession(
+    ctx: WrapperContext,
+    config: WrapperSessionInitConfig,
+    listener: NodeIKernelSessionListener,
+): void {
+    const session = ctx.session ?? createSession(ctx);
+    session.init(config, new DependsAdapter(), new DispatcherAdapter(), listener);
+}
+
+/** 启动会话（startNT(0)，NapCat 语义）。 */
+export function startSession(ctx: WrapperContext): void {
+    const { session } = ctx;
+    if (session === null) {
+        throw kernelError("session 未创建，无法 startNT", "INVALID_STATE");
+    }
+    session.startNT(0);
 }
