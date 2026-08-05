@@ -13,11 +13,14 @@
  * （ctx）集中管理，协议层直接消费 core.ctx。
  */
 
+import { mkdirSync, writeFileSync } from "node:fs";
+import { dirname } from "node:path";
 import { type CoreContext, createCoreContext } from "./context.js";
 import { kernelError } from "./errors.js";
 import type { LoginResult } from "./lifecycle.js";
 import { initAndStartSession, quickLogin } from "./lifecycle.js";
 import { createLogger, type LogLevel } from "./logger.js";
+import { QrLoginSession } from "./login.js";
 import { type PathOptions, PathWrapper } from "./paths.js";
 import type { WrapperNodeApi } from "./types/wrapper.js";
 import { createSessionListener } from "./wrapper-adapters.js";
@@ -42,6 +45,12 @@ export interface CoreLoginOptions {
     appid: string;
     /** session.init 超时（毫秒），默认 15s。 */
     initTimeoutMs?: number;
+    /** 指定快速登录账号（缺省遍历历史列表）。 */
+    quickUin?: string;
+    /** 快速登录失败时回退 QR 登录（二维码写缓存目录），默认 false。 */
+    qrFallback?: boolean;
+    /** QR 二维码图片保存路径（默认缓存目录 qrcode.png）。 */
+    qrCodePath?: string;
 }
 
 /**
@@ -89,9 +98,9 @@ export class NapukettoCore {
     }
 
     /**
-     * 快速登录 + session 初始化（NapCat shell 流程）：
-     * loginService.initConfig → quickLogin → session.init(config, adapters, listener) → startNT(0)。
-     * 成功后填 ctx.login。
+     * 登录 + session 初始化（NapCat shell 流程）：
+     * loginService.initConfig → 快速登录（指定账号/遍历历史）→ 失败可回退 QR
+     * → session.init(config, adapters, listener) → startNT(0)。成功后填 ctx.login。
      */
     async login(opts: CoreLoginOptions): Promise<LoginResult> {
         const { wrapper } = this.ctx;
@@ -115,9 +124,21 @@ export class NapukettoCore {
             this.ctx.logger.warn("loginService 不可用，跳过 initConfig");
         }
 
-        // 2. 快速登录
-        const loginResult = await quickLogin(wrapper, {});
-        this.ctx.logger.info({ uin: loginResult.uin, uid: loginResult.uid }, "快速登录成功");
+        // 2. 登录：快速登录（优先）→ QR 回退
+        let loginResult: LoginResult;
+        try {
+            const quickOpts: { uin?: string } = {};
+            if (opts.quickUin !== undefined) {
+                quickOpts.uin = opts.quickUin;
+            }
+            loginResult = await quickLogin(wrapper, quickOpts);
+            this.ctx.logger.info({ uin: loginResult.uin, uid: loginResult.uid }, "快速登录成功");
+        } catch (err) {
+            if (opts.qrFallback !== true) {
+                throw err;
+            }
+            loginResult = await this.loginByQr(opts);
+        }
 
         // 3. session.init + startNT（等 init 完成信号，lifecycle 封装）
         const sessionConfig = buildSessionConfig({
@@ -140,8 +161,64 @@ export class NapukettoCore {
         return loginResult;
     }
 
+    /** QR 登录：QrLoginSession 状态机 + 二维码写缓存目录（无 UI，cli 可打印路径）。 */
+    private async loginByQr(opts: CoreLoginOptions): Promise<LoginResult> {
+        const { wrapper } = this.ctx;
+        if (wrapper === null || wrapper.loginService === null) {
+            throw kernelError("wrapper/loginService 不可用，无法 QR 登录", "INVALID_STATE");
+        }
+        const session = new QrLoginSession(wrapper.loginService);
+        const qrPath = opts.qrCodePath ?? this.ctx.paths.file("cache", "qrcode.png");
+        session.onQrCode((qr) => {
+            this.ctx.logger.warn(`请扫描二维码登录（保存: ${qrPath} | URL: ${qr.qrcodeUrl}）`);
+            if (qr.pngBase64 !== "") {
+                writeQrCodePng(qrPath, qr.pngBase64);
+            }
+        });
+        session.onStateChange((state) => {
+            this.ctx.logger.info({ state }, "QR 登录状态");
+        });
+
+        // 启动 QR 登录（注册监听 → connect → getQRCodePicture）
+        const startOpts: { quickUin?: string } = {};
+        if (opts.quickUin !== undefined) {
+            startOpts.quickUin = opts.quickUin;
+        }
+        session.start(startOpts);
+
+        // 等待登录成功
+        await new Promise<void>((resolve, reject) => {
+            const offState = session.onStateChange((state) => {
+                if (state === "logged_in") {
+                    offState();
+                    resolve();
+                } else if (state === "failed") {
+                    offState();
+                    reject(kernelError("QR 登录失败", "NOT_LOGIN"));
+                }
+            });
+        });
+
+        const self = session.selfInfo;
+        if (self === null) {
+            throw kernelError("QR 登录成功但 selfInfo 为空", "INVALID_STATE");
+        }
+        session.stop();
+        return { uin: self.uin, uid: self.uid, nick: self.nick };
+    }
+
     /** 停止：日志收尾（资源清理留给 P2 常驻管理）。 */
     stop(): void {
         this.ctx.logger.info("NapukettoCore 停止");
+    }
+}
+
+/** 写二维码 png 到磁盘（base64 解码，供 cli/用户扫码）。 */
+function writeQrCodePng(filePath: string, pngBase64: string): void {
+    try {
+        mkdirSync(dirname(filePath), { recursive: true });
+        writeFileSync(filePath, Buffer.from(pngBase64, "base64"));
+    } catch {
+        // 写失败不阻塞登录（cli 仍可打印 URL）
     }
 }
