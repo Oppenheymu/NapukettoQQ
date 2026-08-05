@@ -45,6 +45,45 @@ function waitFor(predicate: () => boolean, timeoutMs: number, intervalMs = 500):
 /** session init 默认超时（毫秒）。 */
 const DEFAULT_INIT_TIMEOUT_MS = 15_000;
 
+/** session 就绪等待默认超时（毫秒）。 */
+const SESSION_READY_TIMEOUT_MS = 30_000;
+
+/** session 就绪轮询间隔（毫秒）。 */
+const SESSION_READY_POLL_MS = 1000;
+
+/**
+ * 等待 QQ 自己完成 session 初始化（framework 复用模式，2026-08-05 修正）。
+ *
+ * 背景：QQ 9.9.31 实测——session 由 QQ 主进程自己创建并 init（登录后）。
+ * 我们不自己 init（重复 init 断言 "implementation of IQQNTWrapperSession is not valid"），
+ * 也不自己 create（登录前 create() 干扰 QQ，实测 QQ 退出 code=0）。
+ * 正确做法：等 QQ 的 session 就绪（getMsgService 非 null = 核心 service 已挂载）。
+ */
+export async function waitSessionReady(
+    ctx: WrapperContext,
+    opts: { timeoutMs?: number },
+): Promise<void> {
+    const { session } = ctx;
+    if (session === null || session === undefined) {
+        throw kernelError("session 未创建", "INVALID_STATE");
+    }
+    const ok = await waitFor(
+        () => {
+            try {
+                const svc = session.getMsgService();
+                return svc !== null && svc !== undefined;
+            } catch {
+                return false;
+            }
+        },
+        opts.timeoutMs ?? SESSION_READY_TIMEOUT_MS,
+        SESSION_READY_POLL_MS,
+    );
+    if (!ok) {
+        throw kernelError("等待 QQ session 就绪超时（QQ 未完成 init）", "TIMEOUT");
+    }
+}
+
 /** 登录结果（QR 或快速登录）。 */
 export interface LoginResult {
     uin: string;
@@ -159,13 +198,16 @@ export async function initAndStartSession(
     });
 
     session.init(config, depends, dispatcher, listener);
+    // 启动：NapCat 语义（initializeSession 同款 try/catch 兜底）。
+    // QQ 9.9.31 实测 session 无 startNT 方法——init 内部已启动，startNT 失败不致命，
+    // 靠 onOpentelemetryInit/onSessionInitComplete 完成信号判断。
     try {
         session.startNT(0);
     } catch {
         try {
             session.startNT();
-        } catch (e) {
-            throw kernelError(`startNT 失败: ${String(e)}`, "UNKNOWN");
+        } catch {
+            // 无 startNT（9.9.31）：忽略，等 init 完成信号
         }
     }
 

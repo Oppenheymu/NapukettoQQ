@@ -11,7 +11,6 @@
 
 import process from "node:process";
 import { kernelError } from "./errors.js";
-import { getMainSession } from "./session-resolver.js";
 import type {
     EnginInitDesktopConfig,
     NodeIKernelSessionListener,
@@ -106,14 +105,15 @@ export function initEngine(ctx: WrapperContext, config: EnginInitDesktopConfig):
     ctx.engine.initWithDeskTopConfig(config, new GlobalAdapter());
 }
 
-/** 创建会话：`new wrapper.NodeIQQNTWrapperSession()`（NapCat shell 模式确认）。
- * 注：不用 startup.create()/getNTWrapperSession——那些返回未 init 的空 session。 */
+/** 创建会话：`NodeIQQNTWrapperSession.create()`（NapCat shell 正解，2026-08-05 实测修正）。
+ * 注：`new NodeIQQNTWrapperSession()` 构造的对象缺 cpp_impl，session.init 断言
+ * "implementation of IQQNTWrapperSession is not valid"；create() 返回带完整实现的实例。 */
 export function createSession(ctx: WrapperContext): NodeIQQNTWrapperSession {
     const S = ctx.exports.NodeIQQNTWrapperSession;
     let session: NodeIQQNTWrapperSession;
-    try {
-        session = new S();
-    } catch {
+    if (typeof S.create === "function") {
+        session = S.create();
+    } else {
         session = new S();
     }
     ctx.session = session;
@@ -142,10 +142,10 @@ export function startSession(ctx: WrapperContext): void {
 /**
  * boot 装配入口：createWrapper → initEngine → session。
  *
- * **session 来源优先级（2026-08-05 修正，NapCat 机制确认）**：
- *  1. qqSession（boot.cjs 拦截 `new` 窃取的 QQ 已 init session）——**首选**
- *  2. getMainSession（startup.create → getNTWrapperSession）
- *  3. createSession（自己 create，空 session）
+ * **session 来源（2026-08-05 修正）**：
+ *  1. qqSession（boot.cjs 拦截 `new` 窃取的 QQ 已 init session）——尚未落地
+ *  2. createSession（`new NodeIQQNTWrapperSession()`）——NapCat shell 正解，默认路径
+ *  （getMainSession 实测为空壳：service 全 null + 缺 startNT，仅 probe 探测参考）
  *
  * 由 loader runtime/boot.cjs 在 QQ 主进程内调用（import kernel dist 后）。
  * 返回 WrapperContext；失败抛 KernelError。
@@ -170,14 +170,13 @@ export function startNapuketto(options: StartNapukettoOptions): WrapperContext {
         }
     }
 
-    // session：优先 QQ 已 init 的 session（拦截 new 捕获）
+    // session：NapCat shell 正解 = `new NodeIQQNTWrapperSession()`（createSession）。
+    // getMainSession 实测返回空壳——核心 service 全 null 且缺 startNT（2026-08-05
+    // 快速登录 startNT 失败定位）；qqSession 拦截机制尚未在 boot.cjs 落地。
     if (qqSession !== undefined && qqSession !== null) {
         ctx.session = qqSession;
     } else {
-        const main = getMainSession(ctx);
-        if (main === null) {
-            createSession(ctx);
-        }
+        createSession(ctx);
     }
 
     if (sessionConfig !== undefined) {

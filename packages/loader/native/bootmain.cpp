@@ -131,23 +131,37 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
     }
     CloseHandle(pi.hThread);
 
-    // 等主进程出现（QQ 可能 fork 或自提权）
-    DWORD pid = 0;
-    for (int i = 0; i < 30; i++) {
-        pid = findQqProcess(qqPath);
-        if (pid) break;
-        Sleep(500);
+    // 注入目标：优先 CreateProcess 的进程（QQ 主进程）。若注入失败（进程刚退出/
+    // 权限不足等），再按快照找存活实例兜底——避免注入用户已打开的旧 QQ 实例
+    // （QQ 单实例：新启动进程会转发参数后退场，findQqProcess 取 PID 最大会命中旧实例）。
+    DWORD pid = pi.dwProcessId;
+    if (!injectDll(pid, g_hookDllPath)) {
+        pid = 0;
+        for (int i = 0; i < 30; i++) {
+            pid = findQqProcess(qqPath);
+            if (pid) break;
+            Sleep(500);
+        }
+        if (pid) {
+            printf("[boot] 重试注入 (pid=%lu)...\n", pid);
+            injectDll(pid, g_hookDllPath);
+        }
     }
-    if (!pid) pid = pi.dwProcessId;
-
-    // 立即注入（不等待 UI：hookdll 内部有 30s 轮询等 napi 符号，
-    // preload 注册 wrapper.node 之前的窗口期尽量靠前）
-    printf("[boot] injecting (pid=%lu)...\n", pid);
-    injectDll(pid, g_hookDllPath);
+    if (pid == 0) pid = pi.dwProcessId;
 
     // 等 UI 起来（注入已完成，此等待仅确保 QQ 正常启动）
     waitForProcess(pi.hProcess, pid, 3000);
 
+    // 保持存活直到 QQ 进程退出：cli（boot.ts child.on("exit")）观察的是本进程
+    // 生命周期，必须等到 QQ 真正退出才能结束——原实现注入后立即 return 0，
+    // 导致 cli 误报「QQ 进程退出 code=0」并提前退出（2026-08-05 定位）。
+    printf("[boot] waiting for QQ exit (pid=%lu)...\n", pi.dwProcessId);
+    WaitForSingleObject(pi.hProcess, INFINITE);
+    DWORD exitCode = 0;
+    if (!GetExitCodeProcess(pi.hProcess, &exitCode)) {
+        exitCode = 1;
+    }
+    printf("[boot] QQ exited, code=%lu\n", exitCode);
     CloseHandle(pi.hProcess);
-    return 0;
+    return (int)exitCode;
 }

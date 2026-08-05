@@ -31,6 +31,181 @@ function log(msg) {
     }
 }
 
+// ---- 方向 D：IPC 监控（2026-08-05，纯 Electron 官方 API，合规）----
+// 目标：捕获渲染进程 → 主进程的 IPC 消息，定位驱动 cpp_impl 诞生的握手。
+// QQ 9.9.31 把 session 真实初始化下沉到渲染进程，主进程仅作 IPC 转发。
+const ipcChannels = new Map(); // channel -> 计数
+function installIpcMonitor() {
+    try {
+        const electron = require("electron");
+        const ipcMain = electron.ipcMain;
+        if (!ipcMain || typeof ipcMain.emit !== "function") {
+            log("IPC: electron.ipcMain 不可用（无 emit），跳过监控");
+            return;
+        }
+        log("IPC: electron.ipcMain 可用，安装监控");
+        // 打印主进程已注册的接收处理器（EventEmitter 内部表，非逆向）
+        try {
+            const events = ipcMain._events;
+            if (events && typeof events === "object") {
+                const names = Object.keys(events);
+                log(`IPC: ipcMain 已注册接收处理器 ${names.length} 个: ${names.slice(0, 40).join(",")}`);
+            } else {
+                log("IPC: ipcMain._events 为空/不可读");
+            }
+        } catch (e) {
+            log(`IPC: _events 读取失败: ${e?.message ?? e}`);
+        }
+        // webContents 探测（渲染进程注入入口）
+        try {
+            const wc = electron.BrowserWindow?.getAllWindows?.();
+            if (Array.isArray(wc)) {
+                log(`IPC: BrowserWindow 数量=${wc.length}`);
+                wc.forEach((w, i) => {
+                    const id = w.webContents?.id;
+                    const url = w.webContents?.getURL?.() ?? "";
+                    log(`IPC:   window[${i}] webContents.id=${id} url=${String(url).slice(0, 120)}`);
+                });
+            } else {
+                log("IPC: BrowserWindow.getAllWindows 不可用");
+            }
+        } catch (e) {
+            log(`IPC: BrowserWindow 探测失败: ${e?.message ?? e}`);
+        }
+        // 全量 channel 监控（去重 + 计数）
+        const origEmit = ipcMain.emit;
+        ipcMain.emit = function (channel, event, ...args) {
+            try {
+                const key = String(channel);
+                ipcChannels.set(key, (ipcChannels.get(key) ?? 0) + 1);
+                // 深挖关键 channel payload（LogApi 刷屏，忽略普通日志）
+                const isLogApi = key.startsWith("RM_IPCFROM_RENDERER") &&
+                    /LogApi/i.test(JSON.stringify(args[0] ?? "").slice(0, 200));
+                if (/wrapper|session|nt|init|login-storage/i.test(key) || (!isLogApi && /RM_IPCFROM/i.test(key))) {
+                    const brief = args
+                        .map((a) => {
+                            try {
+                                if (a === null || a === undefined) return String(a);
+                                if (typeof a === "string") return a.slice(0, 500);
+                                if (typeof a === "number" || typeof a === "boolean") return String(a);
+                                return JSON.stringify(a).slice(0, 500);
+                            } catch {
+                                return `[${typeof a}]`;
+                            }
+                        })
+                        .join(" | ");
+                    log(`IPC: [${key}] ${brief}`);
+                }
+            } catch (e) {
+                log(`IPC: 记录失败: ${e?.message ?? e}`);
+            }
+            return origEmit.apply(this, arguments);
+        };
+        // 捕获 RM_IPCFROM_RENDERER* 的处理器（ntApi 分发器）——hook ipcMain.on
+        try {
+            const origOn = ipcMain.on.bind(ipcMain);
+            const origOnce = ipcMain.once?.bind(ipcMain);
+            const origHandle = ipcMain.handle?.bind(ipcMain);
+            ipcMain.on = function (channel, listener) {
+                const ret = origOn(channel, listener);
+                const key = String(channel);
+                if (/RM_IPCFROM|ntApi|wrapper|session/i.test(key)) {
+                    log(`IPC: ★ 注册处理器 on(${key}) listener=${listener?.name ?? "anonymous"} 源码=${String(listener).slice(0, 150)}`);
+                }
+                return ret;
+            };
+            if (origOnce) {
+                ipcMain.once = function (channel, listener) {
+                    const ret = origOnce(channel, listener);
+                    const key = String(channel);
+                    if (/RM_IPCFROM|ntApi|wrapper|session/i.test(key)) {
+                        log(`IPC: ★ 注册处理器 once(${key}) listener=${listener?.name ?? "anonymous"}`);
+                    }
+                    return ret;
+                };
+            }
+            if (origHandle) {
+                ipcMain.handle = function (channel, listener) {
+                    const ret = origHandle(channel, listener);
+                    const key = String(channel);
+                    if (/RM_IPCFROM|ntApi|wrapper|session/i.test(key)) {
+                        log(`IPC: ★ 注册处理器 handle(${key}) listener=${listener?.name ?? "anonymous"}`);
+                    }
+                    return ret;
+                };
+            }
+            log("IPC: ipcMain.on/once/handle 已 hook（捕获 ntApi 分发器）");
+        } catch (e) {
+            log(`IPC: ipcMain.on hook 失败: ${e?.message ?? e}`);
+        }
+        // 定时打印 webContents URL（观察 UI 是否从 login.html 进入主界面）
+        try {
+            const injectedIds = new Set();
+            const wcTimer = setInterval(() => {
+                try {
+                    const wins = electron.BrowserWindow?.getAllWindows?.() ?? [];
+                    const urls = wins.map(
+                        (w) => `#${w.webContents?.id}:${String(w.webContents?.getURL?.() ?? "").slice(0, 100)}`,
+                    );
+                    log(`IPC: URL 状态 ${urls.join(" ")}`);
+                    // 对每个非 login.html 窗口尝试渲染进程注入探测（去重 by webContents.id）
+                    for (const w of wins) {
+                        const wc = w.webContents;
+                        if (!wc) continue;
+                        const id = wc.id;
+                        const url = String(wc.getURL?.() ?? "");
+                        if (url.includes("login.html") || injectedIds.has(id)) continue;
+                        injectedIds.add(id);
+                        log(`IPC: 尝试渲染进程注入 wc#${id} url=${url.slice(0, 80)}`);
+                        wc.executeJavaScript(
+                            `(() => {
+                                const out = { wc: ${id} };
+                                try {
+                                    out.globals = Object.keys(window).filter(k => /nt|wrapper|session|QQ/i.test(k)).slice(0, 60);
+                                    out.sessType = typeof window.session;
+                                    out.qqType = typeof window.QQ;
+                                    out.qqntType = typeof window.QQNT;
+                                    const s = window.session || window.QQNTWrapperSession;
+                                    if (s) {
+                                        out.hasGetMsg = typeof s.getMsgService;
+                                        try { out.msgSvc = typeof s.getMsgService(); } catch (e) { out.msgErr = String(e); }
+                                    }
+                                } catch (e) { out.err = String(e); }
+                                return JSON.stringify(out);
+                            })()`,
+                            true,
+                        )
+                            .then((res) => log(`IPC: 渲染进程 wc#${id} 探测结果: ${String(res).slice(0, 1200)}`))
+                            .catch((e) => log(`IPC: executeJavaScript wc#${id} 失败: ${e?.message ?? e}`));
+                    }
+                } catch (e) {
+                    log(`IPC: URL 轮询失败: ${e?.message ?? e}`);
+                }
+            }, 3000);
+            setTimeout(() => clearInterval(wcTimer), 90000);
+        } catch (e) {
+            log(`IPC: URL 轮询安装失败: ${e?.message ?? e}`);
+        }
+        // 30s 后打印 channel 汇总
+        setTimeout(() => {
+            try {
+                const sorted = [...ipcChannels.entries()].sort((a, b) => b[1] - a[1]);
+                log(
+                    `IPC: 汇总（${sorted.length} 个 channel）: ${sorted
+                        .map(([k, v]) => `${k}(${v})`)
+                        .join(" | ")}`,
+                );
+            } catch (e) {
+                log(`IPC: 汇总失败: ${e?.message ?? e}`);
+            }
+        }, 30000);
+        log("IPC: 监控已安装（等待渲染进程消息）");
+    } catch (e) {
+        log(`IPC: 安装失败（electron 不可用?）: ${e?.message ?? e}`);
+    }
+}
+installIpcMonitor();
+
 /**
  * 协议装配：登录成功后，动态 import adapter/network 入口，装配 OB11 适配器。
  * 依赖 launcher 注入的 NAPUTO_ADAPTER_ENTRY / NAPUTO_NETWORK_ENTRY。
@@ -149,6 +324,106 @@ log(`env NAPUTO_BOOT_JS=${process.env.NAPUTO_BOOT_JS}`);
 
 // ---- 捕获状态 ----
 let wrapperExports = null;
+let qqSession = null;
+let qqLoginService = null;
+
+// ---- 拦截 exports 构造器：捕获 QQ 自己创建的 session/loginService 实例 ----
+// （QQ 9.9.31 实测：`new NodeIQQNTWrapperSession()` 自建 session 缺 startNT 且
+//   init 断言失败（implementation not valid）——QQ 自己 new 的实例才是完整可用。
+//   Proxy 必须在 dlopen 返回前装好，才能拦到 preload 后续的 new。）
+function installCtorProxies() {
+    if (!wrapperExports) return;
+    try {
+        const S = wrapperExports.NodeIQQNTWrapperSession;
+        if (typeof S === "function" && S.__naputoProxied !== true) {
+            S.__naputoProxied = true;
+            // hook 静态 get() / getNTWrapperSession()（QQ UI 可能用它们拿 session，而非 new）
+            try {
+                if (typeof S.get === "function") {
+                    const origGet = S.get;
+                    S.get = function () {
+                        const got = origGet.call(this);
+                        qqSession = got;
+                        log(`BOOT: ⭐ QQ 调 get() 拿到 session（===qqSession? ${got === qqSession}）`);
+                        return got;
+                    };
+                }
+            } catch (e) {
+                log(`BOOT: get() hook 失败: ${e?.message ?? e}`);
+            }
+            try {
+                if (typeof S.getNTWrapperSession === "function") {
+                    const origGetNT = S.getNTWrapperSession;
+                    S.getNTWrapperSession = function (name) {
+                        const got = origGetNT.call(this, name);
+                        qqSession = got;
+                        log(`BOOT: ⭐ QQ 调 getNTWrapperSession("${name}") 拿到 session`);
+                        return got;
+                    };
+                }
+            } catch (e) {
+                log(`BOOT: getNTWrapperSession hook 失败: ${e?.message ?? e}`);
+            }
+            wrapperExports.NodeIQQNTWrapperSession = new Proxy(S, {
+                construct(target, args, newTarget) {
+                    const inst = Reflect.construct(target, args, newTarget);
+                    qqSession = inst;
+                    log(
+                        `BOOT: 捕获 QQ session 实例（方法面 ${Object.getOwnPropertyNames(Object.getPrototypeOf(inst) ?? {}).length}）`,
+                    );
+                    // hook 原型 init（实例属性只读，改原型）：探测 QQ 调 init 的 session
+                    try {
+                        const proto = Object.getPrototypeOf(inst);
+                        if (proto && typeof proto.init === "function" && proto.__naputoInitHooked !== true) {
+                            Object.defineProperty(proto, "__naputoInitHooked", {
+                                value: true,
+                                configurable: true,
+                            });
+                            const origInit = proto.init;
+                            Object.defineProperty(proto, "init", {
+                                value: function (cfg, depends, dispatcher, listener) {
+                                    log(
+                                        `BOOT: ⭐ QQ 调 session.init！cfgKeys=${Object.keys(cfg ?? {}).join(",")} this===qqSession? ${this === qqSession}`,
+                                    );
+                                    log(
+                                        `BOOT:   depends=${depends?.constructor?.name ?? typeof depends} dispatcher=${dispatcher?.constructor?.name ?? typeof dispatcher} listener=${listener?.constructor?.name ?? typeof listener}`,
+                                    );
+                                    return origInit.apply(this, arguments);
+                                },
+                                writable: true,
+                                configurable: true,
+                            });
+                            log("BOOT: 原型 init 已 hook（等 QQ 调 init）");
+                        }
+                    } catch (e) {
+                        log(`BOOT: 原型 init hook 失败: ${e?.message ?? e}`);
+                    }
+                    return inst;
+                },
+            });
+            log("BOOT: session 构造器 Proxy 已安装");
+        }
+    } catch (e) {
+        log(`BOOT: session Proxy 安装失败: ${e?.message ?? e}`);
+    }
+    try {
+        const L = wrapperExports.NodeIKernelLoginService;
+        if (typeof L === "function" && L.__naputoProxied !== true) {
+            L.__naputoProxied = true;
+            wrapperExports.NodeIKernelLoginService = new Proxy(L, {
+                construct(target, args, newTarget) {
+                    const inst = Reflect.construct(target, args, newTarget);
+                    qqLoginService = inst;
+                    log("BOOT: 捕获 QQ loginService 实例");
+                    return inst;
+                },
+            });
+            log("BOOT: loginService 构造器 Proxy 已安装");
+        }
+    } catch (e) {
+        log(`BOOT: loginService Proxy 安装失败: ${e?.message ?? e}`);
+    }
+}
 
 // ---- hook process.dlopen 拿 exports（QQ preload 注册后） ----
 const dlopenOrig = process.dlopen;
@@ -158,6 +433,8 @@ process.dlopen = function (module, filename, flags) {
     if (!fn.includes("wrapper.node")) return ret;
     wrapperExports = module.exports;
     log(`CAPTURED wrapper.node exports (${Object.keys(wrapperExports ?? {}).length})`);
+    log(`exports keys: ${Object.keys(wrapperExports ?? {}).join(", ")}`);
+    installCtorProxies();
     maybeBootstrap();
     return ret;
 };
@@ -186,6 +463,7 @@ const pollInterval = setInterval(() => {
         if (m.exports && Object.keys(m.exports).length > 0) {
             wrapperExports = m.exports;
             log(`POLL captured wrapper exports (${Object.keys(wrapperExports).length})`);
+            installCtorProxies();
             bootstrap();
         }
     } catch {
@@ -224,10 +502,71 @@ function bootstrap() {
                             paths: { dataRoot: bootEnv.dataDir },
                             logLevel: "info",
                         });
+                        // 不传 qqSession/qqLoginService（登录前捕获的旧实例已失效/会干扰；
+                        // NapCat framework 语义：登录成功后 kernel 自己 create+init）
                         const ctx = core.attachWrapper(wrapperExports, bootEnv);
                         log(
                             `bootstrap: attachWrapper OK, engine=${typeof ctx.engine}, session=${ctx.session !== null}`,
                         );
+                        // 探测：create() 与捕获的 QQ session 关系（确认 create() 是否干扰 QQ）
+                        try {
+                            const S2 = wrapperExports.NodeIQQNTWrapperSession;
+                            const created = typeof S2.create === "function" ? S2.create() : null;
+                            log(
+                                `BOOT: create()===qqSession? ${created === qqSession} | create()===ctx.session? ${created === ctx.session} | qqSession===ctx.session? ${qqSession === ctx.session}`,
+                            );
+                            const svc =
+                                created && typeof created.getMsgService === "function"
+                                    ? created.getMsgService()
+                                    : null;
+                            log(
+                                `BOOT: create().getMsgService=${svc !== null && svc !== undefined ? "ready" : "null"} qqSession.getMsgService=${qqSession && typeof qqSession.getMsgService === "function" && qqSession.getMsgService() !== null && qqSession.getMsgService() !== undefined ? "ready" : "null"}`,
+                            );
+                        } catch (e) {
+                            log(`BOOT: create() 探测失败: ${e?.message ?? e}`);
+                        }
+                        // 多源 session 就绪探测：qqSession / get() / getNTWrapperSession（5s 间隔，60s 上限）
+                        const sessionProbe = setInterval(() => {
+                            try {
+                                const S2 = wrapperExports.NodeIQQNTWrapperSession;
+                                const out = [];
+                                if (qqSession && typeof qqSession.getMsgService === "function") {
+                                    const svc = qqSession.getMsgService();
+                                    out.push(`qqSession=${svc !== null && svc !== undefined ? "READY" : "null"}`);
+                                }
+                                if (typeof S2.get === "function") {
+                                    const got = S2.get();
+                                    if (got && typeof got.getMsgService === "function") {
+                                        const svc = got.getMsgService();
+                                        out.push(`get()=${svc !== null && svc !== undefined ? "READY" : "null"}${got === qqSession ? "(=qqSession)" : ""}`);
+                                    } else {
+                                        out.push("get()=无效");
+                                    }
+                                }
+                                log(`BOOT: session 探测: ${out.join(" | ")}`);
+                            } catch (e) {
+                                log(`BOOT: session 探测失败: ${e?.message ?? e}`);
+                            }
+                        }, 5000);
+                        setTimeout(() => clearInterval(sessionProbe), 60000);
+                        // 探测 session 方法面（NAPI 反射，验证 startNT/init 等关键方法）
+                        try {
+                            const s = ctx.session;
+                            if (s) {
+                                const names = [
+                                    ...Object.getOwnPropertyNames(Object.getPrototypeOf(s) ?? {}),
+                                    ...Object.keys(s ?? {}),
+                                ];
+                                log(
+                                    `bootstrap: session methods(${names.length}): ${[...new Set(names)].join(", ")}`,
+                                );
+                                log(
+                                    `bootstrap: session.init=${typeof s.init} startNT=${typeof s.startNT} getMsgService=${typeof s.getMsgService}`,
+                                );
+                            }
+                        } catch (e) {
+                            log(`bootstrap: session 探测失败: ${e?.message ?? e}`);
+                        }
                         let loginResult = null;
                         if (typeof core.login === "function") {
                             // 打印可用快速登录账号（对齐 NapCat 启动横幅）
@@ -266,6 +605,48 @@ function bootstrap() {
                             log(
                                 `bootstrap: 登录成功 uin=${loginResult.uin} uid=${loginResult.uid} nick=${loginResult.nick}`,
                             );
+                            // ⭐ 登录后替换 session：Proxy 捕获的 QQ 新实例（登录后重建）才有效，
+                            // 替换 kernel 登录时自建的 session（NapCat framework 语义）。
+                            // 候选来源：construct / get() / getNTWrapperSession 捕获的 qqSession。
+                            if (typeof core.setSession === "function") {
+                                let replaced = false;
+                                for (let i = 0; i < 20; i++) {
+                                    if (qqSession && qqSession !== ctx.session) {
+                                        // 验证候选 session 是否有效（getMsgService 可调，不抛断言）
+                                        let usable = false;
+                                        try {
+                                            const svc = qqSession.getMsgService();
+                                            usable = svc !== null && svc !== undefined;
+                                        } catch {
+                                            usable = false;
+                                        }
+                                        if (usable) {
+                                            core.setSession(qqSession);
+                                            replaced = true;
+                                            log(
+                                                `bootstrap: 已替换为 QQ 登录后 session（getMsgService READY）`,
+                                            );
+                                            break;
+                                        }
+                                        log(
+                                            `bootstrap: qqSession 捕获但未就绪（getMsgService=${usable ? "ready" : "null/断言"}），继续等待`,
+                                        );
+                                    }
+                                    await new Promise((r) => setTimeout(r, 500));
+                                }
+                                if (!replaced) {
+                                    log("bootstrap: 未捕获到可用的登录后 qqSession，保留 kernel 自建 session");
+                                }
+                            }
+                            // 等 session 就绪（getMsgService 非 null）——QQ 完成 init 后才有
+                            try {
+                                await kernel.waitSessionReady(ctx, { timeoutMs: 30000 });
+                                log("bootstrap: QQ session 就绪（getMsgService 可用）");
+                            } catch (readyErr) {
+                                log(
+                                    `bootstrap: 等待 session 就绪失败: ${readyErr?.message ?? readyErr}`,
+                                );
+                            }
                         } else {
                             log("bootstrap: kernel core missing login fn");
                         }

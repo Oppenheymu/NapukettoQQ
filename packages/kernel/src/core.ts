@@ -17,16 +17,13 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { type CoreContext, createCoreContext } from "./context.js";
 import { kernelError } from "./errors.js";
-import type { LoginResult } from "./lifecycle.js";
-import { initAndStartSession, quickLogin } from "./lifecycle.js";
+import { type LoginResult, quickLogin } from "./lifecycle.js";
 import { createLogger, type LogLevel } from "./logger.js";
 import { QrLoginSession } from "./login.js";
 import { type PathOptions, PathWrapper } from "./paths.js";
-import type { WrapperNodeApi } from "./types/wrapper.js";
-import { createSessionListener } from "./wrapper-adapters.js";
-import { buildLoginConfig, buildSessionConfig } from "./wrapper-config.js";
-import type { BootEnv, WrapperContext } from "./wrapper-loader.js";
-import { startNapuketto } from "./wrapper-loader.js";
+import type { NodeIQQNTWrapperSession, WrapperNodeApi } from "./types/wrapper.js";
+import { buildLoginConfig } from "./wrapper-config.js";
+import { type BootEnv, startNapuketto, type WrapperContext } from "./wrapper-loader.js";
 
 export interface NapukettoCoreOptions {
     /** 数据根 / 账号（透传给 PathWrapper，见 ADR-016）。 */
@@ -84,13 +81,18 @@ export class NapukettoCore {
     /**
      * 装配 wrapper：wrapperExports → startNapuketto（engine.init + session 创建），
      * 结果挂到 ctx.wrapper。在 QQ 主进程内调用（boot.cjs 截获 exports 后）。
+     * captured：boot.cjs 拦截 `new` 捕获的 QQ 实例（session/loginService，优先使用）。
      */
-    attachWrapper(wrapperExports: WrapperNodeApi, env?: BootEnv): WrapperContext {
+    attachWrapper(
+        wrapperExports: WrapperNodeApi,
+        env?: BootEnv,
+        captured?: { qqSession?: NodeIQQNTWrapperSession | null; qqLoginService?: unknown },
+    ): WrapperContext {
         let wrapper: WrapperContext;
         if (env === undefined) {
-            wrapper = startNapuketto({ wrapperExports });
+            wrapper = startNapuketto({ wrapperExports, ...captured });
         } else {
-            wrapper = startNapuketto({ wrapperExports, env });
+            wrapper = startNapuketto({ wrapperExports, env, ...captured });
         }
         this.ctx.wrapper = wrapper;
         this.ctx.logger.info({ version: env?.qqVersion }, "wrapper 装配完成（engine + session）");
@@ -98,9 +100,13 @@ export class NapukettoCore {
     }
 
     /**
-     * 登录 + session 初始化（NapCat shell 流程）：
-     * loginService.initConfig → 快速登录（指定账号/遍历历史）→ 失败可回退 QR
-     * → session.init(config, adapters, listener) → startNT(0)。成功后填 ctx.login。
+     * 登录 + session 初始化（NapCat framework 语义，2026-08-05 实测修正）：
+     * loginService.initConfig → 登录（快速/QR）→ **登录成功后** create session + init
+     * → 等 onOpentelemetryInit(is_init) 完成信号。成功后填 ctx.login。
+     *
+     * 关键（实测）：登录前 create()/init 均断言失败（session 未 init / 干扰 QQ）；
+     * 登录后 QQ 自己 init 并触发 listener.onOpentelemetryInit——我们只需在登录后
+     * create + init 并监听该信号。
      */
     async login(opts: CoreLoginOptions): Promise<LoginResult> {
         const { wrapper } = this.ctx;
@@ -108,7 +114,7 @@ export class NapukettoCore {
             throw kernelError("wrapper 未装配，无法登录", "INVALID_STATE");
         }
 
-        // 1. loginService.initConfig（NapCat shell 流程：addKernelLoginListener 前）
+        // 1. loginService.initConfig（NapCat framework 流程：addKernelLoginListener 前）
         const loginService = wrapper.loginService as {
             initConfig?: (config: unknown) => void;
         } | null;
@@ -124,7 +130,7 @@ export class NapukettoCore {
             this.ctx.logger.warn("loginService 不可用，跳过 initConfig");
         }
 
-        // 2. 登录：快速登录（优先）→ QR 回退
+        // 2. 登录：快速登录（优先）→ QR 回退。登录成功前不碰 session。
         let loginResult: LoginResult;
         try {
             const quickOpts: { uin?: string } = {};
@@ -140,25 +146,22 @@ export class NapukettoCore {
             loginResult = await this.loginByQr(opts);
         }
 
-        // 3. session.init + startNT（等 init 完成信号，lifecycle 封装）
-        const sessionConfig = buildSessionConfig({
-            appid: opts.appid,
-            fullVersion: wrapper.versionInfo.fullVersion,
-            selfUin: loginResult.uin,
-            selfUid: loginResult.uid,
-            accountPath: this.ctx.paths.accountDir,
-            downloadPath: this.ctx.paths.file("cache", "download"),
-        });
-        const listener = createSessionListener();
-        let initOpts: { timeoutMs?: number } = {};
-        if (opts.initTimeoutMs !== undefined) {
-            initOpts = { timeoutMs: opts.initTimeoutMs };
-        }
-        await initAndStartSession(wrapper, sessionConfig, listener, initOpts);
-        this.ctx.logger.info("session init + startNT OK");
-
+        // 3. 登录成功即返回。QQ 登录后重建 session（Proxy 捕获新实例），由 boot.cjs
+        // 登录成功后 setSession 替换，再自行等待 session 就绪（waitSessionReady）。
+        // 不在 login 内等待——替换发生在 login 返回之后，这里等不到。
         this.ctx.login = loginResult;
         return loginResult;
+    }
+
+    /**
+     * 替换当前 session（登录后 Proxy 捕获的 QQ 新实例替换自己 create 的无效实例）。
+     * 在 QQ 主进程内由 boot.cjs 调用（登录成功后）。
+     */
+    setSession(session: NodeIQQNTWrapperSession): void {
+        if (this.ctx.wrapper === null) {
+            throw kernelError("wrapper 未装配，无法设置 session", "INVALID_STATE");
+        }
+        this.ctx.wrapper.session = session;
     }
 
     /** QR 登录：QrLoginSession 状态机 + 二维码写缓存目录（无 UI，cli 可打印路径）。 */

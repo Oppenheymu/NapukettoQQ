@@ -38,7 +38,12 @@ export { NTEventChannel } from "./event-channel.js";
 export type { GroupEventChannel } from "./group-bridge.js";
 export { GroupBridge } from "./group-bridge.js";
 export type { LoginAccountInfo, LoginResult } from "./lifecycle.js";
-export { initAndStartSession, listLoginAccounts, quickLogin } from "./lifecycle.js";
+export {
+    initAndStartSession,
+    listLoginAccounts,
+    quickLogin,
+    waitSessionReady,
+} from "./lifecycle.js";
 export type { LoggerOptions, LogLevel } from "./logger.js";
 export { createLogger } from "./logger.js";
 export type { LoginListItem, LoginState, QrCodeData, SelfInfo } from "./login.js";
