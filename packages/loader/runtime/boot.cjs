@@ -59,6 +59,30 @@ function maybeBootstrap() {
     bootstrap();
 }
 
+// 兜底轮询：dlopen hook 可能拿到不完整 exports（首次 dlopen 注册未完成）
+const wrapperPath =
+    process.env.NAPUTO_WRAPPER_PATH || "C:/Program Files/Tencent/QQNT/versions/9.9.31-49919/resources/app/wrapper.node";
+
+const pollInterval = setInterval(() => {
+    if (bootstrapped) {
+        clearInterval(pollInterval);
+        return;
+    }
+    try {
+        const m = { exports: {} };
+        process.dlopen(m, wrapperPath);
+        if (m.exports && Object.keys(m.exports).length > 0) {
+            wrapperExports = m.exports;
+            log(`POLL captured wrapper exports (${Object.keys(wrapperExports).length})`);
+            bootstrap();
+        }
+    } catch {
+        // 未就绪，继续等
+    }
+}, 500);
+// 60s 超时兜底
+setTimeout(() => clearInterval(pollInterval), 60000);
+
 function bootstrap() {
     if (bootstrapped) return;
     bootstrapped = true;
@@ -93,6 +117,18 @@ function bootstrap() {
                     // 2. 完整生命周期：loginService → 快速登录 → session.init → startNT
                     if (typeof kernel.quickLogin === "function" &&
                         typeof kernel.initAndStartSession === "function") {
+                        // 2a. loginService.initConfig（NapCat shell 流程：addListener 前）
+                        if (typeof kernel.buildLoginConfig === "function" && ctx.loginService) {
+                            const loginCfg = kernel.buildLoginConfig(
+                                "537237765",
+                                bootEnv.qqVersion || "",
+                                bootEnv.dataDir || ".",
+                            );
+                            if (typeof ctx.loginService.initConfig === "function") {
+                                ctx.loginService.initConfig(loginCfg);
+                                log("bootstrap: loginService.initConfig OK");
+                            }
+                        }
                         const loginResult = await kernel.quickLogin(ctx, {});
                         log(`bootstrap: quickLogin OK, uin=${loginResult.uin}, uid=${loginResult.uid}`);
                         const sessionConfig = kernel.buildSessionConfig({
@@ -142,23 +178,4 @@ function bootstrap() {
     }
 }
 
-// 兜底：轮询等 exports 就绪
-const wrapperPath =
-    process.env.NAPUTO_WRAPPER_PATH || "C:/Program Files/Tencent/QQNT/versions/9.9.31-49919/resources/app/wrapper.node";
-
-function pollForQQSession() {
-    const interval = setInterval(() => {
-        if (bootstrapped) {
-            clearInterval(interval);
-            return;
-        }
-        if (wrapperExports !== undefined) {
-            clearInterval(interval);
-            bootstrap();
-        }
-    }, 1000);
-    setTimeout(() => clearInterval(interval), 60000);
-}
-
 log("boot ready, waiting for wrapper exports...");
-pollForQQSession();

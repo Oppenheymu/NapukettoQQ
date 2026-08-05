@@ -125,16 +125,6 @@ export interface WrapperSessionInitConfig {
     deviceConfig: string;
 }
 
-/** 会话监听器（init 第四参）。 */
-export interface NodeIKernelSessionListener {
-    onNTSessionCreate?(sessionId: string): void;
-    onGProSessionCreate?(sessionId: string): void;
-    onSessionInitComplete?(result: unknown): void;
-    onOpentelemetryInit?(info: { is_init: boolean; is_report: boolean }): void;
-    onUserOnlineResult?(result: unknown): void;
-    onGetSelfTinyId?(result: unknown): void;
-}
-
 /** NodeIQQNTWrapperSession 构造器（含静态 get / getNTWrapperSession / create）。 */
 export type NodeIQQNTWrapperSessionCtor = new () => NodeIQQNTWrapperSession & {
     get(): NodeIQQNTWrapperSession;
@@ -201,18 +191,35 @@ export interface NodeIO3MiscService {
 }
 
 // adapter 类型（session.init 第二/三参、engine.initWithDeskTopConfig 第二参）
-// NAPI 侧需要 `new wrapper.NodeIXxxAdapter({...})` 构造器包装（NapCat shell 模式确认）。
+// 注意：wrapper exports **不含** NodeI*Adapter / NodeI*Listener 构造器（实测 89 键无）。
+// 传普通 JS 对象即可——NAPI 反射读取对象上的方法回调。方法名是 QQ wrapper 的外部契约
+//（2026-08-05 从 NapCatQQ 运行时行为确认，接口为自研描述）。
 export interface NodeIGlobalAdapter {
-    readonly adapterBrand?: "global";
-}
-export interface NodeIDependsAdapter {
-    readonly adapterBrand?: "depends";
-}
-export interface NodeIDispatcherAdapter {
-    readonly adapterBrand?: "dispatcher";
+    onLog?(...args: unknown[]): void;
+    onGetSrvCalTime?(...args: unknown[]): void;
+    onShowErrUITips?(...args: unknown[]): void;
+    fixPicImgType?(...args: unknown[]): unknown;
+    getAppSetting?(...args: unknown[]): unknown;
+    onInstallFinished?(...args: unknown[]): void;
+    onUpdateGeneralFlag?(...args: unknown[]): void;
+    onGetOfflineMsg?(...args: unknown[]): void;
 }
 
-/** 登录监听器接口（NapCat IKernelLoginListener 同款，自研描述）。 */
+/** session.init 第二参：依赖回调（普通 JS 对象）。 */
+export interface NodeIDependsAdapter {
+    onMSFStatusChange?(statusType: number, changeReasonType: number): void;
+    onMSFSsoError?(code: number, desc: string): void;
+    getGroupCode?(...args: unknown[]): unknown;
+}
+
+/** session.init 第三参：请求分发回调（普通 JS 对象）。 */
+export interface NodeIDispatcherAdapter {
+    dispatchRequest?(arg: unknown): void;
+    dispatchCall?(arg: unknown): void;
+    dispatchCallWithJson?(arg: unknown): void;
+}
+
+/** 登录监听器接口（普通 JS 对象，传给 loginService.addKernelLoginListener）。自研描述。 */
 export interface IKernelLoginListener {
     onLoginConnected?(...args: unknown[]): void;
     onLoginDisConnected?(...args: unknown[]): void;
@@ -232,10 +239,18 @@ export interface IKernelLoginListener {
     onLoginState?(...args: unknown[]): void;
 }
 
-/** NodeIKernelLoginListener 构造器（`new wrapper.NodeIKernelLoginListener(listener)`）。 */
-export type NodeIKernelLoginListener = new (
-    listener: IKernelLoginListener,
-) => NodeIKernelLoginListener;
+/**
+ * NodeIKernelSessionListener：session.init 第四参监听器（普通 JS 对象）。
+ * init 完成信号：NapCat 以 onOpentelemetryInit(is_init===true) 为准（onSessionInitComplete 为辅）。
+ */
+export interface NodeIKernelSessionListener {
+    onNTSessionCreate?(sessionId: string): void;
+    onGProSessionCreate?(sessionId: string): void;
+    onSessionInitComplete?(result: unknown): void;
+    onOpentelemetryInit?(info: { is_init: boolean; is_report: boolean }): void;
+    onUserOnlineResult?(result: unknown): void;
+    onGetSelfTinyId?(result: unknown): void;
+}
 
 /** wrapper.node 的 NAPI 顶层导出（module.exports）。 */
 export interface WrapperNodeApi {
@@ -248,22 +263,6 @@ export interface WrapperNodeApi {
     NodeIQQNTWrapperEngine: NodeIQQNTWrapperEngineCtor;
     /** 构造器：`new wrapper.NodeIKernelLoginService()`。 */
     NodeIKernelLoginService: NodeIKernelLoginServiceCtor;
-    /** 构造器：`new wrapper.NodeIGlobalAdapter({...})`。 */
-    NodeIGlobalAdapter: new (
-        adapter: NodeIGlobalAdapter,
-    ) => NodeIGlobalAdapter;
-    /** 构造器：`new wrapper.NodeIDependsAdapter({...})`。 */
-    NodeIDependsAdapter: new (
-        adapter: NodeIDependsAdapter,
-    ) => NodeIDependsAdapter;
-    /** 构造器：`new wrapper.NodeIDispatcherAdapter({...})`。 */
-    NodeIDispatcherAdapter: new (
-        adapter: NodeIDispatcherAdapter,
-    ) => NodeIDispatcherAdapter;
-    /** 构造器：`new wrapper.NodeIKernelLoginListener({...})`。 */
-    NodeIKernelLoginListener: NodeIKernelLoginListener;
-    /** 构造器：`new wrapper.NodeIKernelSessionListener({...})`。 */
-    NodeIKernelSessionListener: new (
-        listener: NodeIKernelSessionListener,
-    ) => NodeIKernelSessionListener;
+    // 注：wrapper exports **不含** NodeI*Adapter / NodeI*Listener 构造器（实测 89 键无）——
+    // adapter/listener 一律传普通 JS 对象（见 NodeIGlobalAdapter 等接口）。
 }
