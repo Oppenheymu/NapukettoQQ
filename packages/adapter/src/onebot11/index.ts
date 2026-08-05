@@ -5,6 +5,8 @@
 
 export { ob11ErrorCodeMap } from "./action/error-map.js";
 export { createOb11ActionRegistry } from "./action/index.js";
+export type { OneBot11AdapterOptions } from "./adapter.js";
+export { NapukettoOneBot11Adapter } from "./adapter.js";
 export type {
     OB11BaseEvent,
     OB11Event,

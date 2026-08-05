@@ -2,7 +2,7 @@
 
 > 职责：**协议适配器容器**——一个共享的适配器框架（core），外加 OneBot 11 / OneBot 12 / Satori 三套协议语义。
 > 对应 ADR：002 / 003 / 008 / 009 / 013 / 014 / 017
-> 状态：core 框架已实现（BaseAction / ActionRegistry / AdapterRegistry / ProtocolConfig / BaseProtocolAdapter，2026-08-04，见 §8）；onebot11 第一梯队已实现（types / helper/config / action/send_msg，2026-08-04，见 §8.1）；onebot11 helper 翻译层已实现（cqcode/data，2026-08-04，见 §8.2）；onebot11 事件模型已实现（message/notice/request/meta，2026-08-05，见 §8.3）；onebot11 动作骨架扩充已实现（error-map + 6 个查询动作 + types 补全，2026-08-05，见 §8.4）；下一步 onebot11 api、adapter.ts。
+> 状态：core 框架已实现（BaseAction / ActionRegistry / AdapterRegistry / ProtocolConfig / BaseProtocolAdapter，2026-08-04，见 §8）；onebot11 第一梯队已实现（types / helper/config / action/send_msg，2026-08-04，见 §8.1）；onebot11 helper 翻译层已实现（cqcode/data，2026-08-04，见 §8.2）；onebot11 事件模型已实现（message/notice/request/meta，2026-08-05，见 §8.3）；onebot11 动作骨架扩充已实现（error-map + 6 个查询动作 + types 补全，2026-08-05，见 §8.4）；**onebot11 adapter.ts 已实现（2026-08-05，见 §8.5）——订阅 kernel 消息事件 → OB11 消息事件 → network 广播（消息收链路打通）**；下一步 onebot11 api（请求分发 / 动作执行）与动作接 kernel。**§9 实现顺序 5-6 已同步更新。**
 
 ---
 
@@ -270,3 +270,28 @@ abstract class BaseAction<TPayload, TReturn> {
 - **6 个查询类动作骨架**：get_login_info / get_group_info / get_group_list / get_group_member_info / get_group_member_list / get_friend_list——zod schema（含 go-cqhttp no_cache 扩展）+ `_handle` 占位 reject（映射 UNKNOWN=999）+ TODO(P1/P2) 注释；kernel apis 打通后逐个填实现，无需改注册表。
 - **types 补全动作返回值**：GroupMemberInfo（含 go-cqhttp 扩展：qq_level/special_title/shut_up_timestamp/is_friend 等）/ FriendInfo / StrangerInfo / GroupHonorInfo（current_talkative + 5 列表）/ VersionInfo（protocol_version 固定 "v11" + go-cqhttp 扩展）/ Sex 枚举。
 - **骨架 reject 而非占位返回值**：查询类动作在 kernel 未接入时返回假数据会误导调用方，reject（→ 999）语义更诚实；send_msg 保留占位 message_id（Date.now）是历史约定，P2 一并替换。
+
+### 8.5 onebot11 adapter（2026-08-05，消息收链路打通）
+
+`NapukettoOneBot11Adapter`（onebot11/adapter.ts）：订阅 kernel 消息事件通道 → 翻译 OB11 消息事件 → network 广播。
+
+```ts
+class NapukettoOneBot11Adapter extends BaseProtocolAdapter<OB11Config> {
+    constructor(opts: {
+        config: ProtocolConfig<OB11Config>;
+        broadcaster: EventBroadcaster;
+        msgChannel: MsgEventChannel;   // kernel 消息事件通道（MsgBridge 持有）
+        selfUin: string;               // 机器人 QQ 号（self_id）
+    });
+}
+```
+
+**翻译（RawMessage → OB11MessageEvent，纯函数）**：
+- 群消息（chatType=2）：`message_type=group`、`group_id=Number(peerUid)`、sender role 默认 `member`（P2-3 接 cache）
+- 私聊（chatType=1 / 100 临时）：`message_type=private`、`sub_type=friend/group`
+- `message_id=Number(msgSeq)`（P2-3 换 MessageUnique：雪花 msgId → int32 稳定映射）
+- message=canonicalToSegments(toCanonicalElements(msg))；raw_message=canonicalToCqMessage；time=msgTime/1000
+
+**订阅/退订**：onStart 订阅 `Msg/onRecvMsg`（返回 unsubscribe），onStop 退订——协议层生命周期与 kernel 事件解耦。
+
+**请求分发尚未接**：动作注册表 → network onRequest 分发、send_msg 真实调用 kernel apis/msg——下一步（P2-3）。
