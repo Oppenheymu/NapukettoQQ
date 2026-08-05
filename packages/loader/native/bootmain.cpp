@@ -120,16 +120,15 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
     STARTUPINFOA si = {sizeof(si)};
     PROCESS_INFORMATION pi = {};
     std::string cmdline = "\"" + qqPath + "\"";
+    // 实测发现（2026-08-05）：CREATE_SUSPENDED 挂起注入会让 QQ 卡死（1 进程无窗口，
+    // CPU≈0，疑似触发反注入/完整性检测）。改回正常启动 + 找到主进程后立即注入。
     BOOL ok = CreateProcessA(
         qqPath.c_str(), cmdline.data(), nullptr, nullptr, FALSE,
-        CREATE_SUSPENDED | CREATE_UNICODE_ENVIRONMENT, nullptr, nullptr, &si, &pi);
+        CREATE_UNICODE_ENVIRONMENT, nullptr, nullptr, &si, &pi);
     if (!ok) {
         printf("[boot] CreateProcess failed: %lu\n", GetLastError());
         return 1;
     }
-
-    // 用 suspend/resume 确保环境变量已传递
-    ResumeThread(pi.hThread);
     CloseHandle(pi.hThread);
 
     // 等主进程出现（QQ 可能 fork 或自提权）
@@ -141,11 +140,13 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
     }
     if (!pid) pid = pi.dwProcessId;
 
-    // 等 UI 起来再注入（Electron node 环境就绪）
-    waitForProcess(pi.hProcess, pid, 3000);
-
-    // 注入
+    // 立即注入（不等待 UI：hookdll 内部有 30s 轮询等 napi 符号，
+    // preload 注册 wrapper.node 之前的窗口期尽量靠前）
+    printf("[boot] injecting (pid=%lu)...\n", pid);
     injectDll(pid, g_hookDllPath);
+
+    // 等 UI 起来（注入已完成，此等待仅确保 QQ 正常启动）
+    waitForProcess(pi.hProcess, pid, 3000);
 
     CloseHandle(pi.hProcess);
     return 0;

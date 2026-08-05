@@ -75,6 +75,8 @@ export function launchQqWithLoader(options: LaunchOptions): LaunchResult {
         [ENV.HOOK_DLL]: hookDllPath,
         [ENV.KERNEL_ENTRY]: resolve(options.kernelEntry),
         [ENV.CFG_DIR]: cfg,
+        [ENV.QQ_VERSION]: options.qq.version,
+        [ENV.WRAPPER_PATH]: options.qq.wrapperPath,
     };
 
     // BootMain 负责 CreateProcess(QQ) + 注入
@@ -94,4 +96,6 @@ export const ENV = {
     HOOK_DLL: "NAPUTO_HOOK_DLL",
     KERNEL_ENTRY: "NAPUTO_KERNEL_ENTRY",
     CFG_DIR: "NAPUTO_CFG_DIR",
+    QQ_VERSION: "NAPUTO_QQ_VERSION",
+    WRAPPER_PATH: "NAPUTO_WRAPPER_PATH",
 } as const;

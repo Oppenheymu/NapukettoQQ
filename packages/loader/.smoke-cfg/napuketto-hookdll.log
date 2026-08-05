@@ -1,0 +1,11 @@
+[232840218ms] hook: DllMain attach, bootJs=C:\Dev\QQBot-Dev\NapukettoQQ\packages\loader\dist\native\boot.cjs
+[232840218ms] hook: napi 符号就绪，安装 hooks
+[232840218ms] hook: 目标字节: 48 83 3D 4F 06 0A 00 00 74 06 FF 25 
+[232840218ms] hook: napi_module_register inline hook 已安装
+[232840218ms] hook: 目标字节: 48 83 3D 8F 08 0A 00 00 74 06 FF 25 
+[232840218ms] hook: napi_define_class inline hook 已安装
+[232840218ms] hook: 目标字节: 48 83 3D 9B 05 0A 00 00 74 06 FF 25 
+[232840218ms] hook: napi_set_named_property inline hook 已安装
+[232840218ms] hook: 目标字节: 48 83 3D DB 07 0A 00 00 74 06 FF 25 
+[232840218ms] hook: napi_get_global inline hook 已安装
+[232840218ms] hook: 安装完成, 共 4/4 个 hook

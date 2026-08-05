@@ -36,7 +36,24 @@ log(`env NAPUTO_BOOT_JS=${process.env.NAPUTO_BOOT_JS}`);
 
 let wrapperExports = null;
 
-// ---- hook process.dlopen ----
+// 优先读取 hook DLL 已生成的 exports（v5：hook napi_module_register 直接生成）
+function tryReadGlobalExports() {
+    try {
+        const g = globalThis.__napukettoWrapperExports;
+        if (g && typeof g === "object" && Object.keys(g).length > 0) {
+            wrapperExports = g;
+            const keys = Object.keys(wrapperExports);
+            log(`GLOBAL captured wrapper exports (${keys.length}): ${keys.join(", ")}`);
+            bootstrap();
+            return true;
+        }
+    } catch {
+        // ignore
+    }
+    return false;
+}
+
+// ---- hook process.dlopen（回退路径：若 QQ preload 走 JS 层 dlopen） ----
 const dlopenOrig = process.dlopen;
 process.dlopen = function (module, filename, flags) {
     const ret = dlopenOrig.call(this, module, filename, flags);
@@ -67,9 +84,23 @@ function bootstrap() {
             .then((kernel) => {
                 log(`bootstrap: kernel imported, keys: ${Object.keys(kernel).join(", ")}`);
                 if (typeof kernel.startNapuketto === "function") {
-                    kernel.startNapuketto({ wrapperExports }).catch((e) => {
-                        log(`bootstrap: startNapuketto error: ${e.message}`);
-                    });
+                    // 把引导环境透传给 kernel（版本/数据目录/wrapper 路径）
+                    const bootEnv = {
+                        qqVersion: process.env.NAPUTO_QQ_VERSION,
+                        dataDir: process.env.NAPUTO_CFG_DIR,
+                        wrapperPath: process.env.NAPUTO_WRAPPER_PATH,
+                    };
+                    try {
+                        const ctx = kernel.startNapuketto({
+                            wrapperExports,
+                            env: bootEnv,
+                        });
+                        log(
+                            `bootstrap: startNapuketto OK, engine=${typeof ctx.engine}, session=${ctx.session !== null}`,
+                        );
+                    } catch (e) {
+                        log(`bootstrap: startNapuketto error: ${e?.message ?? e}`);
+                    }
                 } else {
                     log("bootstrap: kernel has no startNapuketto export");
                 }
@@ -82,20 +113,20 @@ function bootstrap() {
     }
 }
 
-// 轮询：若 preload 已注册，module 缓存里可能有；尝试再次 dlopen（失败则等）
-const wrapperPath = path.join(
-    process.env.NAPUTO_QQ_VERSION_PATH
-        ? path.dirname(process.env.NAPUTO_QQ_VERSION_PATH)
-        : "C:/Program Files/Tencent/QQNT/versions/9.9.31-49919/resources/app",
-    "wrapper.node",
-);
+// 轮询：优先读 globalThis.__napukettoWrapperExports（hook 生成），
+// 其次尝试 process.dlopen 命中已注册模块（nm_filename 匹配时）
+const wrapperPath =
+    process.env.NAPUTO_WRAPPER_PATH || "C:/Program Files/Tencent/QQNT/versions/9.9.31-49919/resources/app/wrapper.node";
 
 const poll = setInterval(() => {
     if (bootstrapped) {
         clearInterval(poll);
         return;
     }
-    // 尝试触发 QQ preload 已经注册好的 exports（通过 require 缓存）
+    if (tryReadGlobalExports()) {
+        return;
+    }
+    // 回退：尝试触发 QQ preload 已经注册好的 exports（通过 require 缓存）
     try {
         const m = { exports: {} };
         process.dlopen(m, wrapperPath);
@@ -107,6 +138,6 @@ const poll = setInterval(() => {
     } catch {
         // 未就绪，继续等
     }
-}, 1000);
+}, 500);
 
 log("boot ready, waiting for wrapper.node registration...");

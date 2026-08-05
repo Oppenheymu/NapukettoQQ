@@ -9,6 +9,7 @@
  * 业务层拿到的都是真实 JS 对象：engine.initWithDeskTopConfig(config, adapter) 等。
  */
 
+import process from "node:process";
 import { kernelError } from "./errors.js";
 import type {
     EnginInitDesktopConfig,
@@ -21,6 +22,7 @@ import type {
     WrapperNodeApi,
     WrapperSessionInitConfig,
 } from "./types/wrapper.js";
+import { PlatformType } from "./types/wrapper.js";
 
 /** NodeIGlobalAdapter 空实现（engine.initWithDeskTopConfig 第二参）。 */
 class GlobalAdapter implements NodeIGlobalAdapter {}
@@ -30,6 +32,51 @@ class DependsAdapter implements NodeIDependsAdapter {}
 
 /** NodeIDispatcherAdapter 空实现（session.init 第三参）。 */
 class DispatcherAdapter implements NodeIDispatcherAdapter {}
+
+// ---------------------------------------------------------------
+// startNapuketto 内部辅助（非 export，boot 装配用）
+// ---------------------------------------------------------------
+
+/** 日志版 session 监听器（boot 阶段默认，login 模块可覆盖）。 */
+function createBootListener(): NodeIKernelSessionListener {
+    // pino logger 此时可能未初始化（kernel 主配置未装配），先走 stdout
+    const log = (msg: string, ...rest: unknown[]): void => {
+        process.stdout.write(`[napuketto:session] ${msg} ${rest.map(String).join(" ")}\n`);
+    };
+    return {
+        onNTSessionCreate: (sessionId) => log("onNTSessionCreate", sessionId),
+        onGProSessionCreate: (sessionId) => log("onGProSessionCreate", sessionId),
+        onSessionInitComplete: (sessionId) => log("onSessionInitComplete", sessionId),
+        onOpentelemetryInit: (info) => log("onOpentelemetryInit", info),
+        onUserOnlineResult: (result) => log("onUserOnlineResult", result),
+        onGetSelfTinyId: (result) => log("onGetSelfTinyId", result),
+    };
+}
+
+/** 默认 engine 配置（KWINDOWS + 版本号，字段待首个真实联调确认）。 */
+function defaultEngineConfig(env: BootEnv): EnginInitDesktopConfig {
+    let osVersion = process.platform;
+    if (process.platform === "win32") {
+        osVersion = "win32";
+    }
+    return {
+        base_path_prefix: env.dataDir ?? "",
+        platform_type: PlatformType.KWINDOWS,
+        app_type: 4,
+        app_version: env.qqVersion ?? "",
+        os_version: osVersion,
+        use_xlog: false,
+        qua: "",
+        global_path_config: {
+            desktopGlobalPath: env.dataDir ?? "",
+        },
+        thumb_config: { maxSide: 324, minSide: 48, longLimit: 6, density: 2 },
+    };
+}
+
+// ---------------------------------------------------------------
+// 导出区（useExportsLast：export 全部在文件末尾）
+// ---------------------------------------------------------------
 
 /** QQ 版本信息（登录握手用）。 */
 export interface QQVersionContext {
@@ -116,4 +163,52 @@ export function startSession(ctx: WrapperContext): void {
         throw kernelError("session 未创建，无法 startNT", "INVALID_STATE");
     }
     session.startNT(0);
+}
+
+/**
+ * boot 装配入口：createWrapper → initEngine → createSession，
+ * 若提供 sessionConfig 则继续 initSession → startSession。
+ *
+ * 由 loader runtime/boot.cjs 在 QQ 主进程内调用（import kernel dist 后）。
+ * 返回 WrapperContext；失败抛 KernelError。
+ */
+export function startNapuketto(options: StartNapukettoOptions): WrapperContext {
+    const { env, engineConfig, sessionConfig, wrapperExports } = options;
+    const versionInfo: QQVersionContext = {
+        fullVersion: env?.qqVersion ?? "",
+        buildVersion: env?.qqVersion ?? "",
+    };
+    const ctx = createWrapper(wrapperExports, versionInfo);
+    initEngine(ctx, engineConfig ?? defaultEngineConfig(env ?? {}));
+    createSession(ctx);
+
+    if (sessionConfig !== undefined) {
+        initSession(ctx, sessionConfig, createBootListener());
+        startSession(ctx);
+    }
+    return ctx;
+}
+
+/** startNapuketto 的引导环境（由 loader launcher 注入环境变量，boot.cjs 透传）。 */
+export interface BootEnv {
+    /** QQ 版本（如 "9.9.31-49919"）。 */
+    qqVersion?: string;
+    /** 用户数据目录（cfgDir 的父级，用于 desktopPathConfig）。 */
+    dataDir?: string;
+    /** 账号 uin（可选，提供则一步 init+start）。 */
+    selfUin?: string;
+    /** 账号 uid（可选）。 */
+    selfUid?: string;
+}
+
+/** startNapuketto 选项。 */
+export interface StartNapukettoOptions {
+    /** 截获的 wrapper.node NAPI exports（boot.cjs 传入）。 */
+    wrapperExports: WrapperNodeApi;
+    /** 引导环境（版本/数据目录/账号）。 */
+    env?: BootEnv;
+    /** 覆盖 engine 配置（联调用）。 */
+    engineConfig?: EnginInitDesktopConfig;
+    /** 覆盖 session 配置（联调用，提供则自动 init+start）。 */
+    sessionConfig?: WrapperSessionInitConfig;
 }

@@ -40,12 +40,18 @@ export type {
     WrapperNodeApi,
     WrapperSessionInitConfig,
 } from "./types/wrapper.js";
-export type { QQVersionContext, WrapperContext } from "./wrapper-loader.js";
+export type {
+    BootEnv,
+    QQVersionContext,
+    StartNapukettoOptions,
+    WrapperContext,
+} from "./wrapper-loader.js";
 export {
     createSession,
     createWrapper,
     initEngine,
     initSession,
+    startNapuketto,
     startSession,
 } from "./wrapper-loader.js";
 export type { QQVersionInfo } from "./wrapper-version.js";

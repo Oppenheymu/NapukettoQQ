@@ -2,7 +2,7 @@
 
 > 职责：**唯一原生交互层 + 唯一共享状态层**。协议层只认识 kernel，不认识 QQ。
 > 对应 ADR：001 / 003 / 006 / 007 / 008 / 009 / 010 / 012 / 016 / 017 / 018
-> 状态：P0-1 已完成（errors / paths / logger / config，2026-08-04，见 §8.3）；P0-2 已完成（event-channel + 占位 Listener 类型，2026-08-04，见 §4.1）；P1-1 已完成（wrapper-version + wrapper-loader，2026-08-05，见 §8.4）；P1-2 探测完成（RTTI 继承树 + service 类名/方法签名大全，2026-08-05，见 §8.5）；**P1-3 路线定稿：NAPI 范式重构（2026-08-05，见 §8.6）——wrapper-loader 从 koffi 改为 NAPI bootstrap，loader 包负责注入引导，业务层全走 NAPI。**
+> 状态：P0-1 已完成（errors / paths / logger / config，2026-08-04，见 §8.3）；P0-2 已完成（event-channel + 占位 Listener 类型，2026-08-04，见 §4.1）；P1-1 已完成（wrapper-version + wrapper-loader，2026-08-05，见 §8.4）；P1-2 探测完成（RTTI 继承树 + service 类名/方法签名大全，2026-08-05，见 §8.5）；**P1-3 路线定稿：NAPI 范式重构（2026-08-05，见 §8.6）——wrapper-loader 从 koffi 改为 NAPI bootstrap，loader 包负责注入引导，业务层全走 NAPI；startNapuketto 装配入口 + smoke-test 已补（2026-08-05）。**
 
 ---
 
@@ -197,6 +197,31 @@ NTWrapperSession (0x0)
 - **im_core 层实现**：`MsgService@im_core@nt` / `GroupService` / `BuddyService` 等（wrapper Kernel* 类包装它们）。
 
 **下一步（init 参数构造，P1-3）**：service 必须 init 才存在。NapCat 的 session.init(config, depends, dispatcher, listener) 是 napi 4 参包装，C++ 侧可能是 NTSessionBase::Init 或独立方法（反汇编槽位 4 是**小方法**（读 this+0x490 → 调 service vtable[5]），不是 init——init 应是大函数）。候选：① 反汇编定位 init 槽位（大函数 + 大量写 this + 引用 SessionConfig@im_core 结构）；② 构造 SessionConfig 结构 + 3 个接口 mock（vtable 从 RTTI 类名推断）；③ NapCat 的 napi 桥接层（napi 包装的 init）可能接受 JSON 字符串形式。**结论归档，探测脚本在 scripts/probe/（gitignored）**。
+
+### 8.6 P1-3 NAPI 引导装配（2026-08-05 定稿）
+
+**路线**（用户拍板路线 A）：kernel 提供纯函数原语（createWrapper / initEngine / createSession / initSession / startSession，见 `wrapper-loader.ts`），`startNapuketto` 作为 boot 装配入口把链路串起来，被 `runtime/boot.cjs`（loader 包）调用。
+
+**装配流程**：
+
+```
+boot.cjs（QQ 主进程，hook 截获 wrapper.node exports）
+  → kernel.startNapuketto({ wrapperExports, env })
+  → createWrapper(exports)：校验 NodeIQQNTWrapperEngine.get() → ctx
+  → initEngine(ctx, config)：engine.initWithDeskTopConfig(config, GlobalAdapter)
+  → createSession(ctx)：优先 startup.create() 回退 session.create()
+  → initSession(ctx, config, listener)：session.init(config, DependsAdapter, DispatcherAdapter, listener)
+  → startSession(ctx)：session.startNT(0)
+```
+
+**设计决策**：
+
+- **versionInfo 从环境变量注入**：boot.cjs 运行在 QQ 主进程，无法访问 QQ 安装目录的 package.json 之外——launcher 在 spawn QQ 前通过 `NAPUTO_QQ_VERSION`（如 `9.9.31-49919`）传入，kernel 组装 `QQVersionContext`（fullVersion/buildVersion）。boot.cjs 不再硬编码版本路径。
+- **sessionConfig 分阶段**：init 需要登录凭据（selfUin/a2/d2/d2Key），boot 阶段可能拿不到 → `startNapuketto` 允许缺省 sessionConfig：仅做 engine.init + createSession，init/start 留到 login 模块拿到 ticket 后再调（login 模块调用 `initSession/startSession` 原语）。若环境变量已提供凭据（`NAPUTO_QQ_UIN` 等），则一步到位。
+- **listener 默认实现**：`startNapuketto` 提供日志版 `NodeIKernelSessionListener`（onNTSessionCreate / onSessionInitComplete / onUserOnlineResult 打日志），login 模块可覆盖。
+- **engineConfig 默认值**：platform_type=KWINDOWS(3)、app_type=4、app_version=versionInfo.fullVersion、use_xlog=false，其余取环境变量或空值——首个真实联调确认字段。
+
+**待实测（boot 链路）**：initWithDeskTopConfig 是否同步返回 / init 是否抛错（缺 ticket）/ startNT(0) 行为 / wrapper 是否要求 adapter 有具体方法（现在空对象）。
 
 ### 8.1 路径布局（ADR-016）
 
