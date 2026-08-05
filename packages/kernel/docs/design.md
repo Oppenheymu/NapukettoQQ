@@ -489,6 +489,22 @@ function resolveWrapperPath(installDir: string, version: string): string;
 
 **跳过**：get_rkey/ocr_image/闪传/戳一戳（OIDB 或 NodeMiscService 未探测）、get_essence_msg_list（pskey+WebApi 复杂）、upload_group_file（FileApi 发送元素组装复杂）、get_group_file_url/get_private_file_url（OIDB）、get_online_clients（getOnLineDev void）。
 
+### 8.17 P2-15 第六批 NapCat API 方法面（2026-08-05 设计 + 实现）
+
+**目标**：HANDOVER.md §5.3 第六批中基于已探测 service + web 接口可落地的部分。**已实现并 pnpm check 全绿（151 文件）。**
+
+**ProfileService 补**：`getUserDetailInfoByUin(uin)` → `UserDetailInfoByUin`（detail.uid/uin/simpleInfo.coreInfo.nick/commonExt.qqLevel 等，宽松自研描述）；`getUserDetailInfo(uid)` → 同族结构。
+
+**ProfileApi 补**：`getStrangerInfo(uid, noCache)`：getUserDetailInfoByUin 先拿 uid（user_id 传的是 uin）→ getUserDetailInfo → 扁平化 StrangerInfo（user_id/uid/nickname/age/qid/qq_level/sex/long_nick/reg_time/is_vip/remark）。
+
+**TicketApi 补**：`getBkn(cookies)` 静态（skey→bkn 哈希，get_csrf_token 与 web 接口共用）。
+
+**新 `apis/webapi.ts` WebApi**（qun.qq.com 群空间 web 接口，复用 TicketApi.getCookies）：
+- `getEssenceMsgList(groupCode)`：getCookies('qun.qq.com') → bkn → `https://qun.qq.com/cgi-bin/group_digest/digest_list?bkn=&page_start=0&page_limit=50&group_code=`（Cookie 头）→ retcode===0 取 data.msg_list（分页 20 轮）
+- `getGroupHonorInfo(groupCode, type)`：getCookies → `https://qun.qq.com/interactive/honorlist?gc=&type=` → 正则提取 `window.__INITIAL_STATE__={...};` JSON → type 1=talkativeList / 2/3/6=actorList
+
+**跳过**：set_group_sign / get_rkey / 闪传 / 戳一戳（OIDB）；ocr_image（NodeMiscService）；upload_group_file / get_group_file_url（FileApi 复杂）。
+
 ### 8.3 P0-1 实现记录（2026-08-04）
 
 `errors.ts` / `paths.ts` / `logger.ts` / `config.ts` 已实现，通过 `pnpm check` + 运行时冒烟测试（26 项）。关键决策：

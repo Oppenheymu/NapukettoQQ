@@ -65,6 +65,10 @@ async function startProtocols(kernel, ctx, loginResult, logger) {
         const richMediaApi = new kernel.RichMediaApi(session);
         const profileApi = new kernel.ProfileApi(session);
         const profileLikeApi = new kernel.ProfileLikeApi(session);
+        // 群空间 web API（Cookie 经 TicketApi.getCookies 注入）
+        const webApi = new kernel.WebApi({
+            getCookies: (domain) => ticketApi.getCookies(domain, loginResult.uin),
+        });
         // network 广播 + OB11 适配器
         const broadcaster = new network.EventBroadcaster();
         const ob11Config = new adapter.ProtocolConfig({
@@ -84,6 +88,7 @@ async function startProtocols(kernel, ctx, loginResult, logger) {
             richMediaApi,
             profileApi,
             profileLikeApi,
+            webApi,
             selfUin: loginResult.uin,
             selfNickname: loginResult.nick,
             appVersion: process.env.NAPUTO_QQ_VERSION || "unknown",

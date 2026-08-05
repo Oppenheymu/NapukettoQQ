@@ -49,6 +49,16 @@ export class TicketApi {
             "&keyindex=19";
         return fetchJumpCookies(jumpUrl);
     }
+
+    /** 计算 bkn（get_csrf_token 与 web 接口共用；skey → bkn 哈希）。 */
+    static getBkn(skey: string): string {
+        let hash = 5381;
+        for (let i = 0; i < skey.length; i += 1) {
+            const code = skey.charCodeAt(i);
+            hash = hash + (hash << 5) + code;
+        }
+        return (hash & 0x7f_ff_ff_ff).toString();
+    }
 }
 
 /** 请求 jump 地址并解析 set-cookie → dict（fetch 吞 Set-Cookie，故用 node:https）。 */

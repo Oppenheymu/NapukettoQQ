@@ -339,6 +339,25 @@ adapter onStart：装配传输 → 打开 server/client → 广播 lifecycle ena
 
 **boot.cjs 补协议装配**（loader runtime）：登录成功后动态 import adapter/network 入口（launcher 环境变量 NAPUTO_ADAPTER_ENTRY / NAPUTO_NETWORK_ENTRY）→ 创建 MsgChannel + MsgBridge + MsgApi/GroupApi/FriendApi + EventBroadcaster + NapukettoOneBot11Adapter → start。
 
+### 8.15 P2-15 第六批动作（陌生人信息 + csrf + 群请求 + 精华列表 + 群荣誉，2026-08-05 设计 + 实现）
+
+**目标**：HANDOVER.md §5.3 第六批中基于已探测 service + web 接口的部分。kernel 方法面见 kernel design §8.17。**已实现并 pnpm check 全绿（151 文件）+ 全量构建通过。**
+
+**用户类（1 个，friend/）**：`get_stranger_info`：user_id(uin) → ProfileApi.getStrangerInfo → OB11 StrangerInfo（user_id/uid/nickname/age/qid/qq_level/sex/long_nick/reg_time/is_vip/remark）
+
+**系统类（2 个，system/）**：
+- `get_csrf_token`：getCookies('qun.qq.com') → getBkn → { token }
+- `get_credentials`：getCookies(domain) + getBkn → { cookies, csrf_token }
+
+**群类（3 个，group/）**：
+- `get_group_add_request`：getSingleScreenNotifies(false, count) → 未处理申请列表（与 set_group_add_request 呼应）
+- `get_group_ignored_notifies`：getSingleScreenNotifies(true, count) → 可疑/忽略列表
+- `get_essence_msg_list`：WebApi.getEssenceMsgList → msg_seq/msg_random/sender_uin/sender_nick/add_digest_uin/add_digest_nick/add_digest_time/msg_content（text/image 映射）
+
+**go-cqhttp 类（1 个，group/）**：`get_group_honor_info`：type 缺省 all → WebApi.getGroupHonorInfo → GroupHonorInfo（current_talkative + 5 列表）
+
+**deps 扩展**：`profileApi` 已有；加 `webApi`（kernel WebApi）。**跳过**：set_group_sign / get_rkey / 闪传 / 戳一戳（OIDB）；ocr_image（NodeMiscService）；upload_group_file / get_group_file_url。
+
 ### 8.14 P2-14 第五批动作（文件类 + 资料 + 点赞 + 翻译，2026-08-05 设计 + 实现）
 
 **目标**：HANDOVER.md §5.3 第五批中不依赖 OIDB 的部分。kernel 方法面见 kernel design §8.16。**已实现并 pnpm check 全绿（145 文件）+ 全量构建通过。**

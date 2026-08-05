@@ -7,6 +7,23 @@
  */
 import type { GeneralCallResult } from "./msg-service.js";
 
+/** 用户详情（getUserDetailInfoByUin / getUserDetailInfo 返回，宽松自研描述，待探测校准）。 */
+export interface UserDetailInfoByUin {
+    detail?: {
+        uid?: string;
+        uin?: string;
+        simpleInfo?: {
+            coreInfo?: { nick?: string; remark?: string };
+            baseInfo?: { age?: number; qid?: string; sex?: number; longNick?: string };
+            vasInfo?: { svipFlag?: boolean; yearVipFlag?: boolean; vipLevel?: number };
+            status?: { status?: number };
+            relationFlags?: Record<string, unknown>;
+        };
+        commonExt?: { qqLevel?: number; regTime?: number };
+    };
+    [key: string]: unknown;
+}
+
 /** 资料服务。 */
 export interface NodeIKernelProfileService {
     addKernelProfileListener(listener: unknown): number;
@@ -17,5 +34,9 @@ export interface NodeIKernelProfileService {
     setNickName(nickName: string): Promise<unknown>;
     /** 设置头像（set_qq_avatar）。 */
     setHeader(filePath: string): Promise<GeneralCallResult>;
+    /** 按 uin 获取用户详情（get_stranger_info 第一步）。 */
+    getUserDetailInfoByUin(uin: string): Promise<UserDetailInfoByUin>;
+    /** 按 uid 获取用户详情（get_stranger_info 第二步，noCache=true 强制刷新）。 */
+    getUserDetailInfo(uid: string): Promise<UserDetailInfoByUin>;
     isNull(): boolean;
 }

@@ -45,7 +45,7 @@ b2574ec refactor(kernel): 解耦 wrapper-config/wrapper-adapters
 96748f4 feat(kernel): NAPI 路线重构 + loader 包
 ```
 
-**进度坐标**：kernel design.md §9 完成 8/9（login 完成，剩 cache/、apis 的 user/file/system）；**完整启动链路打通**（cli → 定位 QQ → BootMain 注入 → boot.cjs 内 kernel 装配 + 快速登录/QR 回退 → adapter/network 协议装配 → HTTP/WS 监听 + 心跳）；**消息收发 + 6 查询动作 + notice 事件 + meta 事件 + QR 登录全部真实可用**；**一~五批 NapCat API 已实现**。NapCat 对齐度 ≈ 65%。
+**进度坐标**：kernel design.md §9 完成 8/9（login 完成，剩 cache/、apis 的 user/file/system）；**完整启动链路打通**（cli → 定位 QQ → BootMain 注入 → boot.cjs 内 kernel 装配 + 快速登录/QR 回退 → adapter/network 协议装配 → HTTP/WS 监听 + 心跳）；**消息收发 + 6 查询动作 + notice 事件 + meta 事件 + QR 登录全部真实可用**；**一~六批 NapCat API 已实现（总动作数 78）**。NapCat 对齐度 ≈ 70%。
 
 ---
 
@@ -75,6 +75,18 @@ b2574ec refactor(kernel): 解耦 wrapper-config/wrapper-adapters
 - media：完整（image/audio(silk)/video(ffmpeg)）
 - loader：注入引导全链路（launcher/locate-qq/boot.cjs/native）
 - cli：commander 参数解析（-q/-d/--qq-path）→ runSingleAccount（定位 QQ → launch → 常驻）；config 子命令/supervisor 多账号未做
+
+### 3.4 API 来源分层（回答「onebot11 规范吗」）
+
+OneBot 11 规范文档明确以 **go-cqhttp 为参考实现**，第三方框架（NoneBot2 / Lagrange 等）默认连的调用面 = 标准 API + go-cqhttp 扩展。NapukettoQQ 的对齐目标是 NapCat（OneBot 11 当前最活跃参考实现），因此动作分三层：
+
+| 层 | 来源 | 本项目的动作 | 判断 |
+|---|---|---|---|
+| **标准** | OneBot 11 规范原文（30 个，已含从 go-cqhttp 移植的 get_cookies/get_image/get_record 等） | send_msg 系列 / delete_msg / get_msg / get_forward_msg / send_like / set_group_kick·ban·whole_ban·admin·card·name·leave / set_friend·group_add_request / get_login_info / get_friend_list / get_group_info·list / get_group_member_info·list / get_record / get_image / can_send_image·record / get_status / get_version_info / clean_cache / set_restart | 必须对齐 |
+| **go-cqhttp 扩展** | go-cqhttp 兼容扩展（事实标准，框架普遍调用） | get_group·friend_msg_history / send_group·private_forward_msg / mark_msg_as_read 系列 / set·delete_essence_msg / get_group_at_all_remain / download_file / 群文件 9 个 / translate_en2zh / get_stranger_info | 建议对齐 |
+| **NapCat 扩展** | NapCat 独有（参考实现扩展，兼容性加分） | get_clientkey / set_msg_emoji_like / fetch_ptt_text / set_input_status / set_online_status / set_diy_online_status / get_friends_with_category / 双可疑好友申请 / set_qq_profile / set_qq_avatar / set_self_longnick / bot_exit / get_robot_uin_range / get_group_system_msg / get_group_shut_list / forward_group·friend_single_msg / get_group_honor_info 等 | 可选，随 NapCat 对齐 |
+
+**结论**：`protocol_version: "v11"` 不变，标准 API 行为符合规范即「规范」；扩展 API 是兼容性资产而非污染。唯一需注意：**扩展动作的 schema 来自 NapCat/go-cqhttp 而非规范**，文档以本表为准。
 
 ---
 
@@ -144,7 +156,9 @@ NT QQ 的系统事件（撤回/群变动/禁言）通过**消息的灰色提示�
 
 ✅ **第五批已实现（P2-14，2026-08-05）**：群文件 9 个（get_group_root_files / get_group_files_by_folder / get_group_file_system_info / create_group_file_folder / delete_group_file / delete_group_folder / rename_group_file / move_group_file / trans_group_file）+ 资料 3 个（set_self_longnick / set_qq_profile / set_qq_avatar）+ 点赞 1 个（send_like）+ 翻译 1 个（translate_en2zh）+ 媒体 2 个（get_image / get_record 简化版）。新增 kernel RichMediaApi / ProfileApi / ProfileLikeApi + 3 个 service 类型。实现细节见 kernel design §8.16 + adapter design §8.14。**action 目录已重组为 message/group/friend/system 四分组（commit 7dcf94b）**。
 
-已实现动作总数 8 + 19 + 13 + 9 + 7 + 16 = **72 个**。
+✅ **第六批已实现（P2-15，2026-08-05）**：陌生人信息 1 个（get_stranger_info）+ 凭据 2 个（get_csrf_token / get_credentials）+ 群请求 2 个（get_group_add_request / get_group_ignored_notifies）+ 精华列表 1 个（get_essence_msg_list）+ 群荣誉 1 个（get_group_honor_info）。新增 kernel WebApi（qun.qq.com digest_list/honorlist web 接口，Cookie 经 TicketApi）+ TicketApi.getBkn（skey→bkn）+ ProfileApi.getStrangerInfo。实现细节见 kernel design §8.17 + adapter design §8.15。
+
+已实现动作总数 8 + 19 + 13 + 9 + 7 + 16 + 6 = **78 个**。
 
 ### 5.2 NapCat 动作全集（ActionName 清单，约 130+，来源 napcat-onebot/action/router.ts）
 按 service 分组（**★ = 依赖未探测的 service**）：
@@ -306,9 +320,9 @@ node apps/cli/dist/index.mjs --help     # cli 冒烟（不拉起 QQ）
 3. ✅ **API 第三批**（合并转发 + 单条转发 + 在线状态 + download_file + bot_exit/set_restart，P2-12 已完成）。
 4. ✅ **API 第四批**（get_clientkey/get_cookies/set_group_add_request/get_group_system_msg/get_group_shut_list/mark 已读别名，P2-13 已完成）。
 5. ✅ **API 第五批**（群文件 9 + 资料 3 + send_like + translate_en2zh + get_image/get_record 简化版，P2-14 已完成）。
-6. **API 第六批**（剩余：get_online_clients（getOnLineDev void，需探测）/ ocr_image（NodeMiscService.wantWinScreenOCR，需探测）/ get_essence_msg_list（pskey+WebApi）/ upload_group_file / upload_private_file（FileApi 发送元素组装）/ get_group_file_url / get_private_file_url（OIDB）/ 闪传/表情/戳一戳（OIDB）/ get_rkey（OIDB））。**开工前需先探测 NodeMiscService + FileApi 辅助**。
-7. **api/ 聚合层**（adapter design §6 第 4 项）：目前动作直接注入 apis，设计上是 onebot11/api/ 聚合 + 缓存。
-8. **cache/**（ADR-008）：群/成员/好友缓存，翻译层只读消费。GroupService.getAllMemberList 已探测（result.infos Map）。
-9. **set_group_special_title**：OIDB 依赖（违反 NAPI 路线），待评估 `sendSsoCmdReqByContend(cmd, param)` 可行性。
+6. ✅ **API 第六批**（get_stranger_info/get_csrf_token/get_credentials/get_group_add_request/get_group_ignored_notifies/get_essence_msg_list/get_group_honor_info，P2-15 已完成）。
+7. **API 剩余**（OIDB 依赖或需探测）：set_group_sign / send_group_sign / get_rkey / 闪传 / 戳一戳 / ocr_image（NodeMiscService）/ upload_group_file / upload_private_file（FileApi 辅助）/ get_group_file_url / get_private_file_url / get_online_clients（getOnLineDev void）——**多为 OIDB 违反 NAPI 路线，暂不实现**。
+8. **api/ 聚合层**（adapter design §6 第 4 项）：目前动作直接注入 apis，设计上是 onebot11/api/ 聚合 + 缓存。
+9. **cache/**（ADR-008）：群/成员/好友缓存，翻译层只读消费。GroupService.getAllMemberList 已探测（result.infos Map）。
 10. cli config 子命令 + supervisor 多账号（P6）。
 11. onebot12 / satori 空壳填充。

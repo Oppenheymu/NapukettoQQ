@@ -10,18 +10,26 @@ import type {
     ProfileLikeApi,
     RichMediaApi,
     TicketApi,
+    WebApi,
 } from "@napuketto/kernel";
 import { ActionRegistry } from "../../core/index.js";
 import { DeleteFriendAction } from "./friend/delete-friend.js";
 import { GetDoubtFriendsAddRequestAction } from "./friend/get-doubt-friends-add-request.js";
 import { GetFriendListAction } from "./friend/get-friend-list.js";
 import { GetFriendsWithCategoryAction } from "./friend/get-friends-with-category.js";
+import { GetStrangerInfoAction } from "./friend/get-stranger-info.js";
 import { SendLikeAction } from "./friend/send-like.js";
 import { SetDoubtFriendsAddRequestAction } from "./friend/set-doubt-friends-add-request.js";
 import { SetFriendAddRequestAction } from "./friend/set-friend-add-request.js";
 import { SetFriendRemarkAction } from "./friend/set-friend-remark.js";
 import { DeleteEssenceMsgAction } from "./group/delete-essence-msg.js";
+import { GetEssenceMsgListAction } from "./group/get-essence-msg-list.js";
+import {
+    GetGroupAddRequestAction,
+    GetGroupIgnoredNotifiesAction,
+} from "./group/get-group-add-request.js";
 import { GetGroupAtAllRemainAction } from "./group/get-group-at-all-remain.js";
+import { GetGroupHonorInfoAction } from "./group/get-group-honor-info.js";
 import { GetGroupInfoAction } from "./group/get-group-info.js";
 import { GetGroupListAction } from "./group/get-group-list.js";
 import { GetGroupMemberInfoAction } from "./group/get-group-member-info.js";
@@ -84,6 +92,7 @@ import type { DownloadFileDeps } from "./system/download-file.js";
 import { DownloadFileAction } from "./system/download-file.js";
 import { GetClientkeyAction } from "./system/get-clientkey.js";
 import { GetCookiesAction } from "./system/get-cookies.js";
+import { GetCredentialsAction, GetCsrfTokenAction } from "./system/get-credentials.js";
 import { GetLoginInfoAction } from "./system/get-login-info.js";
 import { GetRobotUinRangeAction } from "./system/get-robot-uin-range.js";
 import { GetStatusAction } from "./system/get-status.js";
@@ -117,6 +126,8 @@ export interface Ob11ActionDeps {
     profileApi: ProfileApi;
     /** kernel 点赞 API（send_like 用，P2-14）。 */
     profileLikeApi: ProfileLikeApi;
+    /** kernel 群空间 web API（精华/荣誉用，P2-15）。 */
+    webApi: WebApi;
     /** 登录身份（get_login_info 用）。 */
     self: { uin: string; nickname: string };
     /** 系统类本地信息（get_version_info / clean_cache / download_file / 进程控制用）。 */
@@ -142,7 +153,23 @@ export function createOb11ActionRegistry(deps: Ob11ActionDeps): ActionRegistry {
     registerTicketActions(registry, deps);
     registerProfileActions(registry, deps);
     registerGroupFileActions(registry, deps);
+    registerWebActions(registry, deps);
     return registry;
+}
+
+/** 群空间 web / csrf / 陌生人 / 群请求动作（P2-15）。 */
+function registerWebActions(registry: ActionRegistry, deps: Ob11ActionDeps): void {
+    registry.register(new GetStrangerInfoAction(deps.profileApi));
+    registry.register(
+        new GetCsrfTokenAction({ ticketApi: deps.ticketApi, selfUin: deps.self.uin }),
+    );
+    registry.register(
+        new GetCredentialsAction({ ticketApi: deps.ticketApi, selfUin: deps.self.uin }),
+    );
+    registry.register(new GetGroupAddRequestAction(deps.groupNotifyApi));
+    registry.register(new GetGroupIgnoredNotifiesAction(deps.groupNotifyApi));
+    registry.register(new GetEssenceMsgListAction(deps.webApi));
+    registry.register(new GetGroupHonorInfoAction(deps.webApi));
 }
 
 /** 资料/点赞/翻译动作（P2-14）。 */

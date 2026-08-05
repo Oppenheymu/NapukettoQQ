@@ -19,6 +19,7 @@ import type {
     RawMessage,
     RichMediaApi,
     TicketApi,
+    WebApi,
 } from "@napuketto/kernel";
 import type { EventBroadcaster } from "@napuketto/network";
 import {
@@ -63,6 +64,8 @@ export interface OneBot11AdapterOptions {
     profileApi: ProfileApi;
     /** kernel 点赞 API（send_like 用，P2-14）。 */
     profileLikeApi: ProfileLikeApi;
+    /** kernel 群空间 web API（精华/荣誉用，P2-15）。 */
+    webApi: WebApi;
     /** 机器人自身 QQ 号（self_id 与私聊自消息判定）。 */
     selfUin: string;
     /** 机器人昵称（get_login_info 用，缺省空）。 */
@@ -143,6 +146,7 @@ export class NapukettoOneBot11Adapter extends BaseProtocolAdapter<OB11Config> {
             richMediaApi: opts.richMediaApi,
             profileApi: opts.profileApi,
             profileLikeApi: opts.profileLikeApi,
+            webApi: opts.webApi,
             self: { uin: opts.selfUin, nickname: opts.selfNickname ?? "" },
             system,
         });

@@ -12,10 +12,17 @@ export { FriendApi } from "./apis/friend.js";
 export { GroupApi } from "./apis/group.js";
 export { GroupNotifyApi } from "./apis/group-notify.js";
 export { MsgApi } from "./apis/index.js";
+export type { StrangerInfo } from "./apis/profile.js";
 export { ProfileApi } from "./apis/profile.js";
 export { ProfileLikeApi } from "./apis/profile-like.js";
 export { RichMediaApi } from "./apis/richmedia.js";
 export { TicketApi } from "./apis/ticket.js";
+export type {
+    EssenceMsgItem,
+    GroupHonorWebInfo,
+    HonorListItem,
+} from "./apis/webapi.js";
+export { WebApi, WebHonorType } from "./apis/webapi.js";
 export type { ConfigOptions, ConfigSchema } from "./config.js";
 export { ConfigBase } from "./config.js";
 export type { CoreContext, CoreContextOptions } from "./context.js";
@@ -78,7 +85,10 @@ export type {
 } from "./types/services/msg-service.js";
 export { ElementType } from "./types/services/msg-service.js";
 export type { NodeIKernelProfileLikeService } from "./types/services/profile-like-service.js";
-export type { NodeIKernelProfileService } from "./types/services/profile-service.js";
+export type {
+    NodeIKernelProfileService,
+    UserDetailInfoByUin,
+} from "./types/services/profile-service.js";
 export type {
     GetFileListParam,
     GroupFileItemInfo,
