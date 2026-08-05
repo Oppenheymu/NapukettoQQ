@@ -9,7 +9,6 @@
  */
 
 import type { FriendApi, GroupApi, MsgApi, MsgEventChannel, RawMessage } from "@napuketto/kernel";
-import { ChatType, toCanonicalElements } from "@napuketto/kernel";
 import type { EventBroadcaster } from "@napuketto/network";
 import {
     type ActionRegistry,
@@ -18,19 +17,13 @@ import {
     type ProtocolConfig,
 } from "../core/index.js";
 import { createOb11ActionRegistry } from "./action/index.js";
-import type {
-    OB11GroupMessageEvent,
-    OB11MessageEvent,
-    OB11PrivateMessageEvent,
-} from "./event/index.js";
-import type { GroupSender } from "./event/message.js";
 import type { OB11Config } from "./helper/index.js";
-import { canonicalToCqMessage, canonicalToSegments, ob11ConfigSchema } from "./helper/index.js";
+import { ob11ConfigSchema } from "./helper/index.js";
+import { toOb11MessageEvent } from "./helper/message-event.js";
 import { MessageUnique } from "./helper/message-unique.js";
 import { collectGrayTipUids, hasGrayTip, toOb11NoticeEvent } from "./helper/notice.js";
 import type { Ob11TransportSet } from "./transport.js";
 import { assembleOb11Transports } from "./transport.js";
-import type { Sender } from "./types/index.js";
 
 /** 毫秒 → 秒（Unix 时间戳）。 */
 const MS_TO_SEC = 1000;
@@ -53,71 +46,10 @@ export interface OneBot11AdapterOptions {
     selfUin: string;
     /** 机器人昵称（get_login_info 用，缺省空）。 */
     selfNickname?: string;
-}
-
-/** RawMessage → OB11 消息事件（纯函数，ADR-008）。 */
-function toOb11MessageEvent(
-    msg: RawMessage,
-    selfUin: string,
-    unique: MessageUnique,
-): OB11MessageEvent {
-    const elements = toCanonicalElements(msg);
-    const segments = canonicalToSegments(elements);
-    const time = Math.floor(Number(msg.msgTime) / MS_TO_SEC);
-    const selfId = Number(selfUin);
-    const userId = Number(msg.senderUin);
-    // 记录 peer：delete_msg / get_msg 等只有 message_id 的动作可反查
-    const messageId = unique.alloc(msg.msgId, {
-        chatType: msg.chatType,
-        peerUid: msg.peerUid,
-    });
-    const base = {
-        time,
-        self_id: selfId,
-        post_type: "message" as const,
-        message_id: messageId,
-        message: segments,
-        raw_message: canonicalToCqMessage(elements),
-        font: 0,
-    };
-
-    if (msg.chatType === ChatType.GROUP) {
-        const sender: GroupSender = {
-            user_id: userId,
-            nickname: msg.sendNickName,
-            role: "member", // P2-3: 接 kernel cache 判定 owner/admin
-        };
-        if (msg.sendMemberName !== undefined) {
-            sender.card = msg.sendMemberName;
-        }
-        const event: OB11GroupMessageEvent = {
-            ...base,
-            message_type: "group",
-            sub_type: "normal",
-            group_id: Number(msg.peerUid),
-            user_id: userId,
-            sender,
-        };
-        return event;
-    }
-
-    // 私聊：C2C=好友，临时会话（群内私聊）sub_type=group
-    let subType: "friend" | "group" = "friend";
-    if (msg.chatType === ChatType.C2C_TEMP) {
-        subType = "group";
-    }
-    const sender: Sender = {
-        user_id: userId,
-        nickname: msg.sendNickName,
-    };
-    const event: OB11PrivateMessageEvent = {
-        ...base,
-        message_type: "private",
-        sub_type: subType,
-        user_id: userId,
-        sender,
-    };
-    return event;
+    /** 运行版本（get_version_info 用，缺省 unknown）。 */
+    appVersion?: string;
+    /** 缓存清理回调（clean_cache 用，装配方注入）。 */
+    cleanCache?: () => Promise<void>;
 }
 
 /** OneBot 11 协议适配器。 */
@@ -150,6 +82,12 @@ export class NapukettoOneBot11Adapter extends BaseProtocolAdapter<OB11Config> {
         this.msgChannel = opts.msgChannel;
         this.selfUin = opts.selfUin;
         this.groupApi = opts.groupApi;
+        const system: { appVersion: string; cleanCache?: () => Promise<void> } = {
+            appVersion: opts.appVersion ?? "unknown",
+        };
+        if (opts.cleanCache !== undefined) {
+            system.cleanCache = opts.cleanCache;
+        }
         this.registry = createOb11ActionRegistry({
             sendMsg: {
                 msgApi: opts.msgApi,
@@ -159,6 +97,7 @@ export class NapukettoOneBot11Adapter extends BaseProtocolAdapter<OB11Config> {
             groupApi: opts.groupApi,
             friendApi: opts.friendApi,
             self: { uin: opts.selfUin, nickname: opts.selfNickname ?? "" },
+            system,
         });
     }
 

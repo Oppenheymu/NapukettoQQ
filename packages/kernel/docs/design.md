@@ -411,6 +411,28 @@ function resolveWrapperPath(installDir: string, version: string): string;
 
 **⚠️ set_group_special_title 不实现**：NapCat 走 OIDB 自定义包（`OidbSvcTrpcTcp0X8FC_2` + sendOidbPacket）——违反 NAPI 路线（禁绕过 NAPI 的自定义包/裸调），列入待办（等 `sendSsoCmdReqByContend` 可行性评估）。
 
+### 8.13 P2-11 第二批 NapCat API 方法面（2026-08-05 设计 + 实现）
+
+**目标**：HANDOVER.md §5.3 第二批（好友类 + 系统类 + 消息类剩余）。方法签名以 NapCat 公开类型作说明书自研描述（零复制）。**已实现并 pnpm check 全绿（117 文件）。**
+
+**BuddyService 补方法**（`types/services/buddy-service.ts`）：
+- `getBuddyReq()` → `{ buddyReqs?: BuddyReq[] }`（好友申请列表；`BuddyReq` 新类型：reqTime/friendUid/friendNick/sourceId/... 待探测校准）
+- `approvalFriendRequest({ friendUid, reqTime, accept })`（set_friend_add_request 应答）
+- `setBuddyRemark({ uid, remark })`（set_friend_remark，void 语义乐观处理）
+- `delBuddy({ friendUid, tempBlock, tempBothDel })`（delete_friend）
+- `getDoubtBuddyReq(reqId, num, uk)`（get_doubt_friends_add_request；reqId=Date.now() 作回执匹配，返回 doubtList）
+- `approvalDoubtBuddyReq(uid, str1, str2)`（set_doubt_friends_add_request，void）
+
+**MsgService 补方法**：`sendShowInputStatusReq(chatType, eventType, toUid)`（set_input_status）。
+
+**FriendApi 补**：getBuddyReqList / handleFriendRequest(notify, accept) / setFriendRemark / deleteFriend / getFriendCategories（分类保留，get_friends_with_category 用）/ getDoubtFriendRequest(count)（doubtList → OB11 结构，uin 经注入的 uidToUin 转换，缺省回退 uid）/ handleDoubtFriendRequest(uid)。
+
+**MsgApi 补**：`setInputStatus(target: Peer, eventType)` → sendShowInputStatusReq。
+
+**PathWrapper 补**：`clearCache()`（清空 cacheDir 下文件保留目录，clean_cache 动作经注入回调消费）。
+
+**跳过**（依赖未探测 service ★）：send_like / set_online_status / set_diy_online_status（UserApi.setSelfOnlineStatus——实际是 setStatus 属 MsgService 但 NapCat 走 UserApi 包装，待探测）；get_cookies / get_clientkey / get_rkey（TicketService 从 QQ 本地数据读取，非 service 调用）；get_stranger_info / set_qq_profile（ProfileService）；get_online_clients（getOnLineDev 返回 void，需探测）。
+
 ### 8.3 P0-1 实现记录（2026-08-04）
 
 `errors.ts` / `paths.ts` / `logger.ts` / `config.ts` 已实现，通过 `pnpm check` + 运行时冒烟测试（26 项）。关键决策：

@@ -7,6 +7,7 @@
  * 后续模块（apis / cache / login）按 docs/design.md §9 依次接入。
  */
 
+export type { DoubtFriendRequestInfo, Friend, FriendCategory } from "./apis/friend.js";
 export { FriendApi } from "./apis/friend.js";
 export { GroupApi } from "./apis/group.js";
 export { MsgApi } from "./apis/index.js";
@@ -47,6 +48,8 @@ export type { CanonicalElement } from "./types/message-element.js";
 export { toCanonicalElements, toSendElements } from "./types/message-element.js";
 export type {
     BuddyCategory,
+    BuddyReq,
+    DoubtBuddyReq,
     NodeIKernelBuddyService,
 } from "./types/services/buddy-service.js";
 export type {

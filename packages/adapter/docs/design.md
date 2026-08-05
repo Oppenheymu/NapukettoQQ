@@ -339,6 +339,31 @@ adapter onStart：装配传输 → 打开 server/client → 广播 lifecycle ena
 
 **boot.cjs 补协议装配**（loader runtime）：登录成功后动态 import adapter/network 入口（launcher 环境变量 NAPUTO_ADAPTER_ENTRY / NAPUTO_NETWORK_ENTRY）→ 创建 MsgChannel + MsgBridge + MsgApi/GroupApi/FriendApi + EventBroadcaster + NapukettoOneBot11Adapter → start。
 
+### 8.11 P2-11 第二批动作（好友 + 系统 + 消息剩余，2026-08-05 设计 + 实现）
+
+**目标**：HANDOVER.md §5.3 第二批。kernel 方法面见 kernel design §8.13。**已实现并 pnpm check 全绿（117 文件）+ 全量构建通过。**
+
+**好友类动作（6 个）**：
+- `set_friend_add_request`：flag=reqTime → getBuddyReqList 匹配 → handleFriendRequest(notify, approve) + optional remark（remark 用 notify.friendUid，无需 uin→uid）
+- `set_friend_remark`：user_id → uinToUid → setFriendRemark
+- `delete_friend`：user_id → uinToUid → deleteFriend
+- `get_friends_with_category`：getFriendCategories → 分类结构（buddyList 元素含 uin/nick/remark，uid→Friend 映射来自 getFriendList）
+- `get_doubt_friends_add_request`：count → getDoubtFriendRequest
+- `set_doubt_friends_add_request`：flag=uid → handleDoubtFriendRequest
+
+**系统类动作（6 个）**：
+- `get_status`：本地 `{ online: true, good: true }`（与心跳 status 同构 OB11Status）
+- `get_version_info`：deps.system.appVersion → VersionInfo（app_name="napuketto-qq" / protocol_version="v11"）
+- `clean_cache`：deps.system.cleanCache 回调（未配置抛错）
+- `can_send_image` / `can_send_record`：本地 true
+- `get_robot_uin_range`：本地 `{ min: 10001, max: 4294967295 }`
+
+**消息类动作（1 个）**：`set_input_status`：user_id → uinToUid → setInputStatus(peer, eventType=1)。
+
+**deps 扩展**：`Ob11ActionDeps` 加 `system: { appVersion: string; cleanCache: () => Promise<void> }`；adapter `OneBot11AdapterOptions` 加 `appVersion?` / `cleanCache?`；boot.cjs 装配传 `appVersion=NAPUTO_QQ_VERSION`、`cleanCache=paths.clearCache()`（kernel.PathWrapper）。
+
+**跳过**（依赖未探测 service ★）：send_like / set_online_status / set_diy_online_status / get_cookies / get_clientkey / get_rkey / get_stranger_info / set_qq_profile / get_online_clients。
+
 ### 8.10 P2-10 第一批动作全量（消息 + 群管，2026-08-05 设计 + 实现）
 
 **目标**：HANDOVER.md §5.3 第一批动作。kernel 方法面见 kernel design §8.12。**已实现并 pnpm check 全绿（103 文件）+ 全量构建通过。**

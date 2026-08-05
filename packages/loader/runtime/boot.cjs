@@ -76,6 +76,15 @@ async function startProtocols(kernel, ctx, loginResult, logger) {
             friendApi,
             selfUin: loginResult.uin,
             selfNickname: loginResult.nick,
+            appVersion: process.env.NAPUTO_QQ_VERSION || "unknown",
+            // clean_cache：清理 kernel 数据目录缓存（PathWrapper.clearCache）
+            cleanCache: async () => {
+                const paths = new kernel.PathWrapper({
+                    dataRoot: process.env.NAPKETTO_DATA,
+                    account: loginResult.uin,
+                });
+                paths.clearCache();
+            },
         });
         await ob11.start();
         logger("bootstrap: onebot11 adapter started");

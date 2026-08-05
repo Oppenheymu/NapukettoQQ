@@ -137,4 +137,9 @@ export class MsgApi {
         const raw = await this.service.setMsgRead(target);
         unwrapResult("setMsgRead", raw);
     }
+
+    /** 发送输入状态（set_input_status；eventType=1 输入中，0 停止）。 */
+    async setInputStatus(target: Peer, eventType: number): Promise<void> {
+        await this.service.sendShowInputStatusReq(target.chatType, eventType, target.peerUid);
+    }
 }

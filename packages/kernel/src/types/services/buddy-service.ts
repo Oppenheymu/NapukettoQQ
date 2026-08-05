@@ -17,6 +17,28 @@ export interface BuddyCategory {
     buddyUids: string[];
 }
 
+/** 好友申请（getBuddyReq 返回的 buddyReqs 成员，说明书参考，待探测校准）。 */
+export interface BuddyReq {
+    reqTime: string;
+    friendUid: string;
+    friendNick?: string;
+    sourceId?: number;
+    sourceName?: string;
+    [key: string]: unknown;
+}
+
+/** 可疑好友申请（getDoubtBuddyReq 返回的 doubtList 成员，说明书参考）。 */
+export interface DoubtBuddyReq {
+    uid: string;
+    nick?: string;
+    source?: string;
+    reason?: string;
+    msg?: string;
+    groupCode?: string;
+    reqTime?: string;
+    [key: string]: unknown;
+}
+
 /** 好友服务：apis/friend 用到的核心方法面。 */
 export interface NodeIKernelBuddyService {
     addKernelBuddyListener(listener: unknown): number;
@@ -30,4 +52,28 @@ export interface NodeIKernelBuddyService {
     getBuddyNick(uid: string): string;
     getBuddyRemark(uid: string): string;
     isBuddy(uid: string): boolean;
+    /** 好友申请列表（set_friend_add_request 应答前查找匹配项）。 */
+    getBuddyReq(): Promise<GeneralCallResult & { buddyReqs?: BuddyReq[] }>;
+    /** 同意/拒绝加好友请求（set_friend_add_request）。 */
+    approvalFriendRequest(arg: {
+        friendUid: string;
+        reqTime: string;
+        accept: boolean;
+    }): Promise<void>;
+    /** 设置好友备注（set_friend_remark；void 语义乐观处理）。 */
+    setBuddyRemark(param: { uid: string; remark: string }): void;
+    /** 删除好友（delete_friend）。 */
+    delBuddy(param: {
+        friendUid: string;
+        tempBlock: boolean;
+        tempBothDel: boolean;
+    }): Promise<unknown>;
+    /** 可疑好友申请列表（get_doubt_friends_add_request；reqId 作回执匹配）。 */
+    getDoubtBuddyReq(
+        reqId: string,
+        num: number,
+        uk: string,
+    ): Promise<GeneralCallResult & { doubtList?: DoubtBuddyReq[] }>;
+    /** 处理可疑好友申请（set_doubt_friends_add_request；str1/str2 语义未知，传空串）。 */
+    approvalDoubtBuddyReq(uid: string, str1: string, str2: string): void;
 }

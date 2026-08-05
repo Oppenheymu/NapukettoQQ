@@ -91,4 +91,6 @@ export interface NodeIKernelMsgService {
     ): Promise<GeneralCallResult>;
     /** 语音转文字（fetch_ptt_text；异步转写，结果写回 pttElement.text）。 */
     translatePtt2Text(msgId: string, peer: Peer, msgElement: unknown): Promise<GeneralCallResult>;
+    /** 输入状态（set_input_status；eventType=1 输入中，0 停止）。 */
+    sendShowInputStatusReq(chatType: number, eventType: number, toUid: string): Promise<unknown>;
 }

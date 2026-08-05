@@ -10,7 +10,7 @@
  *
  * 数据根优先级：cli `--data-dir`（显式参数）> `NAPKETTO_DATA` 环境变量 > `~/.napuketto`（默认）。
  */
-import { mkdirSync } from "node:fs";
+import { mkdirSync, readdirSync, rmSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import process from "node:process";
@@ -76,5 +76,21 @@ export class PathWrapper {
     /** 账号目录内的文件路径（如 `file('config', 'napuketto.json')`）。 */
     file(...segments: string[]): string {
         return join(this.accountDir, ...segments);
+    }
+
+    /**
+     * 清空缓存目录（clean_cache 动作经注入回调消费）。
+     * 只删除 cacheDir 下的条目，保留目录本身。
+     */
+    clearCache(): void {
+        let entries: string[];
+        try {
+            entries = readdirSync(this.cacheDir);
+        } catch {
+            return; // 目录不存在视为空
+        }
+        for (const entry of entries) {
+            rmSync(join(this.cacheDir, entry), { recursive: true, force: true });
+        }
     }
 }
