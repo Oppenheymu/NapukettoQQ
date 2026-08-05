@@ -16,7 +16,7 @@
         }
     },
     "bin": {
-        "napuketto": "./dist/index.js"
+        "napuketto": "./dist/index.mjs"
     },
     "scripts": {
         "dev": "tsdown --watch",
