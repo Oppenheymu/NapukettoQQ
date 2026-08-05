@@ -26,23 +26,31 @@ napuketto supervisor             # 从主配置 napuketto.json 的 accounts 批�
 - cli 父进程职责：拉起子进程、崩溃自动重启、信号转发（SIGINT/SIGTERM → 优雅退出）。
 - **kernel 无全局单例**（ADR-015 推论）：每进程一份实例，由子进程持有。
 
-### 2.1 主配置 napuketto.json（P6，2026-08-05 设计）
+### 2.1 全局配置 napuketto.toml（2026-08-05 用户拍板，单一 TOML 文件）
 
-跨账号主配置放**数据根**（非账号目录），路径 `<dataRoot>/napuketto.json`：
+**所有配置统一放 `<数据根>/napuketto.toml`**（不再用独立 JSON）：
 
-```json
-{
-    "dataDir": "C:\\Users\\xxx\\.napuketto",
-    "autoRestart": true,
-    "restartDelayMs": 2000,
-    "accounts": [
-        { "qq": "123456", "enabled": true }
-    ]
-}
+```toml
+dataDir = "C:\\Users\\xxx\\.napuketto"
+autoRestart = true
+restartDelayMs = 2000
+
+[[accounts]]
+qq = "123456"
+enabled = true
+
+[onebot11]                  # 协议段（与 ob11ConfigSchema 对应）
+heartbeatInterval = 3000
+
+[onebot11.http]             # 嵌套表
+enabled = false
+host = "127.0.0.1"
+port = 3000
 ```
 
-- 校验器：cli 手写 `parse`（不引入 zod，适配 kernel ConfigBase 的 ConfigSchema 形状）。
-- `config init` 生成默认主配置；账号协议配置（onebot11.json 等）由运行时 `ProtocolConfig.load()` 自动生成（文件缺失落默认值）。
+- 文本格式：smol-toml 解析/序列化（kernel ConfigBase 按 `.toml` 扩展名推断）。
+- 校验器：cli 手写 `parse`（适配 kernel ConfigBase 的 ConfigSchema 形状，不引入 zod）；协议段由对应协议包 zod schema 校验（boot.cjs 装配时经 seed 传入）。
+- `config init` 生成默认全局配置；账号协议配置不再单独落盘（boot.cjs 从全局 TOML 取段作 seed）。
 
 ### 2.2 supervisor 子进程编排（P6）
 
@@ -85,10 +93,10 @@ sequenceDiagram
 
 ```bash
 napuketto -q 123456               # 指定 QQ 号启动
-napuketto -d <dir> config init    # 生成默认主配置（napuketto.json + 目录骨架）
-napuketto -d <dir> config list    # 列出主配置与各账号配置
-napuketto -d <dir> config apply <file>  # 应用外部配置（校验后写回主配置）
-napuketto -d <dir> supervisor     # 多账号编排（读主配置 accounts）
+napuketto -d <dir> config init    # 生成默认全局配置（napuketto.toml + 目录骨架）
+napuketto -d <dir> config list    # 列出全局配置与各账号配置
+napuketto -d <dir> config apply <file>  # 应用外部配置（TOML/JSON，校验后写回全局配置）
+napuketto -d <dir> supervisor     # 多账号编排（读全局配置 accounts）
 ```
 
 > ⚠️ commander 限制：主命令已定义 `-d/--data-dir` 时，子命令定义同名 option 会解析失效（实测）——因此 `-d` 只定义在主命令，config/supervisor 子命令经 `program.opts()` 读取。

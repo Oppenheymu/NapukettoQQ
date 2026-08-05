@@ -10,7 +10,7 @@
 
 ## 1. 项目定位与技术路线
 
-NapukettoQQ：基于 QQ NT 客户端原生模块（`wrapper.node`）的机器人框架，对外提供 OneBot 11（当前）/ OneBot 12 / Satori（规划）多协议接口。pnpm monorepo + TypeScript + tsdown + biome。
+NapukettoQQ：基于 QQ NT 客户端原生模块（`wrapper.node`）的机器人框架，对外提供 OneBot 11（当前）/ Satori（规划）多协议接口（**OneBot 12 已放弃，规范过于模糊，2026-08-05 删除占位入口 commit ac5ebba**）。pnpm monorepo + TypeScript + tsdown + biome。
 
 **技术路线（2026-08-05 定稿，AGENTS.md 第 7 条）**：
 - **NAPI 范式**：wrapper.node 只能在 QQ 定制版 Electron 主进程内由 preload 注册（纯 Node/普通 Electron 报 "Module did not self-register"）。
@@ -25,6 +25,11 @@ NapukettoQQ：基于 QQ NT 客户端原生模块（`wrapper.node`）的机器人
 ## 2. 当前进度（commit 链，时间正序）
 
 ```
+ac5ebba feat(adapter): 删除 OneBot 12 协议适配器占位文件（规范模糊，用户拍板）
+100b8bd feat(cli): P6 config 子命令 + supervisor 多账号编排（基础设施第三项）
+c7cc211 feat(kernel,adapter): P2-17 GroupCache 群成员缓存（ADR-008，基础设施第二项）
+c984d11 feat(adapter): P2-16 api/ 聚合层（OneBotApi 单类聚合，基础设施第一项）
+82c5b53 docs: 交接文本重写——API 六批全落地（78 动作），转向基础设施
 507959d feat(adapter,kernel): P2-15 第六批 NapCat API（陌生人信息+csrf+群请求+精华+荣誉 7 个）
 74ed607 feat(adapter,kernel): P2-14 第五批 NapCat API（群文件+资料+点赞+翻译 16 个）
 7dcf94b chore(adapter): 重组 onebot11/action 目录（message/group/friend/system 四分组）
@@ -55,18 +60,19 @@ b2574ec refactor(kernel): 解耦 wrapper-config/wrapper-adapters
 96748f4 feat(kernel): NAPI 路线重构 + loader 包
 ```
 
-**进度坐标**：kernel design.md §9 完成 8/9（login 完成，剩 cache/、apis 的 user/file/system）；**完整启动链路打通**（cli → 定位 QQ → BootMain 注入 → boot.cjs 内 kernel 装配 + 快速登录/QR 回退 → adapter/network 协议装配 → HTTP/WS 监听 + 心跳）；**消息收发 + 6 查询动作 + notice 事件 + meta 事件 + QR 登录全部真实可用**；**一~六批 NapCat API 已实现（总动作数 78）**。NapCat 对齐度 ≈ 70%。
+**进度坐标**：kernel design.md §9 完成 8/9（login 完成，剩 cache/ 已实现、apis 的 user/file/system）；**完整启动链路打通**（cli → 定位 QQ → BootMain 注入 → boot.cjs 内 kernel 装配 + 快速登录/QR 回退 → adapter/network 协议装配 → HTTP/WS 监听 + 心跳）；**消息收发 + 6 查询动作 + notice 事件 + meta 事件 + QR 登录全部真实可用**；**一~六批 NapCat API 已实现（总动作数 78）**。**基础设施三项全落地（P2-16 api 聚合 / P2-17 GroupCache / P6 cli config+supervisor）**。NapCat 对齐度 ≈ 70%。
 
 ---
 
 ## 3. 已完成功能清单
 
 ### 3.1 kernel（@napuketto/kernel）
-- 基础设施：errors（KernelError + 8 错误码）/ paths（PathWrapper）/ logger（pino console+file+redact）/ config（ConfigBase 零 zod）/ event-channel（NTEventChannel 类型化 on/waitFor/emit）
+- 基础设施：errors（KernelError + 8 错误码）/ paths（PathWrapper）/ logger（pino console+file+redact）/ config（ConfigBase 零 zod，**支持 TOML（smol-toml）+ seed 内存初值，2026-08-05 全局配置改造**）/ event-channel（NTEventChannel 类型化 on/waitFor/emit）
 - wrapper 层：wrapper-version（版本探测）/ wrapper-loader（createWrapper/initEngine/createSession/initSession/startSession/startNapuketto）/ wrapper-config（buildEngineConfig/buildLoginConfig/buildSessionConfig）/ wrapper-adapters（GlobalAdapter/DependsAdapter/DispatcherAdapter/createSessionListener/createLoginListener）
 - 装配层：context（CoreContext）/ core（NapukettoCore.create/attachWrapper/login/stop）
 - 登录：lifecycle（quickLogin/initAndStartSession）/ login（QrLoginSession 状态机 + selfInfo）/ core.login QR 回退（快速登录失败 → 二维码写缓存目录）
-- 事件链路：msg-bridge（MsgBridge：原生 listener → NTEventChannel）/ types/listeners/msg
+- 事件链路：msg-bridge（MsgBridge：原生 listener → NTEventChannel）/ types/listeners/msg + **group-bridge（GroupBridge：群事件 → GroupEventChannel，P2-17）**
+- 缓存：**cache/group-cache（GroupCache：群/成员缓存，事件主动维护 + 惰性回填，ADR-008，P2-17）**
 - apis（12 个）：
   - MsgApi：sendMessage/recallMessage/fetchMessages/markRead/fetchMsgsByMsgId/setMsgEmojiLike/fetchPttText/setInputStatus/sendForwardMessage/fetchForwardMessage/forwardSingleMessage/setOnlineStatus
   - GroupApi：列表/详情/成员/uin↔uid + kick/ban/role/card/name/quit/essence/at_all_remain
@@ -86,13 +92,14 @@ b2574ec refactor(kernel): 解耦 wrapper-config/wrapper-adapters
   - helper/：config（ob11ConfigSchema）/ cqcode（CQ 码编解码）/ data（canonical↔OB11 翻译）/ translate（Group/GroupMember→OB11）/ message-unique（雪花 msgId↔int32 + peer 记录）/ message-info（get_msg 返回结构）/ message-event（消息事件翻译）/ notice（grayTip→OB11 notice）
   - transport.ts：assembleOb11Transports（HTTP/WS server+client + Bearer/access_token 鉴权）
   - event/：message/notice/request/meta 四类事件模型齐全
-- onebot12 / satori：空壳（未开工）
+  - api/：**OneBotApi 聚合（P2-16）+ GroupCache 只读视图（P2-17）**
+- **onebot12 已删除**（commit ac5ebba，规范模糊）；satori：占位（未开工）
 
 ### 3.3 network / media / loader / cli
 - network：完整（HttpServer/HttpClient/WsServer/WsClient/EventBroadcaster）
 - media：完整（image/audio(silk)/video(ffmpeg)）
 - loader：注入引导全链路（launcher/locate-qq/boot.cjs/native）
-- cli：commander 参数解析（-q/-d/--qq-path）→ runSingleAccount（定位 QQ → launch → 常驻）；config 子命令/supervisor 多账号未做
+- cli：commander 参数解析（-q 多值/-d/--qq-path）→ runSingleAccount（定位 QQ → launch → 常驻）；**config 子命令（init/list/apply）+ supervisor 多账号已做（P6）**
 
 ### 3.4 API 来源分层（回答「onebot11 规范吗」）
 
@@ -338,13 +345,10 @@ node apps/cli/dist/index.mjs --help     # cli 冒烟（不拉起 QQ）
 
 ### 8.1 基础设施（优先，用户点名"赶紧提上日程"）
 
-1. **api/ 聚合层**（adapter design §6 第 4 项，P2-16 候选）：目前动作直接注入 12 个 kernel apis 实例，设计上是 `onebot11/api/` 聚合 + 缓存。目标：`OneBotApi` 单类持有（msg/group/friend/ticket/richmedia/profile/profilelike/webApi），动作只依赖一个聚合对象，boot.cjs 装配简化。
-2. **cache/**（ADR-008，kernel §6）：群/成员/好友缓存，翻译层只读消费。
-   - 现状：GroupService.getAllMemberList 已探测（result.infos Map）；getGroupMemberInfo 每次 forceFetch=true 直查（耗原生调用）。
-   - 目标：`cache/` 模块——订阅原生事件主动维护 + 查询缺失惰性回填；翻译层只读 `getMember(groupId, uid)`；`toOb11GroupMemberInfo` 改读缓存（P2-3 注释"接 kernel cache 判定 owner/admin"落地）。
-   - 依赖：需注册 GroupService listener（`types/listeners/group.ts` + NTEventChannel<GroupListener, "Group">）。
-3. **cli config 子命令 + supervisor 多账号**（P6）：commander 已支持 -q/-d/--qq-path；补 `config init/list/apply` + `supervisor`（accounts.json 批量拉起子进程，进程隔离）。
-4. **onebot12 / satori 空壳填充**（P5）：adapter 包内 `onebot12/`、`satori/` 目录复用 core 框架（生命周期/订阅/广播/校验），只写薄映射；subpath exports 已配好。
+1. ✅ **api/ 聚合层**（P2-16，commit c984d11）：`OneBotApi` 单类聚合（msg/group/friend/ticket/richmedia/profile/profilelike/webApi + messageUnique + self/system），动作只依赖一个聚合对象，boot.cjs 装配简化。
+2. ✅ **cache/**（P2-17，commit c7cc211，ADR-008）：群/成员缓存——GroupListener + GroupBridge 事件通道 + GroupCache（事件主动维护 + 惰性回填）；翻译层只读消费；GetGroupInfo/GetGroupMemberInfo/GetGroupMemberListAction 优先读缓存。
+3. ✅ **cli config 子命令 + supervisor 多账号**（P6，commit 100b8bd）：`config init/list/apply` + `supervisor`（napuketto.json accounts 批量拉起子进程，进程隔离）。
+4. **satori 填充**（P6，规划）：adapter 包内 `satori/` 目录复用 core 框架（生命周期/订阅/广播/校验），只写薄映射。**onebot12 已放弃（规范模糊，commit ac5ebba 删除）**。
 
 ### 8.2 API 剩余（OIDB 依赖或需探测，暂缓）
 

@@ -1,7 +1,8 @@
 /**
- * JSON 配置基类（ADR-012）
+ * 配置基类（ADR-012）
  *
- * 读文件 → 校验 → 内存对象 → 变更写回。
+ * 读文件 → 校验 → 内存对象 → 变更写回。支持 **JSON / TOML** 两种文本格式
+ * （按扩展名推断：.toml → TOML（smol-toml），其余 → JSON）。
  *
  * kernel 不依赖 zod：只依赖校验器的最小 `parse` 形状（`ConfigSchema`），
  * 协议包的 zod schema 天然满足；kernel 主配置用手写校验器包装。
@@ -9,8 +10,20 @@
  */
 import { mkdirSync } from "node:fs";
 import { readFile, rename, writeFile } from "node:fs/promises";
-import { dirname } from "node:path";
+import { dirname, extname } from "node:path";
+import { parse as parseTomlText, stringify as stringifyTomlText } from "smol-toml";
 import { KernelError } from "./errors.js";
+
+/** 配置文本格式。 */
+export type ConfigFormat = "json" | "toml";
+
+/** 按扩展名推断格式（.toml → toml，其余 → json）。 */
+function inferFormat(path: string): ConfigFormat {
+    if (extname(path).toLowerCase() === ".toml") {
+        return "toml";
+    }
+    return "json";
+}
 
 function isMissingFileError(err: unknown): boolean {
     if (err instanceof Error) {
@@ -34,24 +47,34 @@ export interface ConfigOptions<T> {
     schema: ConfigSchema<T>;
     /** 默认值：文件缺失时生成并落盘；校验以它为兜底。 */
     defaults: T;
+    /** 内存初值（已校验对象）：load() 时直接使用，跳过文件读写（全局 TOML 分段的装配方式）。 */
+    seed?: T | undefined;
+    /** 文本格式（缺省按扩展名推断）。 */
+    format?: ConfigFormat | undefined;
 }
 
 /**
- * JSON 配置基类。每次 `load()` / `save()` 都经过 schema 校验，
+ * 配置基类。每次 `load()` / `save()` 都经过 schema 校验，
  * 校验失败抛 `KernelError('INVALID_PARAM')`，不静默吞掉。
+ * - `load()`：seed 存在 → 直接用 seed；否则读文件（缺失落默认值）。
+ * - `save()`：按格式序列化（TOML/JSON）原子写。
  */
 export class ConfigBase<T> {
     readonly path: string;
     readonly defaults: T;
 
     private readonly schema: ConfigSchema<T>;
+    private readonly format: ConfigFormat;
+    private readonly seed: T | undefined;
     private value: T;
 
     constructor(opts: ConfigOptions<T>) {
         this.path = opts.path;
         this.defaults = opts.defaults;
         this.schema = opts.schema;
-        this.value = opts.defaults;
+        this.format = opts.format ?? inferFormat(opts.path);
+        this.seed = opts.seed;
+        this.value = opts.seed ?? opts.defaults;
     }
 
     /** 当前内存值（只读消费；外部不得直接修改返回对象）。 */
@@ -61,10 +84,15 @@ export class ConfigBase<T> {
 
     /**
      * 加载配置：
+     * - seed 存在 → 直接用 seed（已校验，不读文件；全局 TOML 分段装配方式）；
      * - 文件缺失 → 写入默认值并落盘（首次运行自动生成），返回默认值；
      * - 文件存在 → 读取 + 校验，更新内存，返回。
      */
     async load(): Promise<T> {
+        if (this.seed !== undefined) {
+            this.value = this.seed;
+            return this.value;
+        }
         let raw: string;
         try {
             raw = await readFile(this.path, "utf8");
@@ -86,23 +114,41 @@ export class ConfigBase<T> {
 
     /** 校验并落盘（原子写：临时文件 + rename），随后更新内存。 */
     async save(next: T): Promise<void> {
-        const parsed = this.parse(JSON.stringify(next));
+        const parsed = this.parse(this.serialize(next));
         mkdirSync(dirname(this.path), { recursive: true });
         const tmpPath = `${this.path}.tmp`;
-        await writeFile(tmpPath, `${JSON.stringify(parsed, null, 4)}\n`, "utf8");
+        await writeFile(tmpPath, `${this.serialize(parsed)}\n`, "utf8");
         await rename(tmpPath, this.path);
         this.value = parsed;
+    }
+
+    /** 对象 → 文本（TOML/JSON）。 */
+    private serialize(value: T): string {
+        if (this.format === "toml") {
+            return stringifyTomlText(value as Record<string, unknown>);
+        }
+        return JSON.stringify(value, null, 4);
+    }
+
+    /** 文本 → 对象（TOML/JSON）。 */
+    private deserialize(raw: string): unknown {
+        if (this.format === "toml") {
+            return parseTomlText(raw);
+        }
+        return JSON.parse(raw) as unknown;
     }
 
     /** 反序列化 + schema 校验，错误统一包装为 KernelError。 */
     private parse(raw: string): T {
         let input: unknown;
         try {
-            input = JSON.parse(raw) as unknown;
+            input = this.deserialize(raw);
         } catch (err) {
-            throw new KernelError(`配置文件 JSON 解析失败: ${this.path}`, "INVALID_PARAM", {
-                cause: err,
-            });
+            throw new KernelError(
+                `配置文件 ${this.format.toUpperCase()} 解析失败: ${this.path}`,
+                "INVALID_PARAM",
+                { cause: err },
+            );
         }
         try {
             return this.schema.parse(input);
@@ -112,4 +158,14 @@ export class ConfigBase<T> {
             });
         }
     }
+}
+
+/** 解析 TOML 文本 → 对象（boot.cjs / 探测脚本等无 ConfigBase 场景复用）。 */
+export function parseToml(text: string): Record<string, unknown> {
+    return parseTomlText(text);
+}
+
+/** 对象 → TOML 文本（config init 生成全局配置文件等场景）。 */
+export function stringifyToml(value: Record<string, unknown>): string {
+    return stringifyTomlText(value);
 }

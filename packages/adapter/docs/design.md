@@ -1,8 +1,8 @@
 # @napuketto/adapter 设计
 
-> 职责：**协议适配器容器**——一个共享的适配器框架（core），外加 OneBot 11 / OneBot 12 / Satori 三套协议语义。
+> 职责：**协议适配器容器**——一个共享的适配器框架（core），外加 OneBot 11（当前）/ Satori（规划）协议语义。**OneBot 12 已放弃（2026-08-05 用户拍板：规范过于模糊，删除占位入口 commit ac5ebba）**。
 > 对应 ADR：002 / 003 / 008 / 009 / 013 / 014 / 017
-> 状态：core 框架已实现（BaseAction / ActionRegistry / AdapterRegistry / ProtocolConfig / BaseProtocolAdapter，2026-08-04，见 §8）；onebot11 第一梯队已实现（types / helper/config / action/send_msg，2026-08-04，见 §8.1）；onebot11 helper 翻译层已实现（cqcode/data，2026-08-04，见 §8.2）；onebot11 事件模型已实现（message/notice/request/meta，2026-08-05，见 §8.3）；onebot11 动作骨架扩充已实现（error-map + 6 个查询动作 + types 补全，2026-08-05，见 §8.4）；**onebot11 adapter.ts 已实现（2026-08-05，见 §8.5）——订阅 kernel 消息事件 → OB11 消息事件 → network 广播（消息收链路打通）**；**P2-3 请求分发 + send_msg 真实化 + MessageUnique（2026-08-05，见 §8.6）——收发闭环打通**；**P2-4 查询动作真实化（2026-08-05，见 §8.7）——apis/group + apis/friend + 6 查询动作接 kernel**；**P2-5 传输接入（2026-08-05，见 §8.8）——HTTP/WS server+client + 鉴权 + 心跳 meta 事件**；**P2-6 cli 启动编排（2026-08-05，见 §8.9）——boot.cjs 补协议装配 + cli 参数解析拉起 QQ**。**P2-16 api/ 聚合层（2026-08-05，见 §8.16）——OneBotApi 单类聚合 9 个 kernel apis + messageUnique + self/system，动作只依赖一个聚合对象（基础设施第一项）**；**P2-17 GroupCache 消费（2026-08-05，见 §8.17）——群信息/群成员动作读 kernel cache（ADR-008，基础设施第二项）**。**§9 实现顺序 5-6 已同步更新。**
+> 状态：core 框架已实现（BaseAction / ActionRegistry / AdapterRegistry / ProtocolConfig / BaseProtocolAdapter，2026-08-04，见 §8）；onebot11 第一梯队已实现（types / helper/config / action/send_msg，2026-08-04，见 §8.1）；onebot11 helper 翻译层已实现（cqcode/data，2026-08-04，见 §8.2）；onebot11 事件模型已实现（message/notice/request/meta，2026-08-05，见 §8.3）；onebot11 动作骨架扩充已实现（error-map + 6 个查询动作 + types 补全，2026-08-05，见 §8.4）；**onebot11 adapter.ts 已实现（2026-08-05，见 §8.5）——订阅 kernel 消息事件 → OB11 消息事件 → network 广播（消息收链路打通）**；**P2-3 请求分发 + send_msg 真实化 + MessageUnique（2026-08-05，见 §8.6）——收发闭环打通**；**P2-4 查询动作真实化（2026-08-05，见 §8.7）——apis/group + apis/friend + 6 查询动作接 kernel**；**P2-5 传输接入（2026-08-05，见 §8.8）——HTTP/WS server+client + 鉴权 + 心跳 meta 事件**；**P2-6 cli 启动编排（2026-08-05，见 §8.9）——boot.cjs 补协议装配 + cli 参数解析拉起 QQ**。**P2-16 api/ 聚合层（2026-08-05，见 §8.16）——OneBotApi 单类聚合 9 个 kernel apis + messageUnique + self/system，动作只依赖一个聚合对象（基础设施第一项）**；**P2-17 GroupCache 消费（2026-08-05，见 §8.17）——群信息/群成员动作读 kernel cache（ADR-008，基础设施第二项）**；**全局配置 TOML（2026-08-05）——ProtocolConfig 支持 seed（内存初值，boot.cjs 从 napuketto.toml 取 [onebot11] 段 zod 校验后装配，不再读独立协议文件）**。**§9 实现顺序 5-6 已同步更新。**
 
 ---
 
@@ -15,7 +15,7 @@
 
 ## 2. 为什么是"容器"而不是"三个平级包"（ADR-013）
 
-OneBot 11 / OneBot 12 / Satori 三者共享的是**适配器骨架**：订阅 kernel 事件通道 → 翻译 → 交给 network 广播；接收 network 请求 → 校验 → 分发 → 响应；配置热更新；心跳；生命周期。这部分与协议无关，只写一次。
+OneBot 11 / Satori 两者共享的是**适配器骨架**：订阅 kernel 事件通道 → 翻译 → 交给 network 广播；接收 network 请求 → 校验 → 分发 → 响应；配置热更新；心跳；生命周期。这部分与协议无关，只写一次。
 
 三个协议真正不同的只有四样：
 1. **配置 schema**（各写各的）
@@ -37,9 +37,8 @@ packages/adapter/src/
 │   ├── action/                    # msg/ group/ user/ system/ file/ go-cqhttp/ extends/
 │   ├── event/                     # OB11BaseEvent + message/ notice/ request/ meta/
 │   ├── helper/                    # config.ts + data.ts（OB11Constructor）+ cqcode.ts
-│   ├── api/                       # OneBotGroupApi / UserApi / FriendApi（聚合 + 缓存）
+│   ├── api/                       # OneBotApi（P2-16 聚合 + GroupCache 只读视图）
 │   └── types/                     # OB11 类型 + OB11Return
-├── onebot12/                      # P5（规划）：adapter.ts + action/event/helper/types
 └── satori/                        # P6（规划）：adapter.ts + action/event/helper/types
 ```
 
@@ -53,9 +52,7 @@ packages/adapter/src/
     "exports": {
         ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" },
         "./core": { "types": "./dist/core/index.d.ts", "import": "./dist/core/index.js" },
-        "./onebot11": { "types": "./dist/onebot11/index.d.ts", "import": "./dist/onebot11/index.js" },
-        "./onebot12": { "types": "./dist/onebot12/index.d.ts", "import": "./dist/onebot12/index.js" },
-        "./satori": { "types": "./dist/satori/index.d.ts", "import": "./dist/satori/index.js" }
+        "./onebot11": { "types": "./dist/onebot11/index.d.ts", "import": "./dist/onebot11/index.js" }
     }
 }
 ```
@@ -69,7 +66,7 @@ packages/adapter/src/
 ```ts
 // core/BaseProtocolAdapter.ts —— 骨架，三个协议各自实现很薄
 abstract class BaseProtocolAdapter {
-    abstract readonly protocol: 'onebot11' | 'onebot12' | 'satori';
+    abstract readonly protocol: 'onebot11' | 'satori';
     abstract readonly configSchema: ZodType;                 // 协议配置
     abstract readonly actions: ActionRegistry;               // 请求 → 动作
     abstract translateEvent(e: KernelEvent): ProtocolEvent;  // kernel 事件 → 协议事件（薄映射）
@@ -108,7 +105,6 @@ function toSendElements(e: CanonicalElement[]): SendMessageElement[];  // 规范
 然后各协议只写**薄映射**：
 ```
 onebot11: canonical → CQ 码 / segment 数组（反向：解析 CQ 码 → canonical）
-onebot12: canonical → segment（几乎同构，只差字段命名）
 satori:   canonical → 元素（type/attrs，img/audio 等重命名）
 ```
 
@@ -137,7 +133,7 @@ const OB11ErrorMap: Record<KernelErrorCode, number> = {
 // BaseAction 内统一：catch (e) → e instanceof KernelError ? OB11ErrorMap[e.code] : OB11ErrorMap.UNKNOWN
 ```
 
-各协议（OB11/OB12/Satori）各写一份映射表，但共享同一套 `KernelErrorCode`。
+各协议（OB11/Satori）各写一份映射表，但共享同一套 `KernelErrorCode`。
 
 ### 5.4 生命周期
 
@@ -152,7 +148,7 @@ const OB11ErrorMap: Record<KernelErrorCode, number> = {
 4. ✅ `onebot11/api/`（聚合 + 缓存）——**聚合已落地（P2-16，OneBotApi 单类）**；**缓存消费已落地（P2-17，GroupCache 只读视图）**；好友缓存待 kernel BuddyCache 接入后补齐
 5. `onebot11/adapter.ts`：订阅 kernel 事件 → OB11 事件 → network 广播
 6. `onebot11/action/` 按痛点排序：`send_msg` 系列 → `get_*` 系列 → 群管 → 文件 → go-cqhttp 扩展
-7. `onebot12/`（P5）→ `satori/`（P6）：复用 core，各写薄映射
+7. ✅ `onebot11/api/` 聚合 + 缓存（P2-16 聚合完成、P2-17 GroupCache 只读视图完成）→ `satori/`（P6，规划）：复用 core，写薄映射
 
 ## 7. 待验证事项
 
@@ -235,7 +231,7 @@ abstract class BaseAction<TPayload, TReturn> {
 ## 5. 待验证事项
 
 - OB11 消息段（CQ 码）与 NT 元素（ElementType）的完整映射表（P2 先覆盖 text/at/image/face，P4 补全）。
-- 多协议共存时 onebot 包与未来 onebot12/satori 包的公共抽象（是否抽共享协议基座包，P5 前再定）。
+- 多协议共存时 onebot 包与未来 satori 包的公共抽象（是否抽共享协议基座包，Satori 开工前再定）。
 
 ### 8.2 onebot11 helper 翻译层（2026-08-04）
 

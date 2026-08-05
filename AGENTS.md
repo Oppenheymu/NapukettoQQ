@@ -12,7 +12,7 @@ NapukettoQQ：基于 QQ NT 客户端原生模块（`wrapper.node`）的机器人
 2. **依赖方向**（只允许向下依赖）：
 
    ```
-   @napuketto/kernel    无内部依赖（仅 pino）
+   @napuketto/kernel    无内部依赖（仅 pino + smol-toml）
    @napuketto/media     无内部依赖
    @napuketto/network   无内部依赖（协议无关传输原语）
    @napuketto/adapter   kernel + network + media（协议适配器容器：core 框架 + onebot11/onebot12/satori）
@@ -29,6 +29,7 @@ NapukettoQQ：基于 QQ NT 客户端原生模块（`wrapper.node`）的机器人
    - `@napuketto/loader` 注入 hook DLL 把 boot JS 引导进 QQ 主进程，截获 wrapper.node 的 `module.exports`，业务层全部走 NAPI 对象调用。
    - **绝对禁止**：koffi、手算 vtable 槽位、内存偏移/memcpy 结构体、绕过 NAPI 的 thiscall 裸调；**禁止修改 QQ 安装目录**（package.json / asar / 原生文件）。
    - 逆向（Ghidra / probe）仅用于理解机制，产物不进入正式代码；`scripts/probe/` 的旧 koffi 脚本仅作历史参考。
+8. **全局配置 = 单一 TOML 文件**（2026-08-05 用户拍板）：所有配置统一放 `<数据根>/napuketto.toml`（主配置段 + `[onebot11]` 等协议段），**不再使用独立 JSON 配置文件**（JSON 门槛太高）。kernel `ConfigBase` 支持 TOML（smol-toml 解析/序列化，按 `.toml` 扩展名推断）+ `seed`（内存初值：boot.cjs 从全局 TOML 取协议段 zod 校验后作 seed，adapter 不再读独立协议文件）。cli `config init/list/apply` 读写该文件。
 
 ## 工作流
 

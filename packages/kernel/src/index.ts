@@ -25,8 +25,8 @@ export type {
 export { WebApi, WebHonorType } from "./apis/webapi.js";
 export type { GroupCacheOptions } from "./cache/index.js";
 export { GroupCache } from "./cache/index.js";
-export type { ConfigOptions, ConfigSchema } from "./config.js";
-export { ConfigBase } from "./config.js";
+export type { ConfigFormat, ConfigOptions, ConfigSchema } from "./config.js";
+export { ConfigBase, parseToml, stringifyToml } from "./config.js";
 export type { CoreContext, CoreContextOptions } from "./context.js";
 export { createCoreContext } from "./context.js";
 export type { CoreLoginOptions, NapukettoCoreOptions } from "./core.js";

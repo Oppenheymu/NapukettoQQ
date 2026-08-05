@@ -77,10 +77,24 @@ async function startProtocols(kernel, ctx, loginResult, logger) {
         });
         // network 广播 + OB11 适配器
         const broadcaster = new network.EventBroadcaster();
+        // 全局 TOML 配置（<cfgDir>/napuketto.toml）：读 [onebot11] 段，zod 校验后作 seed
+        // （ConfigBase seed 模式：load() 直接用内存值，不再读写独立协议文件）
+        let ob11Section = {};
+        try {
+            const cfgFile = path.join(process.env.NAPUTO_CFG_DIR || ".", "napuketto.toml");
+            const raw = fs.readFileSync(cfgFile, "utf8");
+            const parsed = kernel.parseToml(raw);
+            if (parsed && typeof parsed.onebot11 === "object" && parsed.onebot11 !== null) {
+                ob11Section = parsed.onebot11;
+            }
+        } catch (e) {
+            logger(`bootstrap: 全局配置读取失败（用默认 ob11 配置）: ${e?.message ?? e}`);
+        }
         const ob11Config = new adapter.ProtocolConfig({
-            path: path.join(process.env.NAPUTO_CFG_DIR || ".", "config", "onebot11.json"),
+            path: path.join(process.env.NAPUTO_CFG_DIR || ".", "napuketto.toml"),
             schema: adapter.ob11ConfigSchema,
             defaults: adapter.ob11ConfigSchema.parse({}),
+            seed: adapter.ob11ConfigSchema.parse(ob11Section),
         });
         const ob11 = new adapter.NapukettoOneBot11Adapter({
             config: ob11Config,

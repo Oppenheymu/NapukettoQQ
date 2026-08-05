@@ -567,6 +567,20 @@ function resolveWrapperPath(installDir: string, version: string): string;
 
 **踩坑**：TS 7.0.2 对 NTEventChannel.on 的复杂条件类型 handler 推导失败（implicit any）→ on 回调参数显式标注类型；dedupe 泛型推断回退 unknown → 调用点显式类型参数 `<T>`；相对路径 `../apis/group.js` / `../group-bridge.js`（cache/ 在 src/cache/）；biome organizeImports 会合并同源 import 且 `../` 排 `./` 前（--write 修）。
 
+### 8.19 ConfigBase TOML 支持 + seed（2026-08-05 实现，全局配置改造）
+
+**目标**：用户 2026-08-05 拍板——**全局配置 = 单一 TOML 文件**（`<数据根>/napuketto.toml`，JSON 门槛太高）；smol-toml 解析/序列化，配合 zod 校验。**已实现并 pnpm check 全绿（157 文件）+ 全量构建通过。**
+
+**kernel config.ts 增强**：
+- `ConfigFormat = "json" | "toml"`，按扩展名推断（`.toml` → smol-toml，其余 → JSON）
+- `ConfigOptions` 增 `seed?: T | undefined`（内存初值）+ `format?`；`ConfigBase.load()`：seed 存在 → 直接用 seed（跳过文件读写，全局 TOML 分段的装配方式）；save() 按格式序列化（原子写不变）
+- 导出 `parseToml(text)` / `stringifyToml(obj)` 工具（boot.cjs / cli config 复用，无 ConfigBase 场景）
+- `ConfigOptions` 的 seed/format 用**显式 `| undefined` 联合**（exactOptionalPropertyTypes 允许透传 undefined）
+
+**装配链**：cli `config init/list/apply` 读写 `napuketto.toml`（主配置段 + `[onebot11]` 协议段 + `[[accounts]]`）；boot.cjs 读全局 TOML → `kernel.parseToml` 取 `onebot11` 段 → `adapter.ob11ConfigSchema.parse(seed)` → `ProtocolConfig({ seed })`（不再读独立 onebot11.json）。
+
+**踩坑**：smol-toml `stringify` 对对象数组输出 `[[accounts]]`（正确）；嵌套表 `[onebot11.http]` 正常；TS 7 对 `as Record<string, unknown>` 转换 CliConfig 报 TS2352 → 先转 unknown（`toRecord` helper）；`ConfigOptions.seed/format` 透传需显式联合。
+
 ### 8.3 P0-1 实现记录（2026-08-04）
 
 `errors.ts` / `paths.ts` / `logger.ts` / `config.ts` 已实现，通过 `pnpm check` + 运行时冒烟测试（26 项）。关键决策：
