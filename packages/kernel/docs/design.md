@@ -2,7 +2,7 @@
 
 > 职责：**唯一原生交互层 + 唯一共享状态层**。协议层只认识 kernel，不认识 QQ。
 > 对应 ADR：001 / 003 / 006 / 007 / 008 / 009 / 010 / 012 / 016 / 017 / 018
-> 状态：P0-1 已完成（errors / paths / logger / config，2026-08-04，见 §8.3）；P0-2 已完成（event-channel + 占位 Listener 类型，2026-08-04，见 §4.1）；P1-1 已完成（wrapper-version + wrapper-loader，2026-08-05，见 §8.4）；P1-2 探测完成（RTTI 继承树 + service 类名/方法签名大全，2026-08-05，见 §8.5）；**P1-3 路线定稿：NAPI 范式重构（2026-08-05，见 §8.6）——wrapper-loader 从 koffi 改为 NAPI bootstrap，loader 包负责注入引导，业务层全走 NAPI；startNapuketto 装配入口 + smoke-test 已补（2026-08-05）。**
+> 状态：P0-1 已完成（errors / paths / logger / config，2026-08-04，见 §8.3）；P0-2 已完成（event-channel + 占位 Listener 类型，2026-08-04，见 §4.1）；P1-1 已完成（wrapper-version + wrapper-loader，2026-08-05，见 §8.4）；P1-2 探测完成（RTTI 继承树 + service 类名/方法签名大全，2026-08-05，见 §8.5）；**P1-3 路线定稿：NAPI 范式重构（2026-08-05，见 §8.6）——wrapper-loader 从 koffi 改为 NAPI bootstrap，loader 包负责注入引导，业务层全走 NAPI；startNapuketto 装配入口 + smoke-test 已补（2026-08-05）；全链路实测打通（注入→IAT hook→boot JS→89 exports→startNapuketto OK）。** P1-4 设计定稿：QQ 进程内探测 + session 复用（2026-08-05，见 §8.7）。
 
 ---
 
@@ -222,6 +222,28 @@ boot.cjs（QQ 主进程，hook 截获 wrapper.node exports）
 - **engineConfig 默认值**：platform_type=KWINDOWS(3)、app_type=4、app_version=versionInfo.fullVersion、use_xlog=false，其余取环境变量或空值——首个真实联调确认字段。
 
 **待实测（boot 链路）**：initWithDeskTopConfig 是否同步返回 / init 是否抛错（缺 ticket）/ startNT(0) 行为 / wrapper 是否要求 adapter 有具体方法（现在空对象）。
+
+### 8.7 P1-4 QQ 进程内探测 + session 复用（2026-08-05 定稿）
+
+**背景（实测推论）**：注入链路打通后，wrapper exports 是 QQ 已注册的单例（`NodeIQQNTWrapperEngine.get()` 返回 QQ 的 engine）。**QQ 自己已登录**——它的 session 已 init、service 已创建。因此**不应自己 create+init 新 session**（无凭据），而应**复用 QQ 的 session**：`NodeIQQNTWrapperSession.get()` 拿单例 → 直接 `getMsgService()` 等拿真实 service。
+
+**探测目标（ADR-006 落地，QQ 进程内反射）**：
+1. `session.get()` 返回什么？与 `create()` 的差异？
+2. session 原型方法名全集（`Object.getOwnPropertyNames(Object.getPrototypeOf(session))`）
+3. 各 `get*Service()` 返回值（null 还是对象？）及 service 原型方法名
+4. 关键方法（登录/消息）返回形状 JSON dump
+
+**探测结论（2026-08-05 实测，sessionId 格式确认）**：
+- `NodeIQQNTWrapperSession.get()` **不存在**；静态方法只有 `getNTWrapperSession(sessionId)`。
+- 正确链路：`NodeIQQNTStartupSessionWrapper.create()` → `start()` → `getSessionIdList()` 返回 **Map** `{nt: "nt_3", gpro: "gpro_3"}` → `getNTWrapperSession("nt_3")` 拿到主 session（已 init/已登录，60+ get*Service + 事件回调齐全）。
+- **主 session 复用已打通**（probe-late 实测）：`getMainSession(ctx)` 固化进 wrapper-loader。
+
+**实现**：
+- `kernel/src/probe.ts`：`probeRuntime(ctx)` —— 反射 dump session/service 方法到 `NAPUTO_CFG_DIR/napuketto-probe.json`（不引入日志依赖，直接 fs 写）。
+- `wrapper-loader.ts` 增 `getMainSession(ctx)`：startup.create → start → getSessionIdList → getNTWrapperSession(nt_xxx)，失败回退 create。
+- `boot.cjs` 探测模式：`NAPUTO_PROBE=1` 时 startNapuketto 后调 `kernel.probeRuntime`。
+
+**产出**：探测结果 → 补全 `types/services/`（30+ NodeIKernel*Service）+ `types/wrapper.ts` session 方法 → 再实现 apis/、cache/、login。
 
 ### 8.1 路径布局（ADR-016）
 

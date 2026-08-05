@@ -17,6 +17,7 @@ import type {
     NodeIDispatcherAdapter,
     NodeIGlobalAdapter,
     NodeIKernelSessionListener,
+    NodeIQQNTStartupSessionWrapper,
     NodeIQQNTWrapperEngine,
     NodeIQQNTWrapperSession,
     WrapperNodeApi,
@@ -74,6 +75,57 @@ function defaultEngineConfig(env: BootEnv): EnginInitDesktopConfig {
     };
 }
 
+/** 从 getSessionIdList 的 Map 提取主 sessionId（nt_ 前缀优先）。 */
+function findMainSessionId(ids: Map<unknown, unknown>): string | null {
+    for (const [k, v] of ids) {
+        if (typeof v === "string") {
+            if (v.startsWith("nt_")) {
+                return v;
+            }
+        } else if (typeof k === "string" && k.startsWith("nt_")) {
+            return k;
+        }
+    }
+    for (const [, v] of ids) {
+        if (typeof v === "string") {
+            return v;
+        }
+    }
+    for (const k of ids.keys()) {
+        if (typeof k === "string") {
+            return k;
+        }
+    }
+    return null;
+}
+
+/** 通过 getNTWrapperSession 拿主 session（内部辅助）。 */
+function resolveMainSession(
+    created: { start?: () => void; getSessionIdList?: () => unknown },
+    getNTWrapperSession: (id: string) => NodeIQQNTWrapperSession,
+): NodeIQQNTWrapperSession | null {
+    if (typeof created.start === "function") {
+        created.start();
+    }
+    if (typeof created.getSessionIdList !== "function") {
+        return null;
+    }
+    const ids = created.getSessionIdList();
+    if (!(ids instanceof Map)) {
+        return null;
+    }
+    const mainId = findMainSessionId(ids);
+    if (mainId === null) {
+        return null;
+    }
+    const session = getNTWrapperSession(mainId);
+    const maybe = session as NodeIQQNTWrapperSession | null | undefined;
+    if (maybe !== null && maybe !== undefined && typeof maybe.getMsgService === "function") {
+        return maybe;
+    }
+    return null;
+}
+
 // ---------------------------------------------------------------
 // 导出区（useExportsLast：export 全部在文件末尾）
 // ---------------------------------------------------------------
@@ -104,7 +156,7 @@ export function createWrapper(
     exports: WrapperNodeApi,
     versionInfo: QQVersionContext,
 ): WrapperContext {
-    const engineCtor = exports?.NodeIQQNTWrapperEngine;
+    const engineCtor = exports.NodeIQQNTWrapperEngine;
     if (!engineCtor || typeof engineCtor.get !== "function") {
         throw kernelError(
             "wrapper.node exports 无效（缺少 NodeIQQNTWrapperEngine）",
@@ -139,6 +191,61 @@ export function createSession(ctx: WrapperContext): NodeIQQNTWrapperSession {
     }
     ctx.session = session;
     return session;
+}
+
+/**
+ * 复用 QQ 已有 session（P1-4：QQ 已登录，直接拿单例避免重复 init）。
+ * 优先 `NodeIQQNTWrapperSession.get()`；返回 null 时回退 createSession。
+ */
+export function getExistingSession(ctx: WrapperContext): NodeIQQNTWrapperSession | null {
+    try {
+        const S = ctx.exports.NodeIQQNTWrapperSession;
+        if (typeof S.get === "function") {
+            const got = S.get();
+            if (got && typeof got.getMsgService === "function") {
+                ctx.session = got;
+                return got;
+            }
+        }
+    } catch {
+        // 复用失败，回退 create
+    }
+    return null;
+}
+
+/**
+ * 复用 QQ 主 session（P1-4 实测链路，2026-08-05）：
+ * `NodeIQQNTStartupSessionWrapper.create()` → `start()` → `getSessionIdList()`（Map
+ * {nt:"nt_3", gpro:"gpro_3"}）→ `NodeIQQNTWrapperSession.getNTWrapperSession("nt_3")`
+ * 拿到主 session（QQ 已 init/已登录，60+ get*Service 齐全）。
+ * 失败回退 createSession。返回 null 表示复用失败且未创建新 session。
+ */
+export function getMainSession(ctx: WrapperContext): NodeIQQNTWrapperSession | null {
+    try {
+        const startup = ctx.exports.NodeIQQNTStartupSessionWrapper;
+        const S = ctx.exports.NodeIQQNTWrapperSession;
+        const startupMaybe = startup as NodeIQQNTStartupSessionWrapper | null | undefined;
+        if (
+            startupMaybe === null ||
+            startupMaybe === undefined ||
+            typeof startupMaybe.create !== "function" ||
+            typeof S.getNTWrapperSession !== "function"
+        ) {
+            return null;
+        }
+        const created = startup.create();
+        if (!created) {
+            return null;
+        }
+        const session = resolveMainSession(created, (id) => S.getNTWrapperSession(id));
+        if (session !== null) {
+            ctx.session = session;
+        }
+        return session;
+    } catch {
+        // 复用失败，回退 create
+    }
+    return null;
 }
 
 /** session 初始化（4 参全为 JS 对象，NAPI 自动转换）。 */

@@ -83,6 +83,27 @@
             }
         }
     },
+    "overrides": [
+        {
+            "includes": ["packages/kernel/src/probe.ts"],
+            "linter": {
+                "rules": {
+                    "complexity": {
+                        "noExcessiveCognitiveComplexity": "off",
+                        "noExcessiveLinesPerFunction": "off"
+                    },
+                    "style": {
+                        "noTernary": "off",
+                        "noMagicNumbers": "off",
+                        "useDestructuring": "off",
+                        "useBlockStatements": "off",
+                        "noContinue": "off",
+                        "noExcessiveLinesPerFile": "off"
+                    }
+                }
+            }
+        }
+    ],
     "javascript": {
         "formatter": {
             "quoteStyle": "double",

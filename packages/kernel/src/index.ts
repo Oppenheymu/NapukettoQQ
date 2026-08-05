@@ -17,6 +17,7 @@ export type { LoggerOptions, LogLevel } from "./logger.js";
 export { createLogger } from "./logger.js";
 export type { PathOptions } from "./paths.js";
 export { DEFAULT_DATA_ROOT_NAME, PathWrapper, resolveDataRoot } from "./paths.js";
+export { probeRuntime } from "./probe.js";
 export type { RawMessage } from "./types/entities.js";
 export type { MsgListener } from "./types/listeners/msg.js";
 export type { CanonicalElement } from "./types/message-element.js";
@@ -49,6 +50,8 @@ export type {
 export {
     createSession,
     createWrapper,
+    getExistingSession,
+    getMainSession,
     initEngine,
     initSession,
     startNapuketto,

@@ -98,6 +98,28 @@ function bootstrap() {
                         log(
                             `bootstrap: startNapuketto OK, engine=${typeof ctx.engine}, session=${ctx.session !== null}`,
                         );
+                        // 探测模式（NAPUTO_PROBE=1）：反射 dump session/service 方法
+                        if (process.env.NAPUTO_PROBE === "1" && typeof kernel.probeRuntime === "function") {
+                            try {
+                                const probe = kernel.probeRuntime(ctx);
+                                log(
+                                    `bootstrap: probe done, session=${probe.session ? "ok" : "null"}, services=${Object.keys(probe.services ?? {}).length}`,
+                                );
+                                // 延迟二次探测：等 QQ 完成登录后 session/service 才完整
+                                setTimeout(() => {
+                                    try {
+                                        const late = kernel.probeRuntime(ctx, "napuketto-probe-late.json");
+                                        log(
+                                            `bootstrap: probe-late done, session=${late.session ? "ok" : "null"}, services=${Object.keys(late.services ?? {}).length}`,
+                                        );
+                                    } catch (e2) {
+                                        log(`bootstrap: probe-late error: ${e2?.message ?? e2}`);
+                                    }
+                                }, 35000);
+                            } catch (e) {
+                                log(`bootstrap: probe error: ${e?.message ?? e}`);
+                            }
+                        }
                     } catch (e) {
                         log(`bootstrap: startNapuketto error: ${e?.message ?? e}`);
                     }
