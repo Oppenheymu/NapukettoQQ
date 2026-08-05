@@ -9,6 +9,10 @@
 
 export type { ConfigOptions, ConfigSchema } from "./config.js";
 export { ConfigBase } from "./config.js";
+export type { CoreContext, CoreContextOptions } from "./context.js";
+export { createCoreContext } from "./context.js";
+export type { CoreLoginOptions, NapukettoCoreOptions } from "./core.js";
+export { NapukettoCore } from "./core.js";
 export type { KernelErrorCode } from "./errors.js";
 export { isKernelError, KERNEL_ERROR_CODES, KernelError, kernelError } from "./errors.js";
 export type { ListenerEvents } from "./event-channel.js";

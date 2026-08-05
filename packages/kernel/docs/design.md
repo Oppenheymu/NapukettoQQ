@@ -258,6 +258,27 @@ boot.cjs（QQ 主进程，hook 截获 wrapper.node exports）
 
 **产出**：探测结果 → 补全 `types/services/`（30+ NodeIKernel*Service）+ `types/wrapper.ts` session 方法 → 再实现 apis/、cache/、login。
 
+### 8.8 装配层：core.ts + context.ts（2026-08-05 实现）
+
+**CoreContext（context.ts，只读装配根）**：把 logger / paths / wrapper 上下文聚合成单一装配根，供协议层（adapter）与 apis/cache 消费。无全局单例（ADR-015 推论）：每进程一份，由装配层持有并传递。
+
+```ts
+interface CoreContext {
+    logger: pino.Logger;
+    paths: PathWrapper;
+    wrapper: WrapperContext | null;   // startNapuketto 装配后填充
+    login: LoginResult | null;        // 登录成功后填充
+}
+```
+
+**NapukettoCore（core.ts）**：
+- `NapukettoCore.create(opts)`：装配 paths（ensure 建目录）→ logger（console + 可选 file）→ CoreContext。
+- `attachWrapper(wrapperExports, env)`：调 startNapuketto（createWrapper + engine.init + session），挂到 ctx.wrapper。
+- `login(appid, opts)`：loginService.initConfig → quickLogin → buildSessionConfig → initAndStartSession，填 ctx.login。
+- `stop()`：日志收尾（清理留给 P2 常驻管理）。
+
+**用法**：boot.cjs 截获 exports 后即可 `NapukettoCore.create(...)` + `attachWrapper` + `login`，替代手工拼 startNapuketto/quickLogin/initAndStartSession；协议层从 ctx 拿 logger/paths/wrapper。
+
 ### 8.1 路径布局（ADR-016）
 
 数据（日志/配置/缓存）放**用户数据目录**而非程序目录（程序目录可能只读；多账号需要分离）：
@@ -307,9 +328,9 @@ function resolveWrapperPath(installDir: string, version: string): string;
 2. ✅ `scripts/probe/` 探测脚本 → 产出 `types/`（含 wrapper-version 探测）——占位类型已建（types/listeners + types/entities），探测产出后替换
 3. ✅ `event-channel.ts`（2026-08-04，用占位 Listener 类型验证机制；真实签名待探测后对齐）
 4. ✅ `wrapper-loader.ts` + `wrapper-version.ts`（2026-08-05，koffi + DLL 复制方案，真实环境验证 session 创建）
-5. ⏳ getService / service vtable 逆向（见 §8.4 下一步）→ 产出 `types/wrapper.ts` + `types/services/`
-6. `core.ts` + `context.ts` 装配（P1 与登录打通）
-7. `login.ts`
+5. ✅ 类型层：runtime 探测 + NapCat shell 模式参考确认（wrapper 类型 + service 契约，见 §8.5/§8.7；getService vtable 逆向**不再需要**——NAPI 范式下全部走普通 JS 对象调用）
+6. ✅ `core.ts` + `context.ts` 装配（2026-08-05，见 §8.8）
+7. `login.ts`（QR 状态机 + selfInfo；快速登录已可用，见 lifecycle.quickLogin）
 8. `apis/`（先 msg，后 group/friend/user/file/system）
 9. `cache/`（随 apis 一起演进）
 

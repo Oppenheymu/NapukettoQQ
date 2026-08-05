@@ -106,64 +106,96 @@ function bootstrap() {
                     wrapperPath: process.env.NAPUTO_WRAPPER_PATH,
                 };
                 try {
-                    // 1. 装配（createWrapper + engine.init）
-                    const ctx = kernel.startNapuketto({
-                        wrapperExports,
-                        env: bootEnv,
-                    });
-                    log(
-                        `bootstrap: startNapuketto OK, engine=${typeof ctx.engine}, session=${ctx.session !== null}`,
-                    );
-                    // 2. 完整生命周期：loginService → 快速登录 → session.init → startNT
-                    if (typeof kernel.quickLogin === "function" &&
-                        typeof kernel.initAndStartSession === "function") {
-                        // 2a. loginService.initConfig（NapCat shell 流程：addListener 前）
-                        if (typeof kernel.buildLoginConfig === "function" && ctx.loginService) {
-                            const loginCfg = kernel.buildLoginConfig(
-                                "537237765",
-                                bootEnv.qqVersion || "",
-                                bootEnv.dataDir || ".",
+                    if (typeof kernel.NapukettoCore === "function") {
+                        // 装配层路径：NapukettoCore.create → attachWrapper → login
+                        const core = kernel.NapukettoCore.create({
+                            paths: { dataRoot: bootEnv.dataDir },
+                            logLevel: "info",
+                        });
+                        const ctx = core.attachWrapper(wrapperExports, bootEnv);
+                        log(
+                            `bootstrap: attachWrapper OK, engine=${typeof ctx.engine}, session=${ctx.session !== null}`,
+                        );
+                        if (typeof core.login === "function") {
+                            const loginResult = await core.login({
+                                appid: "537237765",
+                                initTimeoutMs: 20000,
+                            });
+                            log(
+                                `bootstrap: login OK, uin=${loginResult.uin}, uid=${loginResult.uid}`,
                             );
-                            if (typeof ctx.loginService.initConfig === "function") {
-                                ctx.loginService.initConfig(loginCfg);
-                                log("bootstrap: loginService.initConfig OK");
+                        } else {
+                            log("bootstrap: kernel core missing login fn");
+                        }
+                        // 探测模式
+                        if (process.env.NAPUTO_PROBE === "1" && typeof kernel.probeRuntime === "function") {
+                            try {
+                                const probe = kernel.probeRuntime(ctx);
+                                log(
+                                    `bootstrap: probe done, session=${probe.session ? "ok" : "null"}, services=${Object.keys(probe.services ?? {}).length}`,
+                                );
+                                setTimeout(() => {
+                                    try {
+                                        const late = kernel.probeRuntime(ctx, "napuketto-probe-late.json");
+                                        log(
+                                            `bootstrap: probe-late done, session=${late.session ? "ok" : "null"}, services=${Object.keys(late.services ?? {}).length}`,
+                                        );
+                                    } catch (e2) {
+                                        log(`bootstrap: probe-late error: ${e2?.message ?? e2}`);
+                                    }
+                                }, 35000);
+                            } catch (e) {
+                                log(`bootstrap: probe error: ${e?.message ?? e}`);
                             }
                         }
-                        const loginResult = await kernel.quickLogin(ctx, {});
-                        log(`bootstrap: quickLogin OK, uin=${loginResult.uin}, uid=${loginResult.uid}`);
-                        const sessionConfig = kernel.buildSessionConfig({
-                            appid: "537237765",
-                            fullVersion: bootEnv.qqVersion || "",
-                            selfUin: loginResult.uin,
-                            selfUid: loginResult.uid,
-                            accountPath: bootEnv.dataDir || ".",
-                            downloadPath: path.join(bootEnv.dataDir || ".", "temp"),
-                        });
-                        const listener = kernel.createLifecycleSessionListener();
-                        await kernel.initAndStartSession(ctx, sessionConfig, listener, { timeoutMs: 20000 });
-                        log("bootstrap: session init + startNT OK!");
                     } else {
-                        log("bootstrap: kernel missing lifecycle fns (quickLogin/initAndStartSession)");
-                    }
-                    // 探测模式
-                    if (process.env.NAPUTO_PROBE === "1" && typeof kernel.probeRuntime === "function") {
-                        try {
-                            const probe = kernel.probeRuntime(ctx);
-                            log(
-                                `bootstrap: probe done, session=${probe.session ? "ok" : "null"}, services=${Object.keys(probe.services ?? {}).length}`,
-                            );
-                            setTimeout(() => {
-                                try {
-                                    const late = kernel.probeRuntime(ctx, "napuketto-probe-late.json");
-                                    log(
-                                        `bootstrap: probe-late done, session=${late.session ? "ok" : "null"}, services=${Object.keys(late.services ?? {}).length}`,
-                                    );
-                                } catch (e2) {
-                                    log(`bootstrap: probe-late error: ${e2?.message ?? e2}`);
+                        // 回退：旧装配路径（startNapuketto + 手工 lifecycle）
+                        log("bootstrap: kernel has no NapukettoCore, falling back");
+                        const ctx = kernel.startNapuketto({
+                            wrapperExports,
+                            env: bootEnv,
+                        });
+                        log(
+                            `bootstrap: startNapuketto OK, engine=${typeof ctx.engine}, session=${ctx.session !== null}`,
+                        );
+                        if (typeof kernel.quickLogin === "function" &&
+                            typeof kernel.initAndStartSession === "function") {
+                            if (typeof kernel.buildLoginConfig === "function" && ctx.loginService) {
+                                const loginCfg = kernel.buildLoginConfig(
+                                    "537237765",
+                                    bootEnv.qqVersion || "",
+                                    bootEnv.dataDir || ".",
+                                );
+                                if (typeof ctx.loginService.initConfig === "function") {
+                                    ctx.loginService.initConfig(loginCfg);
+                                    log("bootstrap: loginService.initConfig OK");
                                 }
-                            }, 35000);
-                        } catch (e) {
-                            log(`bootstrap: probe error: ${e?.message ?? e}`);
+                            }
+                            const loginResult = await kernel.quickLogin(ctx, {});
+                            log(`bootstrap: quickLogin OK, uin=${loginResult.uin}, uid=${loginResult.uid}`);
+                            const sessionConfig = kernel.buildSessionConfig({
+                                appid: "537237765",
+                                fullVersion: bootEnv.qqVersion || "",
+                                selfUin: loginResult.uin,
+                                selfUid: loginResult.uid,
+                                accountPath: bootEnv.dataDir || ".",
+                                downloadPath: path.join(bootEnv.dataDir || ".", "temp"),
+                            });
+                            const listener = kernel.createLifecycleSessionListener();
+                            await kernel.initAndStartSession(ctx, sessionConfig, listener, { timeoutMs: 20000 });
+                            log("bootstrap: session init + startNT OK!");
+                        } else {
+                            log("bootstrap: kernel missing lifecycle fns (quickLogin/initAndStartSession)");
+                        }
+                        if (process.env.NAPUTO_PROBE === "1" && typeof kernel.probeRuntime === "function") {
+                            try {
+                                const probe = kernel.probeRuntime(ctx);
+                                log(
+                                    `bootstrap: probe done, session=${probe.session ? "ok" : "null"}, services=${Object.keys(probe.services ?? {}).length}`,
+                                );
+                            } catch (e) {
+                                log(`bootstrap: probe error: ${e?.message ?? e}`);
+                            }
                         }
                     }
                 } catch (e) {
