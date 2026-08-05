@@ -8,7 +8,15 @@
  * 翻译为纯函数（ADR-008）：只读入参（RawMessage），不调 API、不读缓存。
  */
 
-import type { FriendApi, GroupApi, MsgApi, MsgEventChannel, RawMessage } from "@napuketto/kernel";
+import type {
+    FriendApi,
+    GroupApi,
+    GroupNotifyApi,
+    MsgApi,
+    MsgEventChannel,
+    RawMessage,
+    TicketApi,
+} from "@napuketto/kernel";
 import type { EventBroadcaster } from "@napuketto/network";
 import {
     type ActionRegistry,
@@ -42,6 +50,10 @@ export interface OneBot11AdapterOptions {
     groupApi: GroupApi;
     /** kernel 好友 API（get_friend_list 用）。 */
     friendApi: FriendApi;
+    /** kernel 群通知 API（群请求/禁言列表用，P2-13）。 */
+    groupNotifyApi: GroupNotifyApi;
+    /** kernel 票据 API（get_clientkey/get_cookies 用，P2-13）。 */
+    ticketApi: TicketApi;
     /** 机器人自身 QQ 号（self_id 与私聊自消息判定）。 */
     selfUin: string;
     /** 机器人昵称（get_login_info 用，缺省空）。 */
@@ -116,7 +128,9 @@ export class NapukettoOneBot11Adapter extends BaseProtocolAdapter<OB11Config> {
                 uinToUid: (uins) => opts.groupApi.uinToUid(uins),
             },
             groupApi: opts.groupApi,
+            groupNotifyApi: opts.groupNotifyApi,
             friendApi: opts.friendApi,
+            ticketApi: opts.ticketApi,
             self: { uin: opts.selfUin, nickname: opts.selfNickname ?? "" },
             system,
         });

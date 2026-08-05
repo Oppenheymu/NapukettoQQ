@@ -43,6 +43,73 @@ export interface GroupRemainAtTimes {
     canNotAtAllMsg: string;
 }
 
+/** 群通知类型（GroupNotifyMsgType，说明书参考）。 */
+export const GroupNotifyMsgType = {
+    UN_SPECIFIED: 0,
+    INVITED_BY_MEMBER: 1, // 邀请入群
+    REFUSE_INVITED: 2,
+    REFUSED_BY_ADMINI_STRATOR: 3,
+    AGREED_TOJOIN_DIRECT: 4,
+    INVITED_NEED_ADMINI_STRATOR_PASS: 5,
+    AGREED_TO_JOIN_BY_ADMINI_STRATOR: 6,
+    REQUEST_JOIN_NEED_ADMINI_STRATOR_PASS: 7, // 申请入群
+    SET_ADMIN: 8,
+    KICK_MEMBER_NOTIFY_ADMIN: 9,
+    KICK_MEMBER_NOTIFY_KICKED: 10,
+    MEMBER_LEAVE_NOTIFY_ADMIN: 11,
+    CANCEL_ADMIN_NOTIFY_CANCELED: 12,
+    CANCEL_ADMIN_NOTIFY_ADMIN: 13,
+    TRANSFER_GROUP_NOTIFY_OLDOWNER: 14,
+    TRANSFER_GROUP_NOTIFY_ADMIN: 15,
+} as const;
+export type GroupNotifyMsgType = (typeof GroupNotifyMsgType)[keyof typeof GroupNotifyMsgType];
+
+/** 群通知处理状态（GroupNotifyMsgStatus，说明书参考）。 */
+export const GroupNotifyMsgStatus = {
+    KINIT: 0,
+    KUNHANDLE: 1, // 未处理
+    KAGREED: 2,
+    KREFUSED: 3,
+    KIGNORED: 4,
+} as const;
+export type GroupNotifyMsgStatus = (typeof GroupNotifyMsgStatus)[keyof typeof GroupNotifyMsgStatus];
+
+/** 群请求操作类型（NTGroupRequestOperateTypes，说明书参考）。 */
+export const NTGroupRequestOperateTypes = {
+    KUNSPECIFIED: 0,
+    KAGREE: 1,
+    KREFUSE: 2,
+    KIGNORE: 3,
+    KDELETE: 4,
+} as const;
+export type NTGroupRequestOperateTypes =
+    (typeof NTGroupRequestOperateTypes)[keyof typeof NTGroupRequestOperateTypes];
+
+/** 群通知（getSingleScreenNotifies 返回项，说明书参考，待探测校准）。 */
+export interface GroupNotify {
+    seq: string;
+    type: GroupNotifyMsgType;
+    status: GroupNotifyMsgStatus;
+    group?: { groupCode: string; groupName: string };
+    user1?: { uid: string; nickName: string };
+    user2?: { uid: string; nickName: string };
+    actionTime?: string;
+    postscript?: string;
+    warningTips?: string;
+}
+
+/** 禁言成员（getGroupShutUpMemberList 返回项，说明书参考，待探测校准）。 */
+export interface ShutUpGroupMember {
+    uid: string;
+    qid: string;
+    uin: string;
+    nick: string;
+    remark: string;
+    cardName: string;
+    shutUpTime: number;
+    memberSpecialTitle?: string;
+}
+
 /** 群列表项（Group 实体，说明书参考）。 */
 export interface Group {
     groupCode: string;
@@ -163,4 +230,25 @@ export interface NodeIKernelGroupService {
             atInfo: GroupRemainAtTimes;
         }
     >;
+    /** 单屏通知列表（get_group_system_msg / set_group_add_request 共用；列表可能走 listener，宽松解包）。 */
+    getSingleScreenNotifies(
+        doubt: boolean,
+        startSeq: string,
+        count: number,
+    ): Promise<GeneralCallResult & { result?: unknown }>;
+    /** 禁言成员列表（get_group_shut_list；同 listener 风格，宽松解包）。 */
+    getGroupShutUpMemberList(groupCode: string): Promise<GeneralCallResult & { result?: unknown }>;
+    /** 处理群请求（set_group_add_request 应答；postscript 空值可能导致失败，默认空格）。 */
+    operateSysNotify(
+        doubt: boolean,
+        operateMsg: {
+            operateType: NTGroupRequestOperateTypes;
+            targetMsg: {
+                seq: string;
+                type: GroupNotifyMsgType;
+                groupCode: string;
+                postscript: string;
+            };
+        },
+    ): Promise<void>;
 }

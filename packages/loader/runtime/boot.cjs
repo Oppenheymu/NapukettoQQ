@@ -60,6 +60,8 @@ async function startProtocols(kernel, ctx, loginResult, logger) {
         const friendApi = new kernel.FriendApi(session, {
             uidToUin: (uids) => groupApi.uidToUin(uids),
         });
+        const groupNotifyApi = new kernel.GroupNotifyApi(session);
+        const ticketApi = new kernel.TicketApi(session);
         // network 广播 + OB11 适配器
         const broadcaster = new network.EventBroadcaster();
         const ob11Config = new adapter.ProtocolConfig({
@@ -73,7 +75,9 @@ async function startProtocols(kernel, ctx, loginResult, logger) {
             msgChannel: channel,
             msgApi,
             groupApi,
+            groupNotifyApi,
             friendApi,
+            ticketApi,
             selfUin: loginResult.uin,
             selfNickname: loginResult.nick,
             appVersion: process.env.NAPUTO_QQ_VERSION || "unknown",

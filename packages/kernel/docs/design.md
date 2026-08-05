@@ -453,6 +453,26 @@ function resolveWrapperPath(installDir: string, version: string): string;
 
 **跳过**（依赖未探测 service ★）：send_like（UserApi.like）/ get_cookies / get_clientkey / get_rkey（TicketService）/ get_online_clients（getOnLineDev 返回 void）/ ocr_image / get_image / get_record（RichMediaService）/ 文件类（FileService）。
 
+### 8.15 P2-13 第四批 NapCat API 方法面（2026-08-05 设计 + 实现）
+
+**目标**：HANDOVER.md §5.3 第四批中**不依赖未探测 service** 的部分（ticket + 群系统消息 + 已读别名）。签名以 NapCat 公开类型作说明书自研描述（零复制）。**已实现并 pnpm check 全绿（133 文件）。**
+
+**TicketService（新文件 `types/services/ticket-service.ts`）**：`forceFetchClientKey(arg)` → `{ url, keyIndex, clientKey, expireTime }`（get_clientkey）。
+
+**GroupService 补**（`types/services/group-service.ts`）：
+- `getSingleScreenNotifies(doubt, startSeq, count)`（get_group_system_msg / set_group_add_request 共用；列表可能走 listener 回调，kernel 宽松解包多形状）
+- `getGroupShutUpMemberList(groupCode)`（get_group_shut_list；同 listener 风格，宽松）
+- `operateSysNotify(doubt, { operateType, targetMsg: { seq, type, groupCode, postscript } })`（set_group_add_request 应答）
+- 新类型：`GroupNotify`（seq/type/status/group/user1/user2/postscript）、`GroupNotifyMsgType`（1=邀请 / 7=申请）、`GroupNotifyMsgStatus`、`NTGroupRequestOperateTypes`（1=同意 / 2=拒绝）、`ShutUpGroupMember`
+
+**TicketApi（新文件 `apis/ticket.ts`）**：
+- `getClientKey()` → forceFetchClientKey 解包
+- `getCookies(domain, uin)` → clientKey → `https://ssl.ptlogin2.qq.com/jump?clientuin=&clientkey=&u1=https://<domain>/<uin>/infocenter&keyindex=19`（node:https 手动解析 set-cookie，fetch 吞 Set-Cookie 头）→ dict（p_skey/skey/pt4_token...）
+
+**GroupApi 补**：`getSingleScreenNotifies(doubt, count)`（兼容数组/notifies/result 多形状）、`getGroupShutUpMemberList(groupCode)`（兼容提取）、`handleGroupRequest(doubt, notify, operateType, reason)`（operateSysNotify，postscript 默认空格防失败）。
+
+**跳过（需探测/OIDB/复杂）**：send_like（ProfileLikeService）、get_online_clients（getOnLineDev void）、get_rkey/ocr_image（OIDB 违反路线）、get_image/get_record（RichMediaService）、set_qq_profile/set_qq_avatar（ProfileService）、文件类（RichMediaService）、get_essence_msg_list（需 pskey + WebApi，复杂，列入后续）。
+
 ### 8.3 P0-1 实现记录（2026-08-04）
 
 `errors.ts` / `paths.ts` / `logger.ts` / `config.ts` 已实现，通过 `pnpm check` + 运行时冒烟测试（26 项）。关键决策：

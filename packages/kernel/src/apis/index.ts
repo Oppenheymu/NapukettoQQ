@@ -2,4 +2,6 @@
 
 export { FriendApi } from "./friend.js";
 export { GroupApi } from "./group.js";
+export { GroupNotifyApi } from "./group-notify.js";
 export { MsgApi } from "./msg.js";
+export { TicketApi } from "./ticket.js";

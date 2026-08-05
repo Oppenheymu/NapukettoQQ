@@ -10,7 +10,9 @@
 export type { DoubtFriendRequestInfo, Friend, FriendCategory } from "./apis/friend.js";
 export { FriendApi } from "./apis/friend.js";
 export { GroupApi } from "./apis/group.js";
+export { GroupNotifyApi } from "./apis/group-notify.js";
 export { MsgApi } from "./apis/index.js";
+export { TicketApi } from "./apis/ticket.js";
 export type { ConfigOptions, ConfigSchema } from "./config.js";
 export { ConfigBase } from "./config.js";
 export type { CoreContext, CoreContextOptions } from "./context.js";
@@ -56,15 +58,26 @@ export type {
     Group,
     GroupDetailInfo,
     GroupMember,
+    GroupNotify,
     NodeIKernelGroupService,
+    ShutUpGroupMember,
 } from "./types/services/group-service.js";
-export { NTGroupMemberRole } from "./types/services/group-service.js";
+export {
+    GroupNotifyMsgStatus,
+    GroupNotifyMsgType,
+    NTGroupMemberRole,
+    NTGroupRequestOperateTypes,
+} from "./types/services/group-service.js";
 export type {
     GeneralCallResult,
     NodeIKernelMsgService,
     SendMessageElement,
 } from "./types/services/msg-service.js";
 export { ElementType } from "./types/services/msg-service.js";
+export type {
+    ForceFetchClientKeyRetType,
+    NodeIKernelTicketService,
+} from "./types/services/ticket-service.js";
 export type {
     DesktopPathConfig,
     DeviceInfo,

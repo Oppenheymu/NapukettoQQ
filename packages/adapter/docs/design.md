@@ -339,6 +339,25 @@ adapter onStart：装配传输 → 打开 server/client → 广播 lifecycle ena
 
 **boot.cjs 补协议装配**（loader runtime）：登录成功后动态 import adapter/network 入口（launcher 环境变量 NAPUTO_ADAPTER_ENTRY / NAPUTO_NETWORK_ENTRY）→ 创建 MsgChannel + MsgBridge + MsgApi/GroupApi/FriendApi + EventBroadcaster + NapukettoOneBot11Adapter → start。
 
+### 8.13 P2-13 第四批动作（ticket + 群系统消息 + 已读别名，2026-08-05 设计 + 实现）
+
+**目标**：HANDOVER.md §5.3 第四批中不依赖未探测 service 的部分。kernel 方法面见 kernel design §8.15。**已实现并 pnpm check 全绿（133 文件）+ 全量构建通过。**
+
+**ticket 类（2 个）**：
+- `get_clientkey`：TicketApi.getClientKey → `{ clientKey, keyIndex, expireTime, url }`
+- `get_cookies`：user_id 缺省 self uin（NapCat 用 selfInfo）→ TicketApi.getCookies(domain, uin) → dict
+
+**已读别名（2 个）**：`mark_private_msg_as_read`（user_id → C2C markRead）/ `mark_group_msg_as_read`（group_id → GROUP markRead）——复用 MarkMsgAsReadAction 逻辑薄封装。
+
+**群系统（3 个）**：
+- `set_group_add_request`：flag=seq → getSingleScreenNotifies(doubt, count) 匹配 → handleGroupRequest（approve→KAGREE / 拒绝→KREFUSE，reason 默认空格）
+- `get_group_system_msg`：getSingleScreenNotifies(false, count) → type 1=invited_requests / 7=join_requests（OB11 结构：request_id/invitor_uin/invitor_nick/group_id/message/group_name/checked/actor/requester_nick；InvitedRequest 兼容别名）
+- `get_group_shut_list`：getGroupShutUpMemberList → [{ user_id, nickname, shut_up_time }]（uin 经 uidToUin）
+
+**deps**：无需新增；get_cookies 用 deps.self.uin，get_group_shut_list 用 uidToUin。
+
+**跳过**（依赖未探测 service）：send_like / get_online_clients / get_rkey / ocr_image / get_image / get_record / set_qq_profile / set_qq_avatar / 文件类 / get_essence_msg_list。
+
 ### 8.12 P2-12 第三批动作（合并转发 + 在线状态 + 单条转发 + 文件下载 + 进程，2026-08-05 设计 + 实现）
 
 **目标**：HANDOVER.md §5.3 第三批。kernel 方法面见 kernel design §8.14。**已实现并 pnpm check 全绿（124 文件）+ 全量构建通过。**

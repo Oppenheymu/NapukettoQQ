@@ -2,7 +2,7 @@
  * OneBot 11 动作注册表（ADR-013 延伸）
  * 各协议维护自己的 ActionRegistry，由协议 adapter 挂到请求分发。
  */
-import type { FriendApi, GroupApi } from "@napuketto/kernel";
+import type { FriendApi, GroupApi, GroupNotifyApi, TicketApi } from "@napuketto/kernel";
 import { ActionRegistry } from "../../core/index.js";
 import { CanSendImageAction } from "./can-send-image.js";
 import { CanSendRecordAction } from "./can-send-record.js";
@@ -15,6 +15,8 @@ import type { DownloadFileDeps } from "./download-file.js";
 import { DownloadFileAction } from "./download-file.js";
 import { FetchPttTextAction } from "./fetch-ptt-text.js";
 import { ForwardFriendSingleMsgAction, ForwardGroupSingleMsgAction } from "./forward-single-msg.js";
+import { GetClientkeyAction } from "./get-clientkey.js";
+import { GetCookiesAction } from "./get-cookies.js";
 import { GetDoubtFriendsAddRequestAction } from "./get-doubt-friends-add-request.js";
 import { GetForwardMsgAction } from "./get-forward-msg.js";
 import { GetFriendListAction } from "./get-friend-list.js";
@@ -26,12 +28,18 @@ import { GetGroupListAction } from "./get-group-list.js";
 import { GetGroupMemberInfoAction } from "./get-group-member-info.js";
 import { GetGroupMemberListAction } from "./get-group-member-list.js";
 import { GetGroupMsgHistoryAction } from "./get-group-msg-history.js";
+import { GetGroupShutListAction } from "./get-group-shut-list.js";
+import { GetGroupSystemMsgAction } from "./get-group-system-msg.js";
 import { GetLoginInfoAction } from "./get-login-info.js";
 import { GetMsgAction } from "./get-msg.js";
 import { GetRobotUinRangeAction } from "./get-robot-uin-range.js";
 import { GetStatusAction } from "./get-status.js";
 import { GetVersionInfoAction } from "./get-version-info.js";
 import { MarkMsgAsReadAction } from "./mark-msg-as-read.js";
+import {
+    MarkGroupMsgAsReadAction,
+    MarkPrivateMsgAsReadAction,
+} from "./mark-msg-as-read-aliases.js";
 import type { ProcessControlDeps } from "./process-control.js";
 import { BotExitAction, SetRestartAction } from "./process-control.js";
 import { SendGroupForwardMsgAction, SendPrivateForwardMsgAction } from "./send-forward-msg.js";
@@ -44,6 +52,7 @@ import { SetDoubtFriendsAddRequestAction } from "./set-doubt-friends-add-request
 import { SetEssenceMsgAction } from "./set-essence-msg.js";
 import { SetFriendAddRequestAction } from "./set-friend-add-request.js";
 import { SetFriendRemarkAction } from "./set-friend-remark.js";
+import { SetGroupAddRequestAction } from "./set-group-add-request.js";
 import { SetGroupAdminAction } from "./set-group-admin.js";
 import { SetGroupBanAction } from "./set-group-ban.js";
 import { SetGroupCardAction } from "./set-group-card.js";
@@ -61,8 +70,12 @@ export interface Ob11ActionDeps {
     sendMsg: SendMsgDeps;
     /** kernel 群 API。 */
     groupApi: GroupApi;
+    /** kernel 群通知 API（群请求/禁言列表用，P2-13）。 */
+    groupNotifyApi: GroupNotifyApi;
     /** kernel 好友 API。 */
     friendApi: FriendApi;
+    /** kernel 票据 API（get_clientkey/get_cookies 用，P2-13）。 */
+    ticketApi: TicketApi;
     /** 登录身份（get_login_info 用）。 */
     self: { uin: string; nickname: string };
     /** 系统类本地信息（get_version_info / clean_cache / download_file / 进程控制用）。 */
@@ -84,7 +97,32 @@ export function createOb11ActionRegistry(deps: Ob11ActionDeps): ActionRegistry {
     registerGroupActions(registry, deps);
     registerFriendActions(registry, deps);
     registerSystemActions(registry, deps);
+    registerGroupNotifyActions(registry, deps);
+    registerTicketActions(registry, deps);
     return registry;
+}
+
+/** 群通知/禁言列表动作（P2-13）。 */
+function registerGroupNotifyActions(registry: ActionRegistry, deps: Ob11ActionDeps): void {
+    registry.register(new SetGroupAddRequestAction(deps.groupNotifyApi));
+    registry.register(
+        new GetGroupSystemMsgAction({
+            groupNotifyApi: deps.groupNotifyApi,
+            uidToUin: (uids) => deps.groupApi.uidToUin(uids),
+        }),
+    );
+    registry.register(
+        new GetGroupShutListAction({
+            groupNotifyApi: deps.groupNotifyApi,
+            uidToUin: (uids) => deps.groupApi.uidToUin(uids),
+        }),
+    );
+}
+
+/** 票据动作（P2-13）。 */
+function registerTicketActions(registry: ActionRegistry, deps: Ob11ActionDeps): void {
+    registry.register(new GetClientkeyAction(deps.ticketApi));
+    registry.register(new GetCookiesAction({ ticketApi: deps.ticketApi, selfUin: deps.self.uin }));
 }
 
 /** 合并转发 / 单条转发 / 在线状态（P2-12）。 */
@@ -108,6 +146,8 @@ function registerMsgActions(registry: ActionRegistry, deps: Ob11ActionDeps): voi
     registry.register(new GetGroupMsgHistoryAction(deps.sendMsg));
     registry.register(new GetFriendMsgHistoryAction(deps.sendMsg));
     registry.register(new MarkMsgAsReadAction(deps.sendMsg));
+    registry.register(new MarkPrivateMsgAsReadAction(deps.sendMsg));
+    registry.register(new MarkGroupMsgAsReadAction(deps.sendMsg.msgApi));
     registry.register(new SetMsgEmojiLikeAction(deps.sendMsg));
     registry.register(new FetchPttTextAction(deps.sendMsg));
     registry.register(new SetInputStatusAction(deps.sendMsg));
