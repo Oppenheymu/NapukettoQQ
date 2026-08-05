@@ -44,10 +44,10 @@ function rootDataDir(program: Command): { dataDir?: string } {
 
 /** 注册 config 子命令（init/list/apply，P6；-d 复用主命令 option）。 */
 function registerConfigCommands(program: Command): void {
-    const configCmd = program.command("config").description("主配置管理（napuketto.json）");
+    const configCmd = program.command("config").description("全局配置管理（napuketto.toml）");
     configCmd
         .command("init")
-        .description("生成默认主配置")
+        .description("生成默认全局配置")
         .action(async () => {
             try {
                 await cmdConfigInit(rootDataDir(program));
@@ -58,7 +58,7 @@ function registerConfigCommands(program: Command): void {
         });
     configCmd
         .command("list")
-        .description("列出主配置与账号配置")
+        .description("列出全局配置与账号配置")
         .action(async () => {
             try {
                 await cmdConfigList(rootDataDir(program));
@@ -69,7 +69,7 @@ function registerConfigCommands(program: Command): void {
         });
     configCmd
         .command("apply <file>")
-        .description("应用外部配置（顶层覆盖合并后写回主配置）")
+        .description("应用外部配置（TOML/JSON，校验后写回全局配置）")
         .action(async (file: string) => {
             try {
                 await cmdConfigApply(file, rootDataDir(program));
@@ -84,7 +84,7 @@ function registerConfigCommands(program: Command): void {
 function registerSupervisorCommand(program: Command): void {
     program
         .command("supervisor")
-        .description("多账号编排（读主配置 accounts 拉起子进程）")
+        .description("多账号编排（读全局配置 accounts 拉起子进程）")
         .action(async () => {
             try {
                 await runSupervisor(rootDataDir(program));
