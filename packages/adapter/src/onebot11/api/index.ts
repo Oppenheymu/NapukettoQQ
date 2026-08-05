@@ -1,5 +1,7 @@
 /**
- * OneBot 11 api 聚合（占位）
- * 后续在此实现：OneBotGroupApi / UserApi / FriendApi（聚合 kernel API + 读缓存）。
+ * OneBot 11 api/ 聚合层出口（P2-16）。
+ * OneBotApi：动作统一依赖聚合；后续 cache/（ADR-008）接入后增只读视图。
  */
-export {};
+
+export type { OneBotApiOptions, OneBotSystemOptions } from "./one-bot-api.js";
+export { OneBotApi } from "./one-bot-api.js";

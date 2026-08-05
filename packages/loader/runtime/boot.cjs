@@ -89,27 +89,29 @@ async function startProtocols(kernel, ctx, loginResult, logger) {
             profileApi,
             profileLikeApi,
             webApi,
-            selfUin: loginResult.uin,
-            selfNickname: loginResult.nick,
-            appVersion: process.env.NAPUTO_QQ_VERSION || "unknown",
-            // clean_cache：清理 kernel 数据目录缓存（PathWrapper.clearCache）
-            cleanCache: async () => {
-                const paths = new kernel.PathWrapper({
-                    dataRoot: process.env.NAPKETTO_DATA,
-                    account: loginResult.uin,
-                });
-                paths.clearCache();
-            },
-            // download_file：缓存目录
-            cacheDir: path.join(process.env.NAPUTO_CFG_DIR || ".", "cache"),
-            // bot_exit / set_restart：进程控制（退出 QQ 主进程由 launcher 观察）
-            exit: async () => {
-                logger("bootstrap: bot_exit 触发，退出 QQ 主进程");
-                process.exit(0);
-            },
-            restart: async () => {
-                logger("bootstrap: set_restart 触发，退出 QQ 主进程（由 launcher 重启）");
-                process.exit(0);
+            // P2-16：api/ 聚合（self + system 回调合并为一个对象）
+            self: { uin: loginResult.uin, nickname: loginResult.nick },
+            system: {
+                appVersion: process.env.NAPUTO_QQ_VERSION || "unknown",
+                // clean_cache：清理 kernel 数据目录缓存（PathWrapper.clearCache）
+                cleanCache: async () => {
+                    const paths = new kernel.PathWrapper({
+                        dataRoot: process.env.NAPKETTO_DATA,
+                        account: loginResult.uin,
+                    });
+                    paths.clearCache();
+                },
+                // download_file：缓存目录
+                cacheDir: path.join(process.env.NAPUTO_CFG_DIR || ".", "cache"),
+                // bot_exit / set_restart：进程控制（退出 QQ 主进程由 launcher 观察）
+                exit: async () => {
+                    logger("bootstrap: bot_exit 触发，退出 QQ 主进程");
+                    process.exit(0);
+                },
+                restart: async () => {
+                    logger("bootstrap: set_restart 触发，退出 QQ 主进程（由 launcher 重启）");
+                    process.exit(0);
+                },
             },
         });
         await ob11.start();

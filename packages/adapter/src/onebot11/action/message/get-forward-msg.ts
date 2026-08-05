@@ -5,11 +5,10 @@
  * 每条 toOb11MessageInfo → { messages }。
  */
 
-import type { MsgApi } from "@napuketto/kernel";
 import { z } from "zod";
 import { BaseAction } from "../../../core/index.js";
+import type { OneBotApi } from "../../api/one-bot-api.js";
 import { toOb11MessageInfo } from "../../helper/index.js";
-import type { MessageUnique } from "../../helper/message-unique.js";
 import { resolveMsgIdAndPeer } from "../../helper/message-unique.js";
 import type { OB11MessageInfo } from "../../types/index.js";
 import { ob11ErrorCodeMap } from "../error-map.js";
@@ -30,9 +29,9 @@ export class GetForwardMsgAction extends BaseAction<
     readonly schema = getForwardMsgSchema;
     protected readonly errorCodeMap = ob11ErrorCodeMap;
 
-    private readonly deps: { msgApi: MsgApi; messageUnique: MessageUnique };
+    private readonly deps: Pick<OneBotApi, "msgApi" | "messageUnique">;
 
-    constructor(deps: { msgApi: MsgApi; messageUnique: MessageUnique }) {
+    constructor(deps: Pick<OneBotApi, "msgApi" | "messageUnique">) {
         super();
         this.deps = deps;
     }

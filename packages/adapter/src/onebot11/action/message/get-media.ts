@@ -4,10 +4,10 @@
  * message_id 反查 → fetchMsgsByMsgId → 找 PIC/PTT 元素 → 返回元素已有路径与 URL。
  * 不做主动下载/转码（NapCat 走 downloadRichMedia 事件驱动下载，待后续接入）。
  */
-import type { MsgApi, RawElement } from "@napuketto/kernel";
+import type { RawElement } from "@napuketto/kernel";
 import { z } from "zod";
 import { BaseAction } from "../../../core/index.js";
-import type { MessageUnique } from "../../helper/message-unique.js";
+import type { OneBotApi } from "../../api/one-bot-api.js";
 import { resolveMsgIdAndPeer } from "../../helper/message-unique.js";
 import { ob11ErrorCodeMap } from "../error-map.js";
 
@@ -28,11 +28,8 @@ export interface MediaInfoResult {
     base64?: string;
 }
 
-/** 媒体动作依赖。 */
-export interface GetMediaDeps {
-    msgApi: MsgApi;
-    messageUnique: MessageUnique;
-}
+/** 媒体动作依赖（OneBotApi 视图）。 */
+export type GetMediaDeps = Pick<OneBotApi, "msgApi" | "messageUnique">;
 
 /** 从消息元素提取媒体路径与 URL（PIC/PTT，纯函数）。 */
 function extractMediaPath(element: RawElement): { path?: string; url?: string } {

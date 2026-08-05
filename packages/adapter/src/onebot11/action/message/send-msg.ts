@@ -9,11 +9,11 @@
  * 私聊：user_id 经 uin→uid → Peer{ chatType: C2C, peerUid: uid }。
  */
 
-import { type CanonicalElement, ChatType, type MsgApi, type Peer } from "@napuketto/kernel";
+import { type CanonicalElement, ChatType, type Peer } from "@napuketto/kernel";
 import { z } from "zod";
 import { BaseAction } from "../../../core/index.js";
+import type { OneBotApi } from "../../api/one-bot-api.js";
 import { cqMessageToCanonical, segmentsToCanonical } from "../../helper/index.js";
-import type { MessageUnique } from "../../helper/message-unique.js";
 import type { OB11MessageSegment } from "../../types/index.js";
 import { ob11ErrorCodeMap } from "../error-map.js";
 
@@ -27,13 +27,8 @@ const sendMsgSchema = z.object({
 
 export type SendMsgPayload = z.infer<typeof sendMsgSchema>;
 
-/** send_msg 依赖（由装配方注入）。 */
-export interface SendMsgDeps {
-    msgApi: MsgApi;
-    messageUnique: MessageUnique;
-    /** uin→uid 转换（私聊发送需要）。 */
-    uinToUid: (uins: string[]) => Promise<Map<string, string>>;
-}
+/** send_msg 依赖（OneBotApi 视图，由装配方注入）。 */
+export type SendMsgDeps = Pick<OneBotApi, "msgApi" | "messageUnique" | "uinToUid">;
 
 /** 解析目标 Peer（group_id 直通；user_id 经 uin→uid）。 */
 async function resolvePeer(payload: SendMsgPayload, deps: SendMsgDeps): Promise<Peer> {

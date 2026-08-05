@@ -7,16 +7,15 @@
 
 import { z } from "zod";
 import { BaseAction } from "../../../core/index.js";
+import type { OneBotApi } from "../../api/one-bot-api.js";
 import { ob11ErrorCodeMap } from "../error-map.js";
 
 const cleanCacheSchema = z.object({});
 
 type CleanCachePayload = z.infer<typeof cleanCacheSchema>;
 
-/** clean_cache 依赖（cleanCache 回调由装配方注入）。 */
-export interface CleanCacheDeps {
-    cleanCache?: () => Promise<void>;
-}
+/** clean_cache 依赖（cleanCache 回调由装配方注入，OneBotApi 视图）。 */
+export type CleanCacheDeps = Pick<OneBotApi, "cleanCache">;
 
 /** 清理缓存（P2-11）。 */
 export class CleanCacheAction extends BaseAction<CleanCachePayload, null> {

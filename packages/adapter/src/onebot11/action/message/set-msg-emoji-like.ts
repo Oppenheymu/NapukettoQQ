@@ -4,10 +4,9 @@
  * message_id → msgId + peer → 拉消息取 msgSeq → MsgApi.setMsgEmojiLike。
  */
 
-import type { MsgApi } from "@napuketto/kernel";
 import { z } from "zod";
 import { BaseAction } from "../../../core/index.js";
-import type { MessageUnique } from "../../helper/message-unique.js";
+import type { OneBotApi } from "../../api/one-bot-api.js";
 import { resolveMsgIdAndPeer } from "../../helper/message-unique.js";
 import { ob11ErrorCodeMap } from "../error-map.js";
 
@@ -23,11 +22,8 @@ const setMsgEmojiLikeSchema = z.object({
 
 type SetMsgEmojiLikePayload = z.infer<typeof setMsgEmojiLikeSchema>;
 
-/** 表情表态依赖（由装配方注入）。 */
-export interface SetMsgEmojiLikeDeps {
-    msgApi: MsgApi;
-    messageUnique: MessageUnique;
-}
+/** 表情表态依赖（OneBotApi 视图，由装配方注入）。 */
+export type SetMsgEmojiLikeDeps = Pick<OneBotApi, "msgApi" | "messageUnique">;
 
 /** 消息表情表态（P2-10 接 kernel setMsgEmojiLike）。 */
 export class SetMsgEmojiLikeAction extends BaseAction<SetMsgEmojiLikePayload, null> {

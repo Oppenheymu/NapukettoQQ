@@ -7,6 +7,7 @@
 import { TicketApi } from "@napuketto/kernel";
 import { z } from "zod";
 import { BaseAction } from "../../../core/index.js";
+import type { OneBotApi } from "../../api/one-bot-api.js";
 import { ob11ErrorCodeMap } from "../error-map.js";
 
 const getCsrfTokenSchema = z.object({});
@@ -22,9 +23,9 @@ export class GetCsrfTokenAction extends BaseAction<GetCsrfTokenPayload, { token:
     readonly schema = getCsrfTokenSchema;
     protected readonly errorCodeMap = ob11ErrorCodeMap;
 
-    private readonly deps: { ticketApi: TicketApi; selfUin: string };
+    private readonly deps: Pick<OneBotApi, "ticketApi" | "selfUin">;
 
-    constructor(deps: { ticketApi: TicketApi; selfUin: string }) {
+    constructor(deps: Pick<OneBotApi, "ticketApi" | "selfUin">) {
         super();
         this.deps = deps;
     }
@@ -51,9 +52,9 @@ export class GetCredentialsAction extends BaseAction<
     readonly schema = getCredentialsSchema;
     protected readonly errorCodeMap = ob11ErrorCodeMap;
 
-    private readonly deps: { ticketApi: TicketApi; selfUin: string };
+    private readonly deps: Pick<OneBotApi, "ticketApi" | "selfUin">;
 
-    constructor(deps: { ticketApi: TicketApi; selfUin: string }) {
+    constructor(deps: Pick<OneBotApi, "ticketApi" | "selfUin">) {
         super();
         this.deps = deps;
     }

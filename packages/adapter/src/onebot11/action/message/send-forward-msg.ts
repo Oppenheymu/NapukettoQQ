@@ -6,10 +6,11 @@
  * 组装到目标 peer（群直通 / 私聊 uinToUid）→ MsgApi.sendForwardMessage。
  */
 
-import type { MsgApi, Peer } from "@napuketto/kernel";
+import type { Peer } from "@napuketto/kernel";
 import { ChatType } from "@napuketto/kernel";
 import { z } from "zod";
 import { BaseAction } from "../../../core/index.js";
+import type { OneBotApi } from "../../api/one-bot-api.js";
 import type { MessageUnique } from "../../helper/message-unique.js";
 import { ob11ErrorCodeMap } from "../error-map.js";
 
@@ -36,12 +37,8 @@ const sendPrivateForwardMsgSchema = z.object({
 
 type SendPrivateForwardMsgPayload = z.infer<typeof sendPrivateForwardMsgSchema>;
 
-/** 合并转发依赖（由装配方注入）。 */
-export interface ForwardMsgDeps {
-    msgApi: MsgApi;
-    messageUnique: MessageUnique;
-    uinToUid: (uins: string[]) => Promise<Map<string, string>>;
-}
+/** 合并转发依赖（OneBotApi 视图，由装配方注入）。 */
+export type ForwardMsgDeps = Pick<OneBotApi, "msgApi" | "messageUnique" | "uinToUid">;
 
 /** 解析 node 元素列表 → 源消息 (msgId, peer) 列表（id 反查，跳过无法解析的项）。 */
 function resolveSourceMessages(

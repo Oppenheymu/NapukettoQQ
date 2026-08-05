@@ -5,12 +5,11 @@
  * → 数组翻译为 OB11 消息信息。
  */
 
-import type { MsgApi } from "@napuketto/kernel";
 import { ChatType } from "@napuketto/kernel";
 import { z } from "zod";
 import { BaseAction } from "../../../core/index.js";
+import type { OneBotApi } from "../../api/one-bot-api.js";
 import { toOb11MessageInfo } from "../../helper/index.js";
-import type { MessageUnique } from "../../helper/message-unique.js";
 import type { OB11MessageInfo } from "../../types/index.js";
 import { ob11ErrorCodeMap } from "../error-map.js";
 
@@ -29,11 +28,8 @@ const getGroupMsgHistorySchema = z.object({
 
 type GetGroupMsgHistoryPayload = z.infer<typeof getGroupMsgHistorySchema>;
 
-/** 历史消息依赖（由装配方注入）。 */
-export interface MsgHistoryDeps {
-    msgApi: MsgApi;
-    messageUnique: MessageUnique;
-}
+/** 历史消息依赖（OneBotApi 视图，由装配方注入）。 */
+export type MsgHistoryDeps = Pick<OneBotApi, "msgApi" | "messageUnique">;
 
 /** 获取群历史消息（P2-10 接 kernel fetchMessages）。 */
 export class GetGroupMsgHistoryAction extends BaseAction<

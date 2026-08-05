@@ -2,9 +2,9 @@
  * delete_friend 动作：删除好友（P2-11 接 kernel FriendApi.deleteFriend）
  */
 
-import type { FriendApi } from "@napuketto/kernel";
 import { z } from "zod";
 import { BaseAction } from "../../../core/index.js";
+import type { OneBotApi } from "../../api/one-bot-api.js";
 import { ob11ErrorCodeMap } from "../error-map.js";
 
 const deleteFriendSchema = z.object({
@@ -19,15 +19,9 @@ export class DeleteFriendAction extends BaseAction<DeleteFriendPayload, null> {
     readonly schema = deleteFriendSchema;
     protected readonly errorCodeMap = ob11ErrorCodeMap;
 
-    private readonly deps: {
-        friendApi: FriendApi;
-        uinToUid: (uins: string[]) => Promise<Map<string, string>>;
-    };
+    private readonly deps: Pick<OneBotApi, "friendApi" | "uinToUid">;
 
-    constructor(deps: {
-        friendApi: FriendApi;
-        uinToUid: (uins: string[]) => Promise<Map<string, string>>;
-    }) {
+    constructor(deps: Pick<OneBotApi, "friendApi" | "uinToUid">) {
         super();
         this.deps = deps;
     }

@@ -5,6 +5,7 @@ import { basename, join } from "node:path";
 import type { ProfileApi } from "@napuketto/kernel";
 import { z } from "zod";
 import { BaseAction } from "../../../core/index.js";
+import type { OneBotApi } from "../../api/one-bot-api.js";
 import { ob11ErrorCodeMap } from "../error-map.js";
 
 /** URL 前缀（头像在线文件识别）。 */
@@ -72,11 +73,8 @@ const setQQAvatarSchema = z.object({
 
 type SetQQAvatarPayload = z.infer<typeof setQQAvatarSchema>;
 
-/** 设置头像依赖（cacheDir 供 URL 下载）。 */
-export interface SetQQAvatarDeps {
-    profileApi: ProfileApi;
-    cacheDir?: string;
-}
+/** 设置头像依赖（cacheDir 供 URL 下载，OneBotApi 视图）。 */
+export type SetQQAvatarDeps = Pick<OneBotApi, "profileApi" | "cacheDir">;
 
 /** 设置 QQ 头像（P2-14 接 kernel ProfileApi.setHeader）。 */
 export class SetQQAvatarAction extends BaseAction<SetQQAvatarPayload, null> {

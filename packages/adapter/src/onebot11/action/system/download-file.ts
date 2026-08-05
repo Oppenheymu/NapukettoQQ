@@ -9,6 +9,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import { z } from "zod";
 import { BaseAction } from "../../../core/index.js";
+import type { OneBotApi } from "../../api/one-bot-api.js";
 import { ob11ErrorCodeMap } from "../error-map.js";
 
 const downloadFileSchema = z.object({
@@ -19,10 +20,8 @@ const downloadFileSchema = z.object({
 
 type DownloadFilePayload = z.infer<typeof downloadFileSchema>;
 
-/** download_file 依赖（cacheDir 由装配方注入）。 */
-export interface DownloadFileDeps {
-    cacheDir?: string;
-}
+/** download_file 依赖（cacheDir 由装配方注入，OneBotApi 视图）。 */
+export type DownloadFileDeps = Pick<OneBotApi, "cacheDir">;
 
 /** 下载文件到缓存目录（P2-12）。 */
 export class DownloadFileAction extends BaseAction<DownloadFilePayload, { file: string }> {

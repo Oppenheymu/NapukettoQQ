@@ -6,10 +6,10 @@
  * 语义别名处理）。user_id → C2C peer；group_id → GROUP peer。
  */
 
-import type { MsgApi } from "@napuketto/kernel";
 import { ChatType } from "@napuketto/kernel";
 import { z } from "zod";
 import { BaseAction } from "../../../core/index.js";
+import type { OneBotApi } from "../../api/one-bot-api.js";
 import { ob11ErrorCodeMap } from "../error-map.js";
 
 const markMsgAsReadSchema = z
@@ -23,11 +23,8 @@ const markMsgAsReadSchema = z
 
 type MarkMsgAsReadPayload = z.infer<typeof markMsgAsReadSchema>;
 
-/** 标记已读依赖（由装配方注入）。 */
-export interface MarkReadDeps {
-    msgApi: MsgApi;
-    uinToUid: (uins: string[]) => Promise<Map<string, string>>;
-}
+/** 标记已读依赖（OneBotApi 视图，由装配方注入）。 */
+export type MarkReadDeps = Pick<OneBotApi, "msgApi" | "uinToUid">;
 
 /** 标记消息已读（P2-10 接 kernel markRead）。 */
 export class MarkMsgAsReadAction extends BaseAction<MarkMsgAsReadPayload, null> {

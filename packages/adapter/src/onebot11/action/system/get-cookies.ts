@@ -4,9 +4,9 @@
  * domain 缺省 v2.qq.com（NapCat 行为）；user_id 缺省用机器人自身 uin。
  */
 
-import type { TicketApi } from "@napuketto/kernel";
 import { z } from "zod";
 import { BaseAction } from "../../../core/index.js";
+import type { OneBotApi } from "../../api/one-bot-api.js";
 import { ob11ErrorCodeMap } from "../error-map.js";
 
 const getCookiesSchema = z.object({
@@ -25,9 +25,9 @@ export class GetCookiesAction extends BaseAction<GetCookiesPayload, Record<strin
     readonly schema = getCookiesSchema;
     protected readonly errorCodeMap = ob11ErrorCodeMap;
 
-    private readonly deps: { ticketApi: TicketApi; selfUin: string };
+    private readonly deps: Pick<OneBotApi, "ticketApi" | "selfUin">;
 
-    constructor(deps: { ticketApi: TicketApi; selfUin: string }) {
+    constructor(deps: Pick<OneBotApi, "ticketApi" | "selfUin">) {
         super();
         this.deps = deps;
     }

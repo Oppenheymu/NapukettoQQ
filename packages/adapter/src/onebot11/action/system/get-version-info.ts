@@ -6,6 +6,7 @@
 
 import { z } from "zod";
 import { BaseAction } from "../../../core/index.js";
+import type { OneBotApi } from "../../api/one-bot-api.js";
 import type { VersionInfo } from "../../types/index.js";
 import { ob11ErrorCodeMap } from "../error-map.js";
 
@@ -13,10 +14,8 @@ const getVersionInfoSchema = z.object({});
 
 type GetVersionInfoPayload = z.infer<typeof getVersionInfoSchema>;
 
-/** get_version_info 依赖（appVersion 由装配方注入）。 */
-export interface GetVersionInfoDeps {
-    appVersion: string;
-}
+/** get_version_info 依赖（appVersion 由装配方注入，OneBotApi 视图）。 */
+export type GetVersionInfoDeps = Pick<OneBotApi, "appVersion">;
 
 /** 获取版本信息（本地组装，P2-11）。 */
 export class GetVersionInfoAction extends BaseAction<GetVersionInfoPayload, VersionInfo> {

@@ -2,7 +2,7 @@
 
 > 职责：**协议适配器容器**——一个共享的适配器框架（core），外加 OneBot 11 / OneBot 12 / Satori 三套协议语义。
 > 对应 ADR：002 / 003 / 008 / 009 / 013 / 014 / 017
-> 状态：core 框架已实现（BaseAction / ActionRegistry / AdapterRegistry / ProtocolConfig / BaseProtocolAdapter，2026-08-04，见 §8）；onebot11 第一梯队已实现（types / helper/config / action/send_msg，2026-08-04，见 §8.1）；onebot11 helper 翻译层已实现（cqcode/data，2026-08-04，见 §8.2）；onebot11 事件模型已实现（message/notice/request/meta，2026-08-05，见 §8.3）；onebot11 动作骨架扩充已实现（error-map + 6 个查询动作 + types 补全，2026-08-05，见 §8.4）；**onebot11 adapter.ts 已实现（2026-08-05，见 §8.5）——订阅 kernel 消息事件 → OB11 消息事件 → network 广播（消息收链路打通）**；**P2-3 请求分发 + send_msg 真实化 + MessageUnique（2026-08-05，见 §8.6）——收发闭环打通**；**P2-4 查询动作真实化（2026-08-05，见 §8.7）——apis/group + apis/friend + 6 查询动作接 kernel**；**P2-5 传输接入（2026-08-05，见 §8.8）——HTTP/WS server+client + 鉴权 + 心跳 meta 事件**；**P2-6 cli 启动编排（2026-08-05，见 §8.9）——boot.cjs 补协议装配 + cli 参数解析拉起 QQ**。**§9 实现顺序 5-6 已同步更新。**
+> 状态：core 框架已实现（BaseAction / ActionRegistry / AdapterRegistry / ProtocolConfig / BaseProtocolAdapter，2026-08-04，见 §8）；onebot11 第一梯队已实现（types / helper/config / action/send_msg，2026-08-04，见 §8.1）；onebot11 helper 翻译层已实现（cqcode/data，2026-08-04，见 §8.2）；onebot11 事件模型已实现（message/notice/request/meta，2026-08-05，见 §8.3）；onebot11 动作骨架扩充已实现（error-map + 6 个查询动作 + types 补全，2026-08-05，见 §8.4）；**onebot11 adapter.ts 已实现（2026-08-05，见 §8.5）——订阅 kernel 消息事件 → OB11 消息事件 → network 广播（消息收链路打通）**；**P2-3 请求分发 + send_msg 真实化 + MessageUnique（2026-08-05，见 §8.6）——收发闭环打通**；**P2-4 查询动作真实化（2026-08-05，见 §8.7）——apis/group + apis/friend + 6 查询动作接 kernel**；**P2-5 传输接入（2026-08-05，见 §8.8）——HTTP/WS server+client + 鉴权 + 心跳 meta 事件**；**P2-6 cli 启动编排（2026-08-05，见 §8.9）——boot.cjs 补协议装配 + cli 参数解析拉起 QQ**。**P2-16 api/ 聚合层（2026-08-05，见 §8.16）——OneBotApi 单类聚合 9 个 kernel apis + messageUnique + self/system，动作只依赖一个聚合对象（基础设施第一项）**。**§9 实现顺序 5-6 已同步更新。**
 
 ---
 
@@ -149,7 +149,7 @@ const OB11ErrorMap: Record<KernelErrorCode, number> = {
 1. `core/`（BaseProtocolAdapter + BaseAction + registry + config）+ package.json 子路径导出（ADR-014）
 2. `onebot11/types/` + `helper/config.ts`（zod schema）
 3. `onebot11/helper/cqcode.ts` + `data.ts`（翻译）
-4. `onebot11/api/`（聚合 + 缓存）
+4. ✅ `onebot11/api/`（聚合 + 缓存）——**聚合已落地（P2-16，OneBotApi 单类）**；缓存部分待 cache/（ADR-008）接入后 OneBotApi 增只读视图
 5. `onebot11/adapter.ts`：订阅 kernel 事件 → OB11 事件 → network 广播
 6. `onebot11/action/` 按痛点排序：`send_msg` 系列 → `get_*` 系列 → 群管 → 文件 → go-cqhttp 扩展
 7. `onebot12/`（P5）→ `satori/`（P6）：复用 core，各写薄映射
@@ -338,6 +338,35 @@ adapter onStart：装配传输 → 打开 server/client → 广播 lifecycle ena
 ### 8.9 P2-6 cli 启动编排（2026-08-05）
 
 **boot.cjs 补协议装配**（loader runtime）：登录成功后动态 import adapter/network 入口（launcher 环境变量 NAPUTO_ADAPTER_ENTRY / NAPUTO_NETWORK_ENTRY）→ 创建 MsgChannel + MsgBridge + MsgApi/GroupApi/FriendApi + EventBroadcaster + NapukettoOneBot11Adapter → start。
+
+### 8.16 P2-16 api/ 聚合层（OneBotApi 单类聚合，2026-08-05 设计 + 实现）
+
+**目标**：HANDOVER.md §8.1-1（基础设施第一项）。此前动作注册表散装注入 9 个 kernel apis 实例 + messageUnique + self + system；改为 `onebot11/api/` 单类聚合，**动作只依赖一个聚合对象**，boot.cjs 装配简化。
+
+**新增 `onebot11/api/one-bot-api.ts`（OneBotApi）**：
+- 持有 9 个 kernel apis（msgApi / groupApi / groupNotifyApi / friendApi / ticketApi / richMediaApi / profileApi / profileLikeApi / webApi）
+- 持有协议层共享状态：messageUnique（MessageUnique，收链路与动作共用同一映射空间）/ self（uin+nickname）/ selfUin（get_cookies / csrf 用）
+- 系统回调拍平为顶层可选字段（exactOptionalPropertyTypes：显式 `| undefined` 联合）：appVersion / cleanCache / cacheDir / exit / restart
+- 便捷方法 uinToUid / uidToUin（委托 groupApi，动作无需再注入转换函数）
+
+**动作改造**：13 个多依赖动作的 deps 接口改为 `Pick<OneBotApi, ...>` 类型别名（**内部代码零改动**）：
+- SendMsgDeps / ForwardMsgDeps / ForwardSingleMsgDeps：`msgApi | messageUnique | uinToUid`
+- DeleteMsgDeps / GetMsgDeps / MsgHistoryDeps / SetMsgEmojiLikeDeps / FetchPttTextDeps / GetMediaDeps / get-forward-msg 字面量：`msgApi | messageUnique`
+- MarkReadDeps / MarkReadAliasDeps / SetInputStatusDeps：`msgApi | uinToUid`
+- EssenceMsgDeps：`groupApi | messageUnique`
+- get-group-system-msg / get-group-shut-list 字面量：`groupNotifyApi | uidToUin`
+- SendLikeDeps：`profileLikeApi | uinToUid`；set-friend-remark / delete-friend 字面量：`friendApi | uinToUid`
+- get-cookies / get-credentials 字面量：`ticketApi | selfUin`
+- CleanCacheDeps：`cleanCache`；DownloadFileDeps：`cacheDir`；ProcessControlDeps：`exit | restart`；GetVersionInfoDeps：`appVersion`；SetQQAvatarDeps：`profileApi | cacheDir`
+- 单 api 动作保持收具体 api 不变（注册处从 deps.api 解出）
+
+**Ob11ActionDeps 收敛**：`{ api: OneBotApi }` 单字段；registerXxx 全部从 `deps.api` 解出小 deps。
+
+**adapter.ts**：构造 OneBotApi → registry 只传 `{ api }`；消息收链路 alloc / broadcastNotice 的 uidToUin 走 `this.oneBotApi.messageUnique` / `this.oneBotApi.uidToUin`。
+
+**boot.cjs**：创建 OneBotApi 单对象传给 adapter——装配面只出现一个聚合对象。
+
+**踩坑**：Pick<OneBotApi> 的接口必须全部是顶层成员（system 拍平原因）；可选回调字段用 `| undefined` 显式联合才能被 Pick 保留可选性；`resolveSourceMessages`（send-forward-msg）仍需 MessageUnique 类型 import，勿删。
 
 ### 8.15 P2-15 第六批动作（陌生人信息 + csrf + 群请求 + 精华列表 + 群荣誉，2026-08-05 设计 + 实现）
 

@@ -1,9 +1,9 @@
 /**
  * send_like 动作：点赞（P2-14 接 kernel ProfileLikeApi.sendLike）
  */
-import type { ProfileLikeApi } from "@napuketto/kernel";
 import { z } from "zod";
 import { BaseAction } from "../../../core/index.js";
+import type { OneBotApi } from "../../api/one-bot-api.js";
 import { ob11ErrorCodeMap } from "../error-map.js";
 
 const sendLikeSchema = z.object({
@@ -13,11 +13,8 @@ const sendLikeSchema = z.object({
 
 type SendLikePayload = z.infer<typeof sendLikeSchema>;
 
-/** send_like 依赖（uinToUid 转 uid）。 */
-export interface SendLikeDeps {
-    profileLikeApi: ProfileLikeApi;
-    uinToUid: (uins: string[]) => Promise<Map<string, string>>;
-}
+/** send_like 依赖（uinToUid 转 uid，OneBotApi 视图）。 */
+export type SendLikeDeps = Pick<OneBotApi, "profileLikeApi" | "uinToUid">;
 
 /** 点赞（P2-14 接 kernel ProfileLikeApi）。 */
 export class SendLikeAction extends BaseAction<SendLikePayload, null> {

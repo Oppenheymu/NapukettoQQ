@@ -5,10 +5,10 @@
  * eventType：1=输入中，0=停止输入。
  */
 
-import type { MsgApi } from "@napuketto/kernel";
 import { ChatType } from "@napuketto/kernel";
 import { z } from "zod";
 import { BaseAction } from "../../../core/index.js";
+import type { OneBotApi } from "../../api/one-bot-api.js";
 import { ob11ErrorCodeMap } from "../error-map.js";
 
 const setInputStatusSchema = z.object({
@@ -22,11 +22,8 @@ type SetInputStatusPayload = z.infer<typeof setInputStatusSchema>;
 /** 输入中事件类型。 */
 const EVENT_TYPE_TYPING = 1;
 
-/** set_input_status 依赖。 */
-export interface SetInputStatusDeps {
-    msgApi: MsgApi;
-    uinToUid: (uins: string[]) => Promise<Map<string, string>>;
-}
+/** set_input_status 依赖（OneBotApi 视图）。 */
+export type SetInputStatusDeps = Pick<OneBotApi, "msgApi" | "uinToUid">;
 
 /** 发送输入状态（P2-11 接 kernel setInputStatus）。 */
 export class SetInputStatusAction extends BaseAction<SetInputStatusPayload, null> {

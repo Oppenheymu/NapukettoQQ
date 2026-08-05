@@ -5,10 +5,9 @@
  * 群聊管理员 / 私聊 2 分钟内可撤回。
  */
 
-import type { MsgApi } from "@napuketto/kernel";
 import { z } from "zod";
 import { BaseAction } from "../../../core/index.js";
-import type { MessageUnique } from "../../helper/message-unique.js";
+import type { OneBotApi } from "../../api/one-bot-api.js";
 import { resolveMsgIdAndPeer } from "../../helper/message-unique.js";
 import { ob11ErrorCodeMap } from "../error-map.js";
 
@@ -18,11 +17,8 @@ const deleteMsgSchema = z.object({
 
 type DeleteMsgPayload = z.infer<typeof deleteMsgSchema>;
 
-/** 撤回消息依赖（由装配方注入）。 */
-export interface DeleteMsgDeps {
-    msgApi: MsgApi;
-    messageUnique: MessageUnique;
-}
+/** 撤回消息依赖（OneBotApi 视图，由装配方注入）。 */
+export type DeleteMsgDeps = Pick<OneBotApi, "msgApi" | "messageUnique">;
 
 /** 撤回消息（P2-10 接 kernel recallMessage）。 */
 export class DeleteMsgAction extends BaseAction<DeleteMsgPayload, null> {

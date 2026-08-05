@@ -5,11 +5,11 @@
  * MsgApi.forwardSingleMessage(srcPeer, [msgId], dstPeer)。
  */
 
-import type { MsgApi, Peer } from "@napuketto/kernel";
+import type { Peer } from "@napuketto/kernel";
 import { ChatType } from "@napuketto/kernel";
 import { z } from "zod";
 import { BaseAction } from "../../../core/index.js";
-import type { MessageUnique } from "../../helper/message-unique.js";
+import type { OneBotApi } from "../../api/one-bot-api.js";
 import { resolveMsgIdAndPeer } from "../../helper/message-unique.js";
 import { ob11ErrorCodeMap } from "../error-map.js";
 
@@ -21,12 +21,8 @@ const forwardSingleMsgSchema = z.object({
 
 type ForwardSingleMsgPayload = z.infer<typeof forwardSingleMsgSchema>;
 
-/** 单条转发依赖（由装配方注入）。 */
-export interface ForwardSingleMsgDeps {
-    msgApi: MsgApi;
-    messageUnique: MessageUnique;
-    uinToUid: (uins: string[]) => Promise<Map<string, string>>;
-}
+/** 单条转发依赖（OneBotApi 视图，由装配方注入）。 */
+export type ForwardSingleMsgDeps = Pick<OneBotApi, "msgApi" | "messageUnique" | "uinToUid">;
 
 /** 解析目标 Peer（group_id 直通；user_id 经 uin→uid）。 */
 async function resolveTargetPeer(

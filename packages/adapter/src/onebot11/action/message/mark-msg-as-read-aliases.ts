@@ -6,10 +6,10 @@
  * - mark_group_msg_as_read：group_id → GROUP markRead
  */
 
-import type { MsgApi } from "@napuketto/kernel";
 import { ChatType } from "@napuketto/kernel";
 import { z } from "zod";
 import { BaseAction } from "../../../core/index.js";
+import type { OneBotApi } from "../../api/one-bot-api.js";
 import { ob11ErrorCodeMap } from "../error-map.js";
 
 const markPrivateMsgAsReadSchema = z.object({
@@ -24,11 +24,8 @@ const markGroupMsgAsReadSchema = z.object({
 
 type MarkGroupMsgAsReadPayload = z.infer<typeof markGroupMsgAsReadSchema>;
 
-/** 标记已读依赖（msgApi + uinToUid）。 */
-export interface MarkReadAliasDeps {
-    msgApi: MsgApi;
-    uinToUid: (uins: string[]) => Promise<Map<string, string>>;
-}
+/** 标记已读依赖（msgApi + uinToUid，OneBotApi 视图）。 */
+export type MarkReadAliasDeps = Pick<OneBotApi, "msgApi" | "uinToUid">;
 
 /** 标记私聊已读（P2-13）。 */
 export class MarkPrivateMsgAsReadAction extends BaseAction<MarkPrivateMsgAsReadPayload, null> {
@@ -60,15 +57,15 @@ export class MarkGroupMsgAsReadAction extends BaseAction<MarkGroupMsgAsReadPaylo
     readonly schema = markGroupMsgAsReadSchema;
     protected readonly errorCodeMap = ob11ErrorCodeMap;
 
-    private readonly msgApi: MsgApi;
+    private readonly deps: Pick<OneBotApi, "msgApi">;
 
-    constructor(msgApi: MsgApi) {
+    constructor(deps: Pick<OneBotApi, "msgApi">) {
         super();
-        this.msgApi = msgApi;
+        this.deps = deps;
     }
 
     protected async _handle(payload: MarkGroupMsgAsReadPayload): Promise<null> {
-        await this.msgApi.markRead({
+        await this.deps.msgApi.markRead({
             chatType: ChatType.GROUP,
             peerUid: String(payload.group_id),
         });

@@ -6,17 +6,15 @@
 
 import { z } from "zod";
 import { BaseAction } from "../../../core/index.js";
+import type { OneBotApi } from "../../api/one-bot-api.js";
 import { ob11ErrorCodeMap } from "../error-map.js";
 
 const botExitSchema = z.object({});
 
 type BotExitPayload = z.infer<typeof botExitSchema>;
 
-/** 退出/重启依赖（回调由装配方注入）。 */
-export interface ProcessControlDeps {
-    exit?: () => Promise<void>;
-    restart?: () => Promise<void>;
-}
+/** 退出/重启依赖（回调由装配方注入，OneBotApi 视图）。 */
+export type ProcessControlDeps = Pick<OneBotApi, "exit" | "restart">;
 
 /** 退出机器人进程（P2-12）。 */
 export class BotExitAction extends BaseAction<BotExitPayload, null> {

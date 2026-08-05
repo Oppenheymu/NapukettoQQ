@@ -1,18 +1,10 @@
 /**
  * OneBot 11 动作注册表（ADR-013 延伸）
  * 各协议维护自己的 ActionRegistry，由协议 adapter 挂到请求分发。
+ * P2-16：deps 收敛为 { api: OneBotApi } 单聚合对象（基础设施第一项）。
  */
-import type {
-    FriendApi,
-    GroupApi,
-    GroupNotifyApi,
-    ProfileApi,
-    ProfileLikeApi,
-    RichMediaApi,
-    TicketApi,
-    WebApi,
-} from "@napuketto/kernel";
 import { ActionRegistry } from "../../core/index.js";
+import type { OneBotApi } from "../api/one-bot-api.js";
 import { DeleteFriendAction } from "./friend/delete-friend.js";
 import { GetDoubtFriendsAddRequestAction } from "./friend/get-doubt-friends-add-request.js";
 import { GetFriendListAction } from "./friend/get-friend-list.js";
@@ -79,16 +71,13 @@ import {
     SendPrivateForwardMsgAction,
 } from "./message/send-forward-msg.js";
 import { SendGroupMsgAction } from "./message/send-group-msg.js";
-import type { SendMsgDeps } from "./message/send-msg.js";
 import { SendMsgAction } from "./message/send-msg.js";
 import { SendPrivateMsgAction } from "./message/send-private-msg.js";
 import { SetInputStatusAction } from "./message/set-input-status.js";
 import { SetMsgEmojiLikeAction } from "./message/set-msg-emoji-like.js";
 import { CanSendImageAction } from "./system/can-send-image.js";
 import { CanSendRecordAction } from "./system/can-send-record.js";
-import type { CleanCacheDeps } from "./system/clean-cache.js";
 import { CleanCacheAction } from "./system/clean-cache.js";
-import type { DownloadFileDeps } from "./system/download-file.js";
 import { DownloadFileAction } from "./system/download-file.js";
 import { GetClientkeyAction } from "./system/get-clientkey.js";
 import { GetCookiesAction } from "./system/get-cookies.js";
@@ -97,7 +86,6 @@ import { GetLoginInfoAction } from "./system/get-login-info.js";
 import { GetRobotUinRangeAction } from "./system/get-robot-uin-range.js";
 import { GetStatusAction } from "./system/get-status.js";
 import { GetVersionInfoAction } from "./system/get-version-info.js";
-import type { ProcessControlDeps } from "./system/process-control.js";
 import { BotExitAction, SetRestartAction } from "./system/process-control.js";
 import {
     SetQQAvatarAction,
@@ -108,36 +96,10 @@ import { SetDiyOnlineStatusAction } from "./system/set-diy-online-status.js";
 import { SetOnlineStatusAction } from "./system/set-online-status.js";
 import { TranslateEn2ZhAction } from "./system/translate-en2zh.js";
 
-/** 动作注册表依赖（各动作所需的 kernel API 由装配方注入）。 */
+/** 动作注册表依赖（P2-16：动作只依赖一个聚合对象）。 */
 export interface Ob11ActionDeps {
-    /** kernel 消息 API（send_msg 等消息类动作用）。 */
-    sendMsg: SendMsgDeps;
-    /** kernel 群 API。 */
-    groupApi: GroupApi;
-    /** kernel 群通知 API（群请求/禁言列表用，P2-13）。 */
-    groupNotifyApi: GroupNotifyApi;
-    /** kernel 好友 API。 */
-    friendApi: FriendApi;
-    /** kernel 票据 API（get_clientkey/get_cookies 用，P2-13）。 */
-    ticketApi: TicketApi;
-    /** kernel 富媒体 API（群文件/翻译用，P2-14）。 */
-    richMediaApi: RichMediaApi;
-    /** kernel 资料 API（签名/昵称/头像用，P2-14）。 */
-    profileApi: ProfileApi;
-    /** kernel 点赞 API（send_like 用，P2-14）。 */
-    profileLikeApi: ProfileLikeApi;
-    /** kernel 群空间 web API（精华/荣誉用，P2-15）。 */
-    webApi: WebApi;
-    /** 登录身份（get_login_info 用）。 */
-    self: { uin: string; nickname: string };
-    /** 系统类本地信息（get_version_info / clean_cache / download_file / 进程控制用）。 */
-    system: {
-        appVersion: string;
-        cleanCache?: () => Promise<void>;
-        cacheDir?: string;
-        exit?: () => Promise<void>;
-        restart?: () => Promise<void>;
-    };
+    /** OneBotApi 聚合（9 个 kernel apis + messageUnique + self/system）。 */
+    api: OneBotApi;
 }
 
 /** 构建 OB11 动作注册表（所有 OB11 动作在此注册，按组拆分控制行数）。 */
@@ -159,184 +121,123 @@ export function createOb11ActionRegistry(deps: Ob11ActionDeps): ActionRegistry {
 
 /** 群空间 web / csrf / 陌生人 / 群请求动作（P2-15）。 */
 function registerWebActions(registry: ActionRegistry, deps: Ob11ActionDeps): void {
-    registry.register(new GetStrangerInfoAction(deps.profileApi));
-    registry.register(
-        new GetCsrfTokenAction({ ticketApi: deps.ticketApi, selfUin: deps.self.uin }),
-    );
-    registry.register(
-        new GetCredentialsAction({ ticketApi: deps.ticketApi, selfUin: deps.self.uin }),
-    );
-    registry.register(new GetGroupAddRequestAction(deps.groupNotifyApi));
-    registry.register(new GetGroupIgnoredNotifiesAction(deps.groupNotifyApi));
-    registry.register(new GetEssenceMsgListAction(deps.webApi));
-    registry.register(new GetGroupHonorInfoAction(deps.webApi));
+    registry.register(new GetStrangerInfoAction(deps.api.profileApi));
+    registry.register(new GetCsrfTokenAction(deps.api));
+    registry.register(new GetCredentialsAction(deps.api));
+    registry.register(new GetGroupAddRequestAction(deps.api.groupNotifyApi));
+    registry.register(new GetGroupIgnoredNotifiesAction(deps.api.groupNotifyApi));
+    registry.register(new GetEssenceMsgListAction(deps.api.webApi));
+    registry.register(new GetGroupHonorInfoAction(deps.api.webApi));
 }
 
 /** 资料/点赞/翻译动作（P2-14）。 */
 function registerProfileActions(registry: ActionRegistry, deps: Ob11ActionDeps): void {
-    registry.register(new SetSelfLongnickAction(deps.profileApi));
-    registry.register(new SetQQProfileAction(deps.profileApi));
-    const avatarDeps: {
-        profileApi: ProfileApi;
-        cacheDir?: string;
-    } = { profileApi: deps.profileApi };
-    if (deps.system.cacheDir !== undefined) {
-        avatarDeps.cacheDir = deps.system.cacheDir;
-    }
-    registry.register(new SetQQAvatarAction(avatarDeps));
-    registry.register(new TranslateEn2ZhAction(deps.richMediaApi));
-    registry.register(
-        new SendLikeAction({
-            profileLikeApi: deps.profileLikeApi,
-            uinToUid: deps.sendMsg.uinToUid,
-        }),
-    );
+    registry.register(new SetSelfLongnickAction(deps.api.profileApi));
+    registry.register(new SetQQProfileAction(deps.api.profileApi));
+    registry.register(new SetQQAvatarAction(deps.api));
+    registry.register(new TranslateEn2ZhAction(deps.api.richMediaApi));
+    registry.register(new SendLikeAction(deps.api));
 }
 
 /** 群文件动作（P2-14）。 */
 function registerGroupFileActions(registry: ActionRegistry, deps: Ob11ActionDeps): void {
-    registry.register(new GetGroupRootFilesAction(deps.richMediaApi));
-    registry.register(new GetGroupFilesByFolderAction(deps.richMediaApi));
-    registry.register(new GetGroupFileSystemInfoAction(deps.richMediaApi));
-    registry.register(new CreateGroupFileFolderAction(deps.richMediaApi));
-    registry.register(new DeleteGroupFileAction(deps.richMediaApi));
-    registry.register(new DeleteGroupFolderAction(deps.richMediaApi));
-    registry.register(new RenameGroupFileAction(deps.richMediaApi));
-    registry.register(new MoveGroupFileAction(deps.richMediaApi));
-    registry.register(new TransGroupFileAction(deps.richMediaApi));
+    registry.register(new GetGroupRootFilesAction(deps.api.richMediaApi));
+    registry.register(new GetGroupFilesByFolderAction(deps.api.richMediaApi));
+    registry.register(new GetGroupFileSystemInfoAction(deps.api.richMediaApi));
+    registry.register(new CreateGroupFileFolderAction(deps.api.richMediaApi));
+    registry.register(new DeleteGroupFileAction(deps.api.richMediaApi));
+    registry.register(new DeleteGroupFolderAction(deps.api.richMediaApi));
+    registry.register(new RenameGroupFileAction(deps.api.richMediaApi));
+    registry.register(new MoveGroupFileAction(deps.api.richMediaApi));
+    registry.register(new TransGroupFileAction(deps.api.richMediaApi));
 }
 
 /** 群通知/禁言列表动作（P2-13）。 */
 function registerGroupNotifyActions(registry: ActionRegistry, deps: Ob11ActionDeps): void {
-    registry.register(new SetGroupAddRequestAction(deps.groupNotifyApi));
-    registry.register(
-        new GetGroupSystemMsgAction({
-            groupNotifyApi: deps.groupNotifyApi,
-            uidToUin: (uids) => deps.groupApi.uidToUin(uids),
-        }),
-    );
-    registry.register(
-        new GetGroupShutListAction({
-            groupNotifyApi: deps.groupNotifyApi,
-            uidToUin: (uids) => deps.groupApi.uidToUin(uids),
-        }),
-    );
+    registry.register(new SetGroupAddRequestAction(deps.api.groupNotifyApi));
+    registry.register(new GetGroupSystemMsgAction(deps.api));
+    registry.register(new GetGroupShutListAction(deps.api));
 }
 
 /** 票据动作（P2-13）。 */
 function registerTicketActions(registry: ActionRegistry, deps: Ob11ActionDeps): void {
-    registry.register(new GetClientkeyAction(deps.ticketApi));
-    registry.register(new GetCookiesAction({ ticketApi: deps.ticketApi, selfUin: deps.self.uin }));
+    registry.register(new GetClientkeyAction(deps.api.ticketApi));
+    registry.register(new GetCookiesAction(deps.api));
 }
 
 /** 合并转发 / 单条转发 / 在线状态（P2-12）。 */
 function registerForwardActions(registry: ActionRegistry, deps: Ob11ActionDeps): void {
-    registry.register(new SendGroupForwardMsgAction(deps.sendMsg));
-    registry.register(new SendPrivateForwardMsgAction(deps.sendMsg));
-    registry.register(new GetForwardMsgAction(deps.sendMsg));
-    registry.register(new ForwardGroupSingleMsgAction(deps.sendMsg));
-    registry.register(new ForwardFriendSingleMsgAction(deps.sendMsg));
-    registry.register(new SetOnlineStatusAction(deps.sendMsg.msgApi));
-    registry.register(new SetDiyOnlineStatusAction(deps.sendMsg.msgApi));
+    registry.register(new SendGroupForwardMsgAction(deps.api));
+    registry.register(new SendPrivateForwardMsgAction(deps.api));
+    registry.register(new GetForwardMsgAction(deps.api));
+    registry.register(new ForwardGroupSingleMsgAction(deps.api));
+    registry.register(new ForwardFriendSingleMsgAction(deps.api));
+    registry.register(new SetOnlineStatusAction(deps.api.msgApi));
+    registry.register(new SetDiyOnlineStatusAction(deps.api.msgApi));
 }
 
 /** 消息类动作（P2-3 / P2-10 / P2-11）。 */
 function registerMsgActions(registry: ActionRegistry, deps: Ob11ActionDeps): void {
-    registry.register(new SendMsgAction(deps.sendMsg));
-    registry.register(new SendPrivateMsgAction(deps.sendMsg));
-    registry.register(new SendGroupMsgAction(deps.sendMsg));
-    registry.register(new DeleteMsgAction(deps.sendMsg));
-    registry.register(new GetMsgAction(deps.sendMsg));
-    registry.register(new GetGroupMsgHistoryAction(deps.sendMsg));
-    registry.register(new GetFriendMsgHistoryAction(deps.sendMsg));
-    registry.register(new MarkMsgAsReadAction(deps.sendMsg));
-    registry.register(new MarkPrivateMsgAsReadAction(deps.sendMsg));
-    registry.register(new MarkGroupMsgAsReadAction(deps.sendMsg.msgApi));
-    registry.register(new SetMsgEmojiLikeAction(deps.sendMsg));
-    registry.register(new FetchPttTextAction(deps.sendMsg));
-    registry.register(new SetInputStatusAction(deps.sendMsg));
-    registry.register(new GetImageAction(deps.sendMsg));
-    registry.register(new GetRecordAction(deps.sendMsg));
+    registry.register(new SendMsgAction(deps.api));
+    registry.register(new SendPrivateMsgAction(deps.api));
+    registry.register(new SendGroupMsgAction(deps.api));
+    registry.register(new DeleteMsgAction(deps.api));
+    registry.register(new GetMsgAction(deps.api));
+    registry.register(new GetGroupMsgHistoryAction(deps.api));
+    registry.register(new GetFriendMsgHistoryAction(deps.api));
+    registry.register(new MarkMsgAsReadAction(deps.api));
+    registry.register(new MarkPrivateMsgAsReadAction(deps.api));
+    registry.register(new MarkGroupMsgAsReadAction(deps.api));
+    registry.register(new SetMsgEmojiLikeAction(deps.api));
+    registry.register(new FetchPttTextAction(deps.api));
+    registry.register(new SetInputStatusAction(deps.api));
+    registry.register(new GetImageAction(deps.api));
+    registry.register(new GetRecordAction(deps.api));
 }
 
 /** 查询类动作（P2-4）。 */
 function registerQueryActions(registry: ActionRegistry, deps: Ob11ActionDeps): void {
-    registry.register(new GetLoginInfoAction(deps.self));
-    registry.register(new GetGroupInfoAction(deps.groupApi));
-    registry.register(new GetGroupListAction(deps.groupApi));
-    registry.register(new GetGroupMemberInfoAction(deps.groupApi));
-    registry.register(new GetGroupMemberListAction(deps.groupApi));
-    registry.register(new GetFriendListAction(deps.friendApi));
+    registry.register(new GetLoginInfoAction(deps.api.self));
+    registry.register(new GetGroupInfoAction(deps.api.groupApi));
+    registry.register(new GetGroupListAction(deps.api.groupApi));
+    registry.register(new GetGroupMemberInfoAction(deps.api.groupApi));
+    registry.register(new GetGroupMemberListAction(deps.api.groupApi));
+    registry.register(new GetFriendListAction(deps.api.friendApi));
 }
 
 /** 群管类动作（P2-10）。 */
 function registerGroupActions(registry: ActionRegistry, deps: Ob11ActionDeps): void {
-    registry.register(new SetGroupKickAction(deps.groupApi));
-    registry.register(new SetGroupBanAction(deps.groupApi));
-    registry.register(new SetGroupWholeBanAction(deps.groupApi));
-    registry.register(new SetGroupAdminAction(deps.groupApi));
-    registry.register(new SetGroupCardAction(deps.groupApi));
-    registry.register(new SetGroupNameAction(deps.groupApi));
-    registry.register(new SetGroupLeaveAction(deps.groupApi));
-    registry.register(
-        new SetEssenceMsgAction({
-            groupApi: deps.groupApi,
-            messageUnique: deps.sendMsg.messageUnique,
-        }),
-    );
-    registry.register(
-        new DeleteEssenceMsgAction({
-            groupApi: deps.groupApi,
-            messageUnique: deps.sendMsg.messageUnique,
-        }),
-    );
-    registry.register(new GetGroupAtAllRemainAction(deps.groupApi));
+    registry.register(new SetGroupKickAction(deps.api.groupApi));
+    registry.register(new SetGroupBanAction(deps.api.groupApi));
+    registry.register(new SetGroupWholeBanAction(deps.api.groupApi));
+    registry.register(new SetGroupAdminAction(deps.api.groupApi));
+    registry.register(new SetGroupCardAction(deps.api.groupApi));
+    registry.register(new SetGroupNameAction(deps.api.groupApi));
+    registry.register(new SetGroupLeaveAction(deps.api.groupApi));
+    registry.register(new SetEssenceMsgAction(deps.api));
+    registry.register(new DeleteEssenceMsgAction(deps.api));
+    registry.register(new GetGroupAtAllRemainAction(deps.api.groupApi));
 }
 
 /** 好友类动作（P2-11）。 */
 function registerFriendActions(registry: ActionRegistry, deps: Ob11ActionDeps): void {
-    registry.register(new SetFriendAddRequestAction(deps.friendApi));
-    registry.register(
-        new SetFriendRemarkAction({
-            friendApi: deps.friendApi,
-            uinToUid: deps.sendMsg.uinToUid,
-        }),
-    );
-    registry.register(
-        new DeleteFriendAction({
-            friendApi: deps.friendApi,
-            uinToUid: deps.sendMsg.uinToUid,
-        }),
-    );
-    registry.register(new GetFriendsWithCategoryAction(deps.friendApi));
-    registry.register(new GetDoubtFriendsAddRequestAction(deps.friendApi));
-    registry.register(new SetDoubtFriendsAddRequestAction(deps.friendApi));
+    registry.register(new SetFriendAddRequestAction(deps.api.friendApi));
+    registry.register(new SetFriendRemarkAction(deps.api));
+    registry.register(new DeleteFriendAction(deps.api));
+    registry.register(new GetFriendsWithCategoryAction(deps.api.friendApi));
+    registry.register(new GetDoubtFriendsAddRequestAction(deps.api.friendApi));
+    registry.register(new SetDoubtFriendsAddRequestAction(deps.api.friendApi));
 }
 
 /** 系统类动作（P2-11 / P2-12）。 */
 function registerSystemActions(registry: ActionRegistry, deps: Ob11ActionDeps): void {
     registry.register(new GetStatusAction());
-    registry.register(new GetVersionInfoAction({ appVersion: deps.system.appVersion }));
-    const cleanCacheDeps: CleanCacheDeps = {};
-    if (deps.system.cleanCache !== undefined) {
-        cleanCacheDeps.cleanCache = deps.system.cleanCache;
-    }
-    registry.register(new CleanCacheAction(cleanCacheDeps));
+    registry.register(new GetVersionInfoAction(deps.api));
+    registry.register(new CleanCacheAction(deps.api));
     registry.register(new CanSendImageAction());
     registry.register(new CanSendRecordAction());
     registry.register(new GetRobotUinRangeAction());
-    const downloadDeps: DownloadFileDeps = {};
-    if (deps.system.cacheDir !== undefined) {
-        downloadDeps.cacheDir = deps.system.cacheDir;
-    }
-    registry.register(new DownloadFileAction(downloadDeps));
-    const processDeps: ProcessControlDeps = {};
-    if (deps.system.exit !== undefined) {
-        processDeps.exit = deps.system.exit;
-    }
-    if (deps.system.restart !== undefined) {
-        processDeps.restart = deps.system.restart;
-    }
-    registry.register(new BotExitAction(processDeps));
-    registry.register(new SetRestartAction(processDeps));
+    registry.register(new DownloadFileAction(deps.api));
+    registry.register(new BotExitAction(deps.api));
+    registry.register(new SetRestartAction(deps.api));
 }

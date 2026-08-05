@@ -5,10 +5,11 @@
  * 返回 OB11 结构：invited_requests / InvitedRequest（兼容别名）/ join_requests。
  */
 
-import type { GroupNotify, GroupNotifyApi } from "@napuketto/kernel";
+import type { GroupNotify } from "@napuketto/kernel";
 import { GroupNotifyMsgType } from "@napuketto/kernel";
 import { z } from "zod";
 import { BaseAction } from "../../../core/index.js";
+import type { OneBotApi } from "../../api/one-bot-api.js";
 import { ob11ErrorCodeMap } from "../error-map.js";
 
 const getGroupSystemMsgSchema = z.object({
@@ -49,15 +50,9 @@ export class GetGroupSystemMsgAction extends BaseAction<
     readonly schema = getGroupSystemMsgSchema;
     protected readonly errorCodeMap = ob11ErrorCodeMap;
 
-    private readonly deps: {
-        groupNotifyApi: GroupNotifyApi;
-        uidToUin: (uids: string[]) => Promise<Map<string, string>>;
-    };
+    private readonly deps: Pick<OneBotApi, "groupNotifyApi" | "uidToUin">;
 
-    constructor(deps: {
-        groupNotifyApi: GroupNotifyApi;
-        uidToUin: (uids: string[]) => Promise<Map<string, string>>;
-    }) {
+    constructor(deps: Pick<OneBotApi, "groupNotifyApi" | "uidToUin">) {
         super();
         this.deps = deps;
     }

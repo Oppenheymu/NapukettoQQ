@@ -4,9 +4,9 @@
  * getGroupShutUpMemberList → [{ user_id, nickname, shut_up_time }]（uin 经 uidToUin）。
  */
 
-import type { GroupNotifyApi } from "@napuketto/kernel";
 import { z } from "zod";
 import { BaseAction } from "../../../core/index.js";
+import type { OneBotApi } from "../../api/one-bot-api.js";
 import { ob11ErrorCodeMap } from "../error-map.js";
 
 const getGroupShutListSchema = z.object({
@@ -28,15 +28,9 @@ export class GetGroupShutListAction extends BaseAction<GetGroupShutListPayload, 
     readonly schema = getGroupShutListSchema;
     protected readonly errorCodeMap = ob11ErrorCodeMap;
 
-    private readonly deps: {
-        groupNotifyApi: GroupNotifyApi;
-        uidToUin: (uids: string[]) => Promise<Map<string, string>>;
-    };
+    private readonly deps: Pick<OneBotApi, "groupNotifyApi" | "uidToUin">;
 
-    constructor(deps: {
-        groupNotifyApi: GroupNotifyApi;
-        uidToUin: (uids: string[]) => Promise<Map<string, string>>;
-    }) {
+    constructor(deps: Pick<OneBotApi, "groupNotifyApi" | "uidToUin">) {
         super();
         this.deps = deps;
     }
