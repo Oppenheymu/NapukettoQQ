@@ -2,7 +2,7 @@
 
 > 职责：**协议适配器容器**——一个共享的适配器框架（core），外加 OneBot 11 / OneBot 12 / Satori 三套协议语义。
 > 对应 ADR：002 / 003 / 008 / 009 / 013 / 014 / 017
-> 状态：core 框架已实现（BaseAction / ActionRegistry / AdapterRegistry / ProtocolConfig / BaseProtocolAdapter，2026-08-04，见 §8）；onebot11 第一梯队已实现（types / helper/config / action/send_msg，2026-08-04，见 §8.1）；onebot11 helper 翻译层已实现（cqcode/data，2026-08-04，见 §8.2）；onebot11 事件模型已实现（message/notice/request/meta，2026-08-05，见 §8.3）；onebot11 动作骨架扩充已实现（error-map + 6 个查询动作 + types 补全，2026-08-05，见 §8.4）；**onebot11 adapter.ts 已实现（2026-08-05，见 §8.5）——订阅 kernel 消息事件 → OB11 消息事件 → network 广播（消息收链路打通）**；**P2-3 请求分发 + send_msg 真实化 + MessageUnique（2026-08-05，见 §8.6）——收发闭环打通**；**P2-4 查询动作真实化（2026-08-05，见 §8.7）——apis/group + apis/friend + 6 查询动作接 kernel**；**P2-5 传输接入（2026-08-05，见 §8.8）——HTTP/WS server+client + 鉴权 + 心跳 meta 事件**。**§9 实现顺序 5-6 已同步更新。**
+> 状态：core 框架已实现（BaseAction / ActionRegistry / AdapterRegistry / ProtocolConfig / BaseProtocolAdapter，2026-08-04，见 §8）；onebot11 第一梯队已实现（types / helper/config / action/send_msg，2026-08-04，见 §8.1）；onebot11 helper 翻译层已实现（cqcode/data，2026-08-04，见 §8.2）；onebot11 事件模型已实现（message/notice/request/meta，2026-08-05，见 §8.3）；onebot11 动作骨架扩充已实现（error-map + 6 个查询动作 + types 补全，2026-08-05，见 §8.4）；**onebot11 adapter.ts 已实现（2026-08-05，见 §8.5）——订阅 kernel 消息事件 → OB11 消息事件 → network 广播（消息收链路打通）**；**P2-3 请求分发 + send_msg 真实化 + MessageUnique（2026-08-05，见 §8.6）——收发闭环打通**；**P2-4 查询动作真实化（2026-08-05，见 §8.7）——apis/group + apis/friend + 6 查询动作接 kernel**；**P2-5 传输接入（2026-08-05，见 §8.8）——HTTP/WS server+client + 鉴权 + 心跳 meta 事件**；**P2-6 cli 启动编排（2026-08-05，见 §8.9）——boot.cjs 补协议装配 + cli 参数解析拉起 QQ**。**§9 实现顺序 5-6 已同步更新。**
 
 ---
 
@@ -323,3 +323,20 @@ kernel 新增 `apis/group.ts`（GroupApi）与 `apis/friend.ts`（FriendApi）�
 - **翻译模块（helper/translate.ts）**：NT GroupMember → OB11 GroupMemberInfo（role 映射 owner/admin/member，card=cardName，shut_up_timestamp=shutUpTime×1000，join_time/last_sent_time 数值化）；Group → GroupInfo。
 - **动作改造**：GetGroupListAction / GetGroupInfoAction / GetGroupMemberListAction / GetGroupMemberInfoAction / GetFriendListAction 注入 GroupApi/FriendApi；GetLoginInfoAction 注入 self（uin/nickname）。deps 扩展 `{ sendMsg, groupApi, friendApi, self }`。
 - **send_msg 私聊补全**：user_id(uin) → groupApi.uinToUid → Peer{chatType: C2C, peerUid: uid}。
+
+### 8.8 P2-5 传输接入（2026-08-05）
+
+`onebot11/transport.ts`：`assembleOb11Transports(opts)` 按配置装配 network 传输：
+
+- **HTTP 反向**（http.enabled）：HttpServer + token 鉴权（Authorization: Bearer / access_token query）+ onRequest = adapter.handleRequest。
+- **WS 反向**（ws.enabled）：WsServer + 鉴权 + 心跳 ping。
+- **HTTP 正向上报**（httpPost.enabled）：HttpClient 注册 broadcaster（fire-and-forget）。
+- **WS 正向**（wsReverse.enabled）：WsClient 双向（事件广播 + 请求响应）。
+
+adapter onStart：装配传输 → 打开 server/client → 广播 lifecycle enable → 起心跳定时器（heartbeatInterval，0 关闭）。onStop：心跳/传输/退订全清理。BaseProtocolAdapter 增 `getBroadcaster()`（protected）。
+
+### 8.9 P2-6 cli 启动编排（2026-08-05）
+
+**boot.cjs 补协议装配**（loader runtime）：登录成功后动态 import adapter/network 入口（launcher 环境变量 NAPUTO_ADAPTER_ENTRY / NAPUTO_NETWORK_ENTRY）→ 创建 MsgChannel + MsgBridge + MsgApi/GroupApi/FriendApi + EventBroadcaster + NapukettoOneBot11Adapter → start。
+
+**cli（apps/cli）**：参数解析（-q 账号 / --data-dir / --config）→ locate QQ → launchQqWithLoader（BootMain 拉起 QQ + 注入）→ 常驻等待。

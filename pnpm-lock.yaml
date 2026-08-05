@@ -231,6 +231,9 @@ importers:
       '@napuketto/kernel':
         specifier: workspace:*
         version: link:../../packages/kernel
+      '@napuketto/loader':
+        specifier: workspace:*
+        version: link:../../packages/loader
       '@napuketto/network':
         specifier: workspace:*
         version: link:../../packages/network

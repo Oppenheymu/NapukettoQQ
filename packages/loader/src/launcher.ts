@@ -30,6 +30,10 @@ export interface LaunchOptions {
     kernelEntry: string;
     /** 配置目录。 */
     cfgDir: string;
+    /** adapter 入口（.mjs，boot.js 协议装配用）。 */
+    adapterEntry?: string;
+    /** network 入口（.mjs，boot.js 协议装配用）。 */
+    networkEntry?: string;
     /** boot JS 路径（默认 dist/native/boot.cjs）。 */
     bootJs?: string;
     /** hook DLL 路径（默认 dist/native/NapukettoWinBootHook.dll）。 */
@@ -68,7 +72,7 @@ export function launchQqWithLoader(options: LaunchOptions): LaunchResult {
     const cfg = resolve(options.cfgDir);
     mkdirSync(cfg, { recursive: true });
 
-    const env = {
+    const env: Record<string, string> = {
         ...process.env,
         [ENV.QQ_PATH]: options.qq.qqPath,
         [ENV.BOOT_JS]: bootJsPath,
@@ -78,6 +82,12 @@ export function launchQqWithLoader(options: LaunchOptions): LaunchResult {
         [ENV.QQ_VERSION]: options.qq.version,
         [ENV.WRAPPER_PATH]: options.qq.wrapperPath,
     };
+    if (options.adapterEntry !== undefined) {
+        env[ENV.ADAPTER_ENTRY] = resolve(options.adapterEntry);
+    }
+    if (options.networkEntry !== undefined) {
+        env[ENV.NETWORK_ENTRY] = resolve(options.networkEntry);
+    }
 
     // BootMain 负责 CreateProcess(QQ) + 注入
     const child = spawn(bootMainPath, [], {
@@ -98,4 +108,8 @@ export const ENV = {
     CFG_DIR: "NAPUTO_CFG_DIR",
     QQ_VERSION: "NAPUTO_QQ_VERSION",
     WRAPPER_PATH: "NAPUTO_WRAPPER_PATH",
+    /** adapter 包入口（boot.cjs 协议装配用）。 */
+    ADAPTER_ENTRY: "NAPUTO_ADAPTER_ENTRY",
+    /** network 包入口（boot.cjs 协议装配用）。 */
+    NETWORK_ENTRY: "NAPUTO_NETWORK_ENTRY",
 } as const;

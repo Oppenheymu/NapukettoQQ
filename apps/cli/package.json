@@ -32,6 +32,7 @@
         "@napuketto/kernel": "workspace:*",
         "@napuketto/network": "workspace:*",
         "@napuketto/adapter": "workspace:*",
+        "@napuketto/loader": "workspace:*",
         "commander": "^15.0.0",
         "picocolors": "^1.1.1",
         "qrcode": "^1.5.4"

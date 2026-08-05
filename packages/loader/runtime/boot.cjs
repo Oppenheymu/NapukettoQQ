@@ -31,6 +31,59 @@ function log(msg) {
     }
 }
 
+/**
+ * 协议装配：登录成功后，动态 import adapter/network 入口，装配 OB11 适配器。
+ * 依赖 launcher 注入的 NAPUTO_ADAPTER_ENTRY / NAPUTO_NETWORK_ENTRY。
+ */
+async function startProtocols(kernel, ctx, loginResult, logger) {
+    const adapterEntry = process.env.NAPUTO_ADAPTER_ENTRY;
+    const networkEntry = process.env.NAPUTO_NETWORK_ENTRY;
+    if (!adapterEntry || !networkEntry) {
+        logger("bootstrap: NAPUTO_ADAPTER_ENTRY/NETWORK_ENTRY 未设置，跳过协议装配");
+        return;
+    }
+    try {
+        const network = await import("file://" + networkEntry.replace(/\\/g, "/"));
+        const adapter = await import("file://" + adapterEntry.replace(/\\/g, "/"));
+        const session = ctx.session;
+        if (!session) {
+            logger("bootstrap: session 为空，无法装配协议");
+            return;
+        }
+        // 消息事件通道 + 桥
+        const channel = new kernel.NTEventChannel("Msg");
+        const bridge = new kernel.MsgBridge(session, channel);
+        bridge.register();
+        // kernel APIs
+        const groupApi = new kernel.GroupApi(session);
+        const msgApi = new kernel.MsgApi(session);
+        const friendApi = new kernel.FriendApi(session, {
+            uidToUin: (uids) => groupApi.uidToUin(uids),
+        });
+        // network 广播 + OB11 适配器
+        const broadcaster = new network.EventBroadcaster();
+        const ob11Config = new adapter.ProtocolConfig({
+            path: path.join(process.env.NAPUTO_CFG_DIR || ".", "config", "onebot11.json"),
+            schema: adapter.ob11ConfigSchema,
+            defaults: adapter.ob11ConfigSchema.parse({}),
+        });
+        const ob11 = new adapter.NapukettoOneBot11Adapter({
+            config: ob11Config,
+            broadcaster,
+            msgChannel: channel,
+            msgApi,
+            groupApi,
+            friendApi,
+            selfUin: loginResult.uin,
+            selfNickname: loginResult.nick,
+        });
+        await ob11.start();
+        logger("bootstrap: onebot11 adapter started");
+    } catch (e) {
+        logger(`bootstrap: 协议装配失败: ${e?.message ?? e}`);
+    }
+}
+
 log(`boot loaded: node=${process.version} electron=${process.versions.electron ?? "n/a"}`);
 log(`cwd: ${process.cwd()}`);
 log(`env NAPUTO_BOOT_JS=${process.env.NAPUTO_BOOT_JS}`);
@@ -116,8 +169,9 @@ function bootstrap() {
                         log(
                             `bootstrap: attachWrapper OK, engine=${typeof ctx.engine}, session=${ctx.session !== null}`,
                         );
+                        let loginResult = null;
                         if (typeof core.login === "function") {
-                            const loginResult = await core.login({
+                            loginResult = await core.login({
                                 appid: "537237765",
                                 initTimeoutMs: 20000,
                             });
@@ -126,6 +180,10 @@ function bootstrap() {
                             );
                         } else {
                             log("bootstrap: kernel core missing login fn");
+                        }
+                        // 协议装配（adapter + network，登录成功后）
+                        if (loginResult !== null) {
+                            await startProtocols(kernel, ctx, loginResult, log);
                         }
                         // 探测模式
                         if (process.env.NAPUTO_PROBE === "1" && typeof kernel.probeRuntime === "function") {
