@@ -51,6 +51,24 @@ export interface LoginInfo {
     nickname: string;
 }
 
+/** OB11 消息信息（get_msg / 历史消息返回项）。 */
+export interface OB11MessageInfo {
+    message_id: number;
+    real_id?: number;
+    message_type: "group" | "private";
+    sender: {
+        user_id: number;
+        nickname: string;
+        card?: string;
+        role?: "owner" | "admin" | "member";
+    };
+    time: number;
+    message: OB11MessageSegment[];
+    raw_message: string;
+    group_id?: number;
+    user_id?: number;
+}
+
 /** 性别枚举。 */
 export type Sex = "male" | "female" | "unknown";
 

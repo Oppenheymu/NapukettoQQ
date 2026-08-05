@@ -21,6 +21,7 @@ export {
     segmentsToCanonical,
     segmentsToCqMessage,
 } from "./data.js";
+export { toOb11MessageInfo } from "./message-info.js";
 export { MessageUnique } from "./message-unique.js";
 export {
     collectGrayTipUids,

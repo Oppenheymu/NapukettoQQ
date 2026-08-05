@@ -7,9 +7,7 @@
     },
     "files": {
         "ignoreUnknown": false,
-        "includes": [
-            "**/src/**/*.{ts,tsx,mts,cts,js,mjs,cjs,jsx}"
-        ]
+        "includes": ["**/src/**/*.{ts,tsx,mts,cts,js,mjs,cjs,jsx}"]
     },
     "formatter": {
         "enabled": true,
@@ -60,29 +58,19 @@
                                 "selector": {
                                     "kind": "typeParameter"
                                 },
-                                "formats": [
-                                    "PascalCase"
-                                ]
+                                "formats": ["PascalCase"]
                             },
                             {
                                 "selector": {
                                     "kind": "typeMember"
                                 },
-                                "formats": [
-                                    "camelCase",
-                                    "snake_case",
-                                    "PascalCase"
-                                ]
+                                "formats": ["camelCase", "snake_case", "PascalCase"]
                             },
                             {
                                 "selector": {
                                     "kind": "objectLiteralMember"
                                 },
-                                "formats": [
-                                    "camelCase",
-                                    "snake_case",
-                                    "CONSTANT_CASE"
-                                ]
+                                "formats": ["camelCase", "snake_case", "CONSTANT_CASE"]
                             }
                         ]
                     }
@@ -99,9 +87,7 @@
     },
     "overrides": [
         {
-            "includes": [
-                "packages/kernel/src/probe.ts"
-            ],
+            "includes": ["packages/kernel/src/probe.ts"],
             "linter": {
                 "rules": {
                     "complexity": {
@@ -120,9 +106,7 @@
             }
         },
         {
-            "includes": [
-                "packages/adapter/src/onebot11/helper/notice.ts"
-            ],
+            "includes": ["packages/adapter/src/onebot11/helper/notice.ts"],
             "linter": {
                 "rules": {
                     "complexity": {

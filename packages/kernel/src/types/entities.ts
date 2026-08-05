@@ -48,6 +48,8 @@ export interface PttElement {
     md5?: string;
     fileName?: string;
     duration?: number;
+    /** 语音转文字结果（translatePtt2Text 异步写回）。 */
+    text?: string;
 }
 
 /** 表情元素。 */

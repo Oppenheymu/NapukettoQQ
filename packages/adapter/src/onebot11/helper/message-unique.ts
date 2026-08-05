@@ -7,6 +7,7 @@
  *
  * 溢出（>2^31-1）后从头分配：优先复用已 release 的槽位（先检查释放池，再线性扫描）。
  */
+import type { Peer } from "@napuketto/kernel";
 import { kernelError } from "@napuketto/kernel";
 
 /** OB11 message_id 上限（int32 max = 0x7FFF_FFFF）。 */
@@ -20,20 +21,31 @@ export class MessageUnique {
     private readonly msgIdToInt = new Map<string, number>();
     /** OB11 message_id → NT msgId。 */
     private readonly intToMsgId = new Map<number, string>();
+    /** NT msgId → Peer（delete_msg / get_msg 等只有 message_id 时反查用）。 */
+    private readonly msgIdToPeer = new Map<string, Peer>();
     /** 递增计数器。 */
     private cursor = 1;
     /** 已释放的槽位（可复用）。 */
     private readonly freed = new Set<number>();
 
-    /** 为新 NT 消息分配 OB11 message_id（幂等：同一 msgId 返回同一 id）。 */
-    alloc(msgId: string): number {
+    /**
+     * 为新 NT 消息分配 OB11 message_id（幂等：同一 msgId 返回同一 id）。
+     * peer 可选：传入则记录，供 message_id → peer 反查。
+     */
+    alloc(msgId: string, peer?: Peer): number {
         const existing = this.msgIdToInt.get(msgId);
         if (existing !== undefined) {
+            if (peer !== undefined) {
+                this.msgIdToPeer.set(msgId, peer);
+            }
             return existing;
         }
         const id = this.nextFreeId();
         this.msgIdToInt.set(msgId, id);
         this.intToMsgId.set(id, msgId);
+        if (peer !== undefined) {
+            this.msgIdToPeer.set(msgId, peer);
+        }
         this.freed.delete(id);
         return id;
     }
@@ -48,6 +60,11 @@ export class MessageUnique {
         return this.msgIdToInt.get(msgId);
     }
 
+    /** NT msgId → Peer（alloc 时未记录返回 undefined）。 */
+    getPeer(msgId: string): Peer | undefined {
+        return this.msgIdToPeer.get(msgId);
+    }
+
     /** 释放 NT msgId 占用的槽位（消息过期/删除时调用，可选）。 */
     release(msgId: string): void {
         const id = this.msgIdToInt.get(msgId);
@@ -56,6 +73,7 @@ export class MessageUnique {
         }
         this.msgIdToInt.delete(msgId);
         this.intToMsgId.delete(id);
+        this.msgIdToPeer.delete(msgId);
         this.freed.add(id);
     }
 
@@ -78,4 +96,30 @@ export class MessageUnique {
         this.cursor += 1;
         return id;
     }
+}
+
+/**
+ * 从 OB11 message_id 反查 NT msgId + Peer。
+ * delete_msg / get_msg / set_msg_emoji_like / fetch_ptt_text / 精华消息等
+ * 只有 message_id 参数的动作共用（消息不存在抛 KernelError NOT_FOUND）。
+ */
+export function resolveMsgIdAndPeer(
+    messageId: number | string,
+    unique: MessageUnique,
+): { msgId: string; peer: Peer } {
+    let shortId: number;
+    if (typeof messageId === "number") {
+        shortId = messageId;
+    } else {
+        shortId = Number(messageId);
+    }
+    const msgId = unique.getMsgId(shortId);
+    if (msgId === undefined) {
+        throw kernelError(`消息 ${messageId} 不存在`, "NOT_FOUND");
+    }
+    const peer = unique.getPeer(msgId);
+    if (peer === undefined) {
+        throw kernelError(`消息 ${messageId} 无会话记录`, "NOT_FOUND");
+    }
+    return { msgId, peer };
 }

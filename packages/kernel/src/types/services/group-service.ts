@@ -17,6 +17,32 @@ export const NTGroupMemberRole = {
 } as const;
 export type NTGroupMemberRole = (typeof NTGroupMemberRole)[keyof typeof NTGroupMemberRole];
 
+/** 踢人请求项（KickMemberV2Req.kickList 成员，说明书参考，字段值待探测校准）。 */
+export interface KickMemberInfo {
+    optFlag: number;
+    optOperate: number;
+    optMemberUid: string;
+    optBytesMsg: string;
+}
+
+/** 踢人请求（set_group_kick 的 kickMemberV2 参数，说明书参考）。 */
+export interface KickMemberV2Req {
+    groupCode: string;
+    kickFlag: number;
+    kickList: KickMemberInfo[];
+    kickListUids: string[];
+    kickMsg: string;
+}
+
+/** @all 剩余次数（getGroupRemainAtTimes 返回）。 */
+export interface GroupRemainAtTimes {
+    canAtAll: boolean;
+    remainAtAllCountForUin: number;
+    remainAtAllCountForGroup: number;
+    atTimesMsg: string;
+    canNotAtAllMsg: string;
+}
+
 /** 群列表项（Group 实体，说明书参考）。 */
 export interface Group {
     groupCode: string;
@@ -94,4 +120,47 @@ export interface NodeIKernelGroupService {
     getUinByUids(
         uids: string[],
     ): Promise<{ errCode: number; errMsg: string; uins: Map<string, string> }>;
+    /** 踢人（set_group_kick）。 */
+    kickMemberV2(param: KickMemberV2Req): Promise<GeneralCallResult>;
+    /** 成员禁言（set_group_ban；timeStamp=0 解除禁言）。 */
+    setMemberShutUp(
+        groupCode: string,
+        memberTimes: Array<{ uid: string; timeStamp: number }>,
+    ): Promise<GeneralCallResult>;
+    /** 全员禁言（set_group_whole_ban）。 */
+    setGroupShutUp(groupCode: string, shutUp: boolean): Promise<GeneralCallResult>;
+    /** 设置管理员（set_group_admin；void 语义，乐观处理）。 */
+    modifyMemberRole(groupCode: string, uid: string, role: NTGroupMemberRole): void;
+    /** 设置群名片（set_group_card；void 语义）。 */
+    modifyMemberCardName(groupCode: string, uid: string, cardName: string): void;
+    /** 修改群名（set_group_name）。 */
+    modifyGroupName(
+        groupCode: string,
+        groupName: string,
+        isNormalMember: boolean,
+    ): Promise<GeneralCallResult>;
+    /** 退群（set_group_leave）。 */
+    quitGroupV2(param: {
+        groupCode: string;
+        needDeleteLocalMsg: boolean;
+    }): Promise<GeneralCallResult>;
+    /** 设置精华消息（msgSeq/msgRandom 取自消息本体）。 */
+    addGroupEssence(param: {
+        groupCode: string;
+        msgRandom: number;
+        msgSeq: number;
+    }): Promise<unknown>;
+    /** 取消精华消息。 */
+    removeGroupEssence(param: {
+        groupCode: string;
+        msgRandom: number;
+        msgSeq: number;
+    }): Promise<unknown>;
+    /** @all 剩余次数（get_group_at_all_remain）。 */
+    getGroupRemainAtTimes(groupCode: string): Promise<
+        Omit<GeneralCallResult, "result"> & {
+            errCode: number;
+            atInfo: GroupRemainAtTimes;
+        }
+    >;
 }

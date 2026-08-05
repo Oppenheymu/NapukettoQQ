@@ -339,4 +339,27 @@ adapter onStart：装配传输 → 打开 server/client → 广播 lifecycle ena
 
 **boot.cjs 补协议装配**（loader runtime）：登录成功后动态 import adapter/network 入口（launcher 环境变量 NAPUTO_ADAPTER_ENTRY / NAPUTO_NETWORK_ENTRY）→ 创建 MsgChannel + MsgBridge + MsgApi/GroupApi/FriendApi + EventBroadcaster + NapukettoOneBot11Adapter → start。
 
+### 8.10 P2-10 第一批动作全量（消息 + 群管，2026-08-05 设计 + 实现）
+
+**目标**：HANDOVER.md §5.3 第一批动作。kernel 方法面见 kernel design §8.12。**已实现并 pnpm check 全绿（103 文件）+ 全量构建通过。**
+
+**MessageUnique 扩展**：`alloc(msgId, peer?)` 记录 Peer（delete_msg / get_msg / essence / emoji_like / fetch_ptt_text 只有 message_id，必须反查 peer + msgId）；`getPeer(msgId)`；新增 `resolveMsgIdAndPeer(messageId, unique)` 共享反查（消息不存在抛 KernelError NOT_FOUND → OB11 错误码 102）。NapCat 同款（getMsgIdAndPeerByShortId）。**关键：adapter.ts 消息事件翻译的 alloc 也传 peer**——收方向就记录，之后动作才能反查。
+
+**新增 helper**：`toOb11MessageInfo(msg, unique)` —— RawMessage → OB11 消息信息结构（get_msg / 历史消息返回用；事件翻译 `toOb11MessageEvent` 是另一套带 self_id/post_type 的格式，不复用）。
+
+**消息类动作**（9 个）：
+- `send_private_msg` / `send_group_msg`：抽 `sendOb11Message(payload, deps)` 共享核心（resolvePeer + canonical 翻译 + auto_escape），SendMsgAction 与新动作复用（_handle 非 async 直接 return，规避 useAwait）
+- `delete_msg`：message_id → msgId + peer → recallMessage
+- `get_msg`：message_id → msgId + peer → fetchMsgsByMsgId → toOb11MessageInfo
+- `get_group_msg_history` / `get_friend_msg_history`：peer + count → fetchMessages → 数组翻译；message_seq 为 OB11 message_id 时经 MessageUnique 反查起始 msgId
+- `mark_msg_as_read`：user_id/group_id 二选一（refine）→ markRead
+- `set_msg_emoji_like`：message_id → 拉消息取 msgSeq → setMsgEmojiLike
+- `fetch_ptt_text`：message_id → fetchPttText → { text }
+
+**群管类动作**（10 个）：set_group_kick（refuseForever → kickMemberV2 optFlag）/ set_group_ban（duration 秒，0 解禁）/ set_group_whole_ban / set_group_admin（role 注解 NTGroupMemberRole 字面量坑：let role: NTGroupMemberRole）/ set_group_card / set_group_name / set_group_leave（is_dismiss）/ set_essence_msg / delete_essence_msg / get_group_at_all_remain。user_id 一律 uin→uid；**set_group_special_title 不实现**（OIDB 依赖，见 kernel design §8.12）。
+
+**注册**：deps 复用现有 `{ sendMsg, groupApi, friendApi, self }`，无需新增依赖；精华消息动作组合 `{ groupApi, messageUnique }`（sendMsg 无 groupApi）。
+
+**踩坑**：exactOptionalPropertyTypes 下 `{ msgId: string | undefined }` 不能直接传可选参数 → if 分支构造 opts；kernel 产物未重建时 adapter 报 TS2339（先 build kernel 再 check）。
+
 **cli（apps/cli）**：参数解析（-q 账号 / --data-dir / --config）→ locate QQ → launchQqWithLoader（BootMain 拉起 QQ + 注入）→ 常驻等待。

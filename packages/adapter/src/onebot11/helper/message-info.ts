@@ -1,0 +1,49 @@
+/**
+ * OB11 消息信息翻译（RawMessage → OB11 消息信息结构）
+ *
+ * get_msg / get_group_msg_history / get_friend_msg_history 返回项用。
+ * 纯函数（ADR-008）：只读入参，不调 API、不读缓存。
+ * 与 adapter.ts 的 toOb11MessageEvent（事件格式，带 self_id/post_type）是两套结构，不复用。
+ */
+import type { RawMessage } from "@napuketto/kernel";
+import { ChatType, toCanonicalElements } from "@napuketto/kernel";
+import type { OB11MessageInfo } from "../types/index.js";
+import { canonicalToCqMessage, canonicalToSegments } from "./data.js";
+import type { MessageUnique } from "./message-unique.js";
+
+/** 毫秒 → 秒（Unix 时间戳）。 */
+const MS_TO_SEC = 1000;
+
+/** RawMessage → OB11 消息信息（message_id 经 MessageUnique 映射）。 */
+export function toOb11MessageInfo(msg: RawMessage, unique: MessageUnique): OB11MessageInfo {
+    const elements = toCanonicalElements(msg);
+    let messageType: "group" | "private" = "private";
+    if (msg.chatType === ChatType.GROUP) {
+        messageType = "group";
+    }
+    const info: OB11MessageInfo = {
+        message_id: unique.alloc(msg.msgId, {
+            chatType: msg.chatType,
+            peerUid: msg.peerUid,
+        }),
+        message_type: messageType,
+        sender: {
+            user_id: Number(msg.senderUin),
+            nickname: msg.sendNickName,
+        },
+        time: Math.floor(Number(msg.msgTime) / MS_TO_SEC),
+        message: canonicalToSegments(elements),
+        raw_message: canonicalToCqMessage(elements),
+    };
+    if (msg.chatType === ChatType.GROUP) {
+        info.group_id = Number(msg.peerUid);
+        const { sender } = info;
+        sender.role = "member";
+        if (msg.sendMemberName !== undefined) {
+            sender.card = msg.sendMemberName;
+        }
+    } else {
+        info.user_id = Number(msg.peerUin);
+    }
+    return info;
+}

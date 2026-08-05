@@ -386,6 +386,31 @@ function resolveWrapperPath(installDir: string, version: string): string;
 
 版本信息从 QQ 安装目录哪个文件读、appid/qua 怎么拿到 → **P1 探测脚本第一批目标**。
 
+### 8.12 P2-10 第一批 NapCat API 方法面（2026-08-05 设计 + 实现）
+
+**目标**：HANDOVER.md §5.3 第一批（消息 + 群管类）所需 kernel 方法面。方法签名以 NapCat 公开类型作说明书自研描述（零复制）。**已实现并 pnpm check 全绿（103 文件）。**
+
+**MsgService 补方法**（`types/services/msg-service.ts`）：
+- `getMsgsByMsgId(peer, ids)` → `{ msgList }`（get_msg / 精华 / ptt 转文字共用）
+- `setMsgEmojiLikes(peer, msgSeq, emojiId, emojiType, setOrCancel)`（set_msg_emoji_like）
+- `translatePtt2Text(msgId, peer, msgElement)`（fetch_ptt_text：异步转写，文本写回 pttElement.text；PttElement 补 `text?` 字段）
+
+**GroupService 补方法**（`types/services/group-service.ts`）：
+- `kickMemberV2(KickMemberV2Req)`（set_group_kick；**kickFlag/kickList 字段值待探测校准**：optFlag=1 普通踢 / 0 拉黑，TODO P3 联调）
+- `setMemberShutUp(groupCode, memberTimes[])`（set_group_ban，timeStamp=0 解禁）
+- `setGroupShutUp(groupCode, bool)`（whole_ban）/ `modifyMemberRole`（admin，void 语义乐观处理）
+- `modifyMemberCardName`（card，void）/ `modifyGroupName(groupCode, name, isNormalMember)`（name）
+- `quitGroupV2({groupCode, needDeleteLocalMsg})`（leave，is_dismiss）
+- `addGroupEssence` / `removeGroupEssence({groupCode, msgRandom, msgSeq})`（精华；返回形状未知，GroupApi 宽松校验 result 数字非 0）
+- `getGroupRemainAtTimes(groupCode)` → `{ atInfo }`（at_all_remain）
+- 新增 `KickMemberInfo` / `KickMemberV2Req` / `GroupRemainAtTimes` 类型
+
+**MsgApi 补**：`fetchMsgsByMsgId`（get_msg / 精华 / ptt 共用）/ `setMsgEmojiLike(peer, opts)`（options 对象规避 useMaxParams）/ `fetchPttText(msgId, peer)`（内部：getMsgsByMsgId → 找 PTT 元素 → translatePtt2Text → 再取回读 pttElement.text；数组解构规避 noUncheckedIndexedAccess + useDestructuring 双规则）。
+
+**GroupApi 补**：kickMember / setMemberShutUp / setGroupShutUp / setMemberRole（同步 void）/ setMemberCardName（同步 void）/ modifyGroupName / quitGroup / addGroupEssence(groupCode, msgId)（**构造时同时取 msgService**，内部经 getMsgsByMsgId 取 msgSeq/msgRandom）/ removeGroupEssence / getGroupRemainAtTimes。
+
+**⚠️ set_group_special_title 不实现**：NapCat 走 OIDB 自定义包（`OidbSvcTrpcTcp0X8FC_2` + sendOidbPacket）——违反 NAPI 路线（禁绕过 NAPI 的自定义包/裸调），列入待办（等 `sendSsoCmdReqByContend` 可行性评估）。
+
 ### 8.3 P0-1 实现记录（2026-08-04）
 
 `errors.ts` / `paths.ts` / `logger.ts` / `config.ts` 已实现，通过 `pnpm check` + 运行时冒烟测试（26 项）。关键决策：

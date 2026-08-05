@@ -66,7 +66,11 @@ function toOb11MessageEvent(
     const time = Math.floor(Number(msg.msgTime) / MS_TO_SEC);
     const selfId = Number(selfUin);
     const userId = Number(msg.senderUin);
-    const messageId = unique.alloc(msg.msgId);
+    // 记录 peer：delete_msg / get_msg 等只有 message_id 的动作可反查
+    const messageId = unique.alloc(msg.msgId, {
+        chatType: msg.chatType,
+        peerUid: msg.peerUid,
+    });
     const base = {
         time,
         self_id: selfId,

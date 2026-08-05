@@ -75,5 +75,20 @@ export interface NodeIKernelMsgService {
         count: number,
         queryOrder: boolean,
     ): Promise<GeneralCallResult & { msgList?: RawMessage[] }>;
+    /** 按 msgId 批量拉取消息（get_msg / 精华消息 / ptt 转文字共用）。 */
+    getMsgsByMsgId(
+        peer: Peer,
+        ids: string[],
+    ): Promise<GeneralCallResult & { msgList?: RawMessage[] }>;
     setMsgRead(peer: Peer): Promise<GeneralCallResult>;
+    /** 消息表情表态（set_msg_emoji_like；setOrCancel=true 点赞，false 取消）。 */
+    setMsgEmojiLikes(
+        peer: Peer,
+        msgSeq: string,
+        emojiId: string,
+        emojiType: string,
+        setOrCancel: boolean,
+    ): Promise<GeneralCallResult>;
+    /** 语音转文字（fetch_ptt_text；异步转写，结果写回 pttElement.text）。 */
+    translatePtt2Text(msgId: string, peer: Peer, msgElement: unknown): Promise<GeneralCallResult>;
 }

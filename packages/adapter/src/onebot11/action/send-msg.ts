@@ -1,11 +1,12 @@
 /**
- * send_msg 动作：发送消息（群聊/私聊）
+ * send_msg 动作：发送消息（群聊/私聊）+ 共享发送核心 sendOb11Message
  *
  * P2-3 真实化：注入 kernel MsgApi，message 参数（CQ 码字符串或 segment 数组）
  * 翻译为 canonical 元素 → MsgApi.sendMessage → 返回真实 message_id。
+ * send_private_msg / send_group_msg 复用 sendOb11Message（P2-10）。
  *
  * 群聊：group_id → Peer{ chatType: GROUP, peerUid: String(group_id) }（群消息 peerUid=群号）。
- * 私聊：user_id 需 uin→uid（BuddyService 探测后 P2-4 补），暂明确 reject。
+ * 私聊：user_id 经 uin→uid → Peer{ chatType: C2C, peerUid: uid }。
  */
 
 import { type CanonicalElement, ChatType, type MsgApi, type Peer } from "@napuketto/kernel";
@@ -24,7 +25,7 @@ const sendMsgSchema = z.object({
     auto_escape: z.boolean().optional(),
 });
 
-type SendMsgPayload = z.infer<typeof sendMsgSchema>;
+export type SendMsgPayload = z.infer<typeof sendMsgSchema>;
 
 /** send_msg 依赖（由装配方注入）。 */
 export interface SendMsgDeps {
@@ -50,6 +51,32 @@ async function resolvePeer(payload: SendMsgPayload, deps: SendMsgDeps): Promise<
     throw new Error("send_msg 需要 group_id 或 user_id");
 }
 
+/** 共享发送核心：解析 Peer → canonical 翻译（含 auto_escape）→ sendMessage → 映射 message_id。 */
+export async function sendOb11Message(
+    payload: SendMsgPayload,
+    deps: SendMsgDeps,
+): Promise<{ message_id: number }> {
+    const peer = await resolvePeer(payload, deps);
+    // message: CQ 码字符串 → canonical；segment 数组 → canonical
+    let canonical: CanonicalElement[];
+    if (Array.isArray(payload.message)) {
+        canonical = segmentsToCanonical(payload.message as OB11MessageSegment[]);
+    } else {
+        canonical = cqMessageToCanonical(payload.message);
+    }
+    // auto_escape：文本段转义 CQ 特殊字符
+    if (payload.auto_escape === true) {
+        canonical = canonical.map((el) => {
+            if (el.type === "text") {
+                return { ...el, text: escapeText(el.text) };
+            }
+            return el;
+        });
+    }
+    const { msgId } = await deps.msgApi.sendMessage(peer, canonical);
+    return { message_id: deps.messageUnique.alloc(msgId, peer) };
+}
+
 /** 发送消息（P2-3 接 kernel apis/msg，返回真实 message_id）。 */
 export class SendMsgAction extends BaseAction<SendMsgPayload, { message_id: number }> {
     readonly name = "send_msg";
@@ -63,26 +90,8 @@ export class SendMsgAction extends BaseAction<SendMsgPayload, { message_id: numb
         this.deps = deps;
     }
 
-    protected async _handle(payload: SendMsgPayload): Promise<{ message_id: number }> {
-        const peer = await resolvePeer(payload, this.deps);
-        // message: CQ 码字符串 → canonical；segment 数组 → canonical
-        let canonical: CanonicalElement[];
-        if (Array.isArray(payload.message)) {
-            canonical = segmentsToCanonical(payload.message as OB11MessageSegment[]);
-        } else {
-            canonical = cqMessageToCanonical(payload.message);
-        }
-        // auto_escape：文本段转义 CQ 特殊字符
-        if (payload.auto_escape === true) {
-            canonical = canonical.map((el) => {
-                if (el.type === "text") {
-                    return { ...el, text: escapeText(el.text) };
-                }
-                return el;
-            });
-        }
-        const { msgId } = await this.deps.msgApi.sendMessage(peer, canonical);
-        return { message_id: this.deps.messageUnique.alloc(msgId) };
+    protected _handle(payload: SendMsgPayload): Promise<{ message_id: number }> {
+        return sendOb11Message(payload, this.deps);
     }
 }
 

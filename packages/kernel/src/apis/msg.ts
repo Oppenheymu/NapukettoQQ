@@ -76,6 +76,62 @@ export class MsgApi {
         return raw.msgList ?? [];
     }
 
+    /** 按 msgId 批量拉取消息（get_msg / 精华消息 / ptt 转文字共用）。 */
+    async fetchMsgsByMsgId(target: Peer, ids: string[]): Promise<RawMessage[]> {
+        if (ids.length === 0) {
+            return [];
+        }
+        const raw = await this.service.getMsgsByMsgId(target, ids);
+        unwrapResult("getMsgsByMsgId", raw);
+        return raw.msgList ?? [];
+    }
+
+    /** 消息表情表态（set_msg_emoji_like；like=true 点赞，false 取消）。 */
+    async setMsgEmojiLike(
+        target: Peer,
+        opts: { msgSeq: string; emojiId: string; emojiType: string; like: boolean },
+    ): Promise<void> {
+        const raw = await this.service.setMsgEmojiLikes(
+            target,
+            opts.msgSeq,
+            opts.emojiId,
+            opts.emojiType,
+            opts.like,
+        );
+        unwrapResult("setMsgEmojiLikes", raw);
+    }
+
+    /**
+     * 语音转文字（fetch_ptt_text）。
+     * 流程：按 msgId 拉消息 → 找 PTT 元素 → translatePtt2Text（异步转写）
+     * → 再拉一次消息读 pttElement.text。
+     */
+    async fetchPttText(msgId: string, target: Peer): Promise<string> {
+        const msgs = await this.fetchMsgsByMsgId(target, [msgId]);
+        const [first] = msgs;
+        if (first === undefined) {
+            throw kernelError("消息不存在", "NOT_FOUND");
+        }
+        const ptt = first.elements.find((el) => el.pttElement !== undefined);
+        if (ptt?.pttElement === undefined) {
+            throw kernelError("消息中不包含语音", "NOT_FOUND");
+        }
+        const raw = await this.service.translatePtt2Text(msgId, target, ptt);
+        unwrapResult("translatePtt2Text", raw);
+        // 转写异步完成：再拉一次拿 text
+        const after = await this.fetchMsgsByMsgId(target, [msgId]);
+        const [afterFirst] = after;
+        if (afterFirst === undefined) {
+            throw kernelError("获取语音转文字结果失败", "UNKNOWN");
+        }
+        const text = afterFirst.elements.find((el) => el.pttElement !== undefined)?.pttElement
+            ?.text;
+        if (text === undefined || text === "") {
+            throw kernelError("获取语音转文字结果失败", "UNKNOWN");
+        }
+        return text;
+    }
+
     /** 标记会话已读。 */
     async markRead(target: Peer): Promise<void> {
         const raw = await this.service.setMsgRead(target);
