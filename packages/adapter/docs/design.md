@@ -339,6 +339,35 @@ adapter onStart：装配传输 → 打开 server/client → 广播 lifecycle ena
 
 **boot.cjs 补协议装配**（loader runtime）：登录成功后动态 import adapter/network 入口（launcher 环境变量 NAPUTO_ADAPTER_ENTRY / NAPUTO_NETWORK_ENTRY）→ 创建 MsgChannel + MsgBridge + MsgApi/GroupApi/FriendApi + EventBroadcaster + NapukettoOneBot11Adapter → start。
 
+### 8.14 P2-14 第五批动作（文件类 + 资料 + 点赞 + 翻译，2026-08-05 设计 + 实现）
+
+**目标**：HANDOVER.md §5.3 第五批中不依赖 OIDB 的部分。kernel 方法面见 kernel design §8.16。**已实现并 pnpm check 全绿（145 文件）+ 全量构建通过。**
+
+**群文件类（8 个，group/）**：
+- `get_group_root_files`：getGroupFileList(groupCode, {sortType, fileCount, startIndex, sortOrder, showOnlinedocFolder}) → files（fileInfo）/ folders（folderInfo）
+- `get_group_files_by_folder`：folder_id → 同上（parent=文件夹）
+- `get_group_file_system_info`：getGroupFileList 的 groupSpaceResult → { file_count, limit_count, used_space, total_space }
+- `create_group_file_folder`：folder_name → createGroupFolder
+- `delete_group_file`：file_id → deleteGroupFile(groupCode, [102], [file_id])
+- `delete_group_folder`：folder_id → deleteGroupFolder
+- `rename_group_file`：file_id/name → renameGroupFile（参数待探测校准）
+- `move_group_file`：file_id/folder → moveGroupFile
+- `trans_group_file`：file_id → transGroupFile
+
+**系统类（4 个，system/）**：
+- `set_self_longnick`：longNick → ProfileApi.setLongNick
+- `set_qq_profile`：nickname/personal_note → setNickName + setLongNick（sex 忽略）
+- `set_qq_avatar`：file → ProfileApi.setHeader（本地路径，URL 先下载再设置）
+- `translate_en2zh`：words → RichMediaApi.translateWords → { words }
+
+**好友类（1 个，friend/）**：`send_like`：user_id → uinToUid → ProfileLikeApi.sendLike(uid, times)
+
+**消息类（2 个，message/）**：`get_image` / `get_record`：message_id 反查 → fetchMsgsByMsgId → 找 PIC/PTT 元素 → { file: 本地路径, url, file_size, file_name }（简化版：返回元素已有路径+URL，不做主动下载/转码）
+
+**deps 扩展**：`richMediaApi` / `profileApi` / `profileLikeApi`；boot.cjs 装配。
+
+**跳过**：get_rkey/ocr_image/闪传/戳一戳（OIDB 或 NodeMiscService）/ get_essence_msg_list（pskey+WebApi）/ upload_group_file / get_group_file_url / get_online_clients。
+
 ### 8.13 P2-13 第四批动作（ticket + 群系统消息 + 已读别名，2026-08-05 设计 + 实现）
 
 **目标**：HANDOVER.md §5.3 第四批中不依赖未探测 service 的部分。kernel 方法面见 kernel design §8.15。**已实现并 pnpm check 全绿（133 文件）+ 全量构建通过。**

@@ -14,7 +14,10 @@ import type {
     GroupNotifyApi,
     MsgApi,
     MsgEventChannel,
+    ProfileApi,
+    ProfileLikeApi,
     RawMessage,
+    RichMediaApi,
     TicketApi,
 } from "@napuketto/kernel";
 import type { EventBroadcaster } from "@napuketto/network";
@@ -54,6 +57,12 @@ export interface OneBot11AdapterOptions {
     groupNotifyApi: GroupNotifyApi;
     /** kernel 票据 API（get_clientkey/get_cookies 用，P2-13）。 */
     ticketApi: TicketApi;
+    /** kernel 富媒体 API（群文件/翻译用，P2-14）。 */
+    richMediaApi: RichMediaApi;
+    /** kernel 资料 API（签名/昵称/头像用，P2-14）。 */
+    profileApi: ProfileApi;
+    /** kernel 点赞 API（send_like 用，P2-14）。 */
+    profileLikeApi: ProfileLikeApi;
     /** 机器人自身 QQ 号（self_id 与私聊自消息判定）。 */
     selfUin: string;
     /** 机器人昵称（get_login_info 用，缺省空）。 */
@@ -131,6 +140,9 @@ export class NapukettoOneBot11Adapter extends BaseProtocolAdapter<OB11Config> {
             groupNotifyApi: opts.groupNotifyApi,
             friendApi: opts.friendApi,
             ticketApi: opts.ticketApi,
+            richMediaApi: opts.richMediaApi,
+            profileApi: opts.profileApi,
+            profileLikeApi: opts.profileLikeApi,
             self: { uin: opts.selfUin, nickname: opts.selfNickname ?? "" },
             system,
         });

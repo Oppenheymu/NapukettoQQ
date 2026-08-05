@@ -154,6 +154,8 @@ export interface NodeIQQNTWrapperSession {
     getTicketService(): unknown;
     getRichMediaService(): unknown;
     getProfileService(): unknown;
+    getProfileLikeService(): unknown;
+    getTipOffService(): unknown;
 }
 
 /** NodeIQQNTStartupSessionWrapper：启动会话实例方法。 */

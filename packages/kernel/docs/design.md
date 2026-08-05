@@ -473,6 +473,22 @@ function resolveWrapperPath(installDir: string, version: string): string;
 
 **跳过（需探测/OIDB/复杂）**：send_like（ProfileLikeService）、get_online_clients（getOnLineDev void）、get_rkey/ocr_image（OIDB 违反路线）、get_image/get_record（RichMediaService）、set_qq_profile/set_qq_avatar（ProfileService）、文件类（RichMediaService）、get_essence_msg_list（需 pskey + WebApi，复杂，列入后续）。
 
+### 8.16 P2-14 第五批 NapCat API 方法面（2026-08-05 设计 + 实现）
+
+**目标**：HANDOVER.md §5.3 第五批中不依赖 OIDB 的部分。签名以 NapCat 公开类型作说明书自研描述（零复制）。**已实现并 pnpm check 全绿（145 文件）。**
+
+**新 service 类型（3 个）**：
+- `types/services/richmedia-service.ts`：NodeIKernelRichMediaService（translateEnWordToZn / getGroupFileList / createGroupFolder / deleteGroupFile / deleteGroupFolder / renameGroupFile / moveGroupFile / transGroupFile / batchGetGroupFileCount + GetFileListParam / GroupFileItemInfo / GroupFolderInfo / GroupSpaceInfo 类型）
+- `types/services/profile-service.ts`：NodeIKernelProfileService（setLongNick / setNickName / setHeader）
+- `types/services/profile-like-service.ts`：NodeIKernelProfileLikeService（setBuddyProfileLike → send_like；session getter `getProfileLikeService` 补进 wrapper.ts）
+
+**新 apis（3 个）**：
+- `apis/richmedia.ts` RichMediaApi：translateWords（translate_en2zh）/ getGroupFileList / getGroupFileSystemInfo（getGroupFileList 的 groupSpaceResult）/ createGroupFolder / deleteGroupFile / deleteGroupFolder / renameGroupFile / moveGroupFile / transGroupFile
+- `apis/profile.ts` ProfileApi：setLongNick（set_self_longnick）/ setNickName / setHeader（set_qq_avatar）
+- `apis/profile-like.ts` ProfileLikeApi：sendLike(uid, count) → setBuddyProfileLike({friendUid, sourceId: 71, doLikeCount, doLikeTollCount: 0})
+
+**跳过**：get_rkey/ocr_image/闪传/戳一戳（OIDB 或 NodeMiscService 未探测）、get_essence_msg_list（pskey+WebApi 复杂）、upload_group_file（FileApi 发送元素组装复杂）、get_group_file_url/get_private_file_url（OIDB）、get_online_clients（getOnLineDev void）。
+
 ### 8.3 P0-1 实现记录（2026-08-04）
 
 `errors.ts` / `paths.ts` / `logger.ts` / `config.ts` 已实现，通过 `pnpm check` + 运行时冒烟测试（26 项）。关键决策：

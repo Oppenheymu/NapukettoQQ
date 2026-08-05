@@ -2,12 +2,21 @@
  * OneBot 11 动作注册表（ADR-013 延伸）
  * 各协议维护自己的 ActionRegistry，由协议 adapter 挂到请求分发。
  */
-import type { FriendApi, GroupApi, GroupNotifyApi, TicketApi } from "@napuketto/kernel";
+import type {
+    FriendApi,
+    GroupApi,
+    GroupNotifyApi,
+    ProfileApi,
+    ProfileLikeApi,
+    RichMediaApi,
+    TicketApi,
+} from "@napuketto/kernel";
 import { ActionRegistry } from "../../core/index.js";
 import { DeleteFriendAction } from "./friend/delete-friend.js";
 import { GetDoubtFriendsAddRequestAction } from "./friend/get-doubt-friends-add-request.js";
 import { GetFriendListAction } from "./friend/get-friend-list.js";
 import { GetFriendsWithCategoryAction } from "./friend/get-friends-with-category.js";
+import { SendLikeAction } from "./friend/send-like.js";
 import { SetDoubtFriendsAddRequestAction } from "./friend/set-doubt-friends-add-request.js";
 import { SetFriendAddRequestAction } from "./friend/set-friend-add-request.js";
 import { SetFriendRemarkAction } from "./friend/set-friend-remark.js";
@@ -19,6 +28,19 @@ import { GetGroupMemberInfoAction } from "./group/get-group-member-info.js";
 import { GetGroupMemberListAction } from "./group/get-group-member-list.js";
 import { GetGroupShutListAction } from "./group/get-group-shut-list.js";
 import { GetGroupSystemMsgAction } from "./group/get-group-system-msg.js";
+import {
+    CreateGroupFileFolderAction,
+    DeleteGroupFileAction,
+    DeleteGroupFolderAction,
+    MoveGroupFileAction,
+    RenameGroupFileAction,
+    TransGroupFileAction,
+} from "./group/group-files-op.js";
+import {
+    GetGroupFileSystemInfoAction,
+    GetGroupFilesByFolderAction,
+    GetGroupRootFilesAction,
+} from "./group/group-files-query.js";
 import { SetEssenceMsgAction } from "./group/set-essence-msg.js";
 import { SetGroupAddRequestAction } from "./group/set-group-add-request.js";
 import { SetGroupAdminAction } from "./group/set-group-admin.js";
@@ -37,6 +59,7 @@ import {
 import { GetForwardMsgAction } from "./message/get-forward-msg.js";
 import { GetFriendMsgHistoryAction } from "./message/get-friend-msg-history.js";
 import { GetGroupMsgHistoryAction } from "./message/get-group-msg-history.js";
+import { GetImageAction, GetRecordAction } from "./message/get-media.js";
 import { GetMsgAction } from "./message/get-msg.js";
 import { MarkMsgAsReadAction } from "./message/mark-msg-as-read.js";
 import {
@@ -67,8 +90,14 @@ import { GetStatusAction } from "./system/get-status.js";
 import { GetVersionInfoAction } from "./system/get-version-info.js";
 import type { ProcessControlDeps } from "./system/process-control.js";
 import { BotExitAction, SetRestartAction } from "./system/process-control.js";
+import {
+    SetQQAvatarAction,
+    SetQQProfileAction,
+    SetSelfLongnickAction,
+} from "./system/profile-actions.js";
 import { SetDiyOnlineStatusAction } from "./system/set-diy-online-status.js";
 import { SetOnlineStatusAction } from "./system/set-online-status.js";
+import { TranslateEn2ZhAction } from "./system/translate-en2zh.js";
 
 /** 动作注册表依赖（各动作所需的 kernel API 由装配方注入）。 */
 export interface Ob11ActionDeps {
@@ -82,6 +111,12 @@ export interface Ob11ActionDeps {
     friendApi: FriendApi;
     /** kernel 票据 API（get_clientkey/get_cookies 用，P2-13）。 */
     ticketApi: TicketApi;
+    /** kernel 富媒体 API（群文件/翻译用，P2-14）。 */
+    richMediaApi: RichMediaApi;
+    /** kernel 资料 API（签名/昵称/头像用，P2-14）。 */
+    profileApi: ProfileApi;
+    /** kernel 点赞 API（send_like 用，P2-14）。 */
+    profileLikeApi: ProfileLikeApi;
     /** 登录身份（get_login_info 用）。 */
     self: { uin: string; nickname: string };
     /** 系统类本地信息（get_version_info / clean_cache / download_file / 进程控制用）。 */
@@ -105,7 +140,43 @@ export function createOb11ActionRegistry(deps: Ob11ActionDeps): ActionRegistry {
     registerSystemActions(registry, deps);
     registerGroupNotifyActions(registry, deps);
     registerTicketActions(registry, deps);
+    registerProfileActions(registry, deps);
+    registerGroupFileActions(registry, deps);
     return registry;
+}
+
+/** 资料/点赞/翻译动作（P2-14）。 */
+function registerProfileActions(registry: ActionRegistry, deps: Ob11ActionDeps): void {
+    registry.register(new SetSelfLongnickAction(deps.profileApi));
+    registry.register(new SetQQProfileAction(deps.profileApi));
+    const avatarDeps: {
+        profileApi: ProfileApi;
+        cacheDir?: string;
+    } = { profileApi: deps.profileApi };
+    if (deps.system.cacheDir !== undefined) {
+        avatarDeps.cacheDir = deps.system.cacheDir;
+    }
+    registry.register(new SetQQAvatarAction(avatarDeps));
+    registry.register(new TranslateEn2ZhAction(deps.richMediaApi));
+    registry.register(
+        new SendLikeAction({
+            profileLikeApi: deps.profileLikeApi,
+            uinToUid: deps.sendMsg.uinToUid,
+        }),
+    );
+}
+
+/** 群文件动作（P2-14）。 */
+function registerGroupFileActions(registry: ActionRegistry, deps: Ob11ActionDeps): void {
+    registry.register(new GetGroupRootFilesAction(deps.richMediaApi));
+    registry.register(new GetGroupFilesByFolderAction(deps.richMediaApi));
+    registry.register(new GetGroupFileSystemInfoAction(deps.richMediaApi));
+    registry.register(new CreateGroupFileFolderAction(deps.richMediaApi));
+    registry.register(new DeleteGroupFileAction(deps.richMediaApi));
+    registry.register(new DeleteGroupFolderAction(deps.richMediaApi));
+    registry.register(new RenameGroupFileAction(deps.richMediaApi));
+    registry.register(new MoveGroupFileAction(deps.richMediaApi));
+    registry.register(new TransGroupFileAction(deps.richMediaApi));
 }
 
 /** 群通知/禁言列表动作（P2-13）。 */
@@ -157,6 +228,8 @@ function registerMsgActions(registry: ActionRegistry, deps: Ob11ActionDeps): voi
     registry.register(new SetMsgEmojiLikeAction(deps.sendMsg));
     registry.register(new FetchPttTextAction(deps.sendMsg));
     registry.register(new SetInputStatusAction(deps.sendMsg));
+    registry.register(new GetImageAction(deps.sendMsg));
+    registry.register(new GetRecordAction(deps.sendMsg));
 }
 
 /** 查询类动作（P2-4）。 */
