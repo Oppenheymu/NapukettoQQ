@@ -28,7 +28,7 @@ export type { PathOptions } from "./paths.js";
 export { DEFAULT_DATA_ROOT_NAME, PathWrapper, resolveDataRoot } from "./paths.js";
 export { probeRuntime } from "./probe.js";
 export { getExistingSession, getMainSession } from "./session-resolver.js";
-export type { RawMessage } from "./types/entities.js";
+export type { Peer, RawMessage } from "./types/entities.js";
 export { ChatType } from "./types/entities.js";
 export type { MsgListener } from "./types/listeners/msg.js";
 export type { CanonicalElement } from "./types/message-element.js";

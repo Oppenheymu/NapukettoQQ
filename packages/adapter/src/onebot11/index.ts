@@ -4,6 +4,7 @@
  */
 
 export { ob11ErrorCodeMap } from "./action/error-map.js";
+export type { Ob11ActionDeps } from "./action/index.js";
 export { createOb11ActionRegistry } from "./action/index.js";
 export type { OneBot11AdapterOptions } from "./adapter.js";
 export { NapukettoOneBot11Adapter } from "./adapter.js";
@@ -39,6 +40,7 @@ export {
     serializeCqParts,
     unescapeCqText,
 } from "./helper/index.js";
+export { MessageUnique } from "./helper/message-unique.js";
 export type {
     CurrentTalkative,
     FriendInfo,

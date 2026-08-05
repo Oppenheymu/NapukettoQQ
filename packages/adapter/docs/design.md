@@ -2,7 +2,7 @@
 
 > 职责：**协议适配器容器**——一个共享的适配器框架（core），外加 OneBot 11 / OneBot 12 / Satori 三套协议语义。
 > 对应 ADR：002 / 003 / 008 / 009 / 013 / 014 / 017
-> 状态：core 框架已实现（BaseAction / ActionRegistry / AdapterRegistry / ProtocolConfig / BaseProtocolAdapter，2026-08-04，见 §8）；onebot11 第一梯队已实现（types / helper/config / action/send_msg，2026-08-04，见 §8.1）；onebot11 helper 翻译层已实现（cqcode/data，2026-08-04，见 §8.2）；onebot11 事件模型已实现（message/notice/request/meta，2026-08-05，见 §8.3）；onebot11 动作骨架扩充已实现（error-map + 6 个查询动作 + types 补全，2026-08-05，见 §8.4）；**onebot11 adapter.ts 已实现（2026-08-05，见 §8.5）——订阅 kernel 消息事件 → OB11 消息事件 → network 广播（消息收链路打通）**；下一步 onebot11 api（请求分发 / 动作执行）与动作接 kernel。**§9 实现顺序 5-6 已同步更新。**
+> 状态：core 框架已实现（BaseAction / ActionRegistry / AdapterRegistry / ProtocolConfig / BaseProtocolAdapter，2026-08-04，见 §8）；onebot11 第一梯队已实现（types / helper/config / action/send_msg，2026-08-04，见 §8.1）；onebot11 helper 翻译层已实现（cqcode/data，2026-08-04，见 §8.2）；onebot11 事件模型已实现（message/notice/request/meta，2026-08-05，见 §8.3）；onebot11 动作骨架扩充已实现（error-map + 6 个查询动作 + types 补全，2026-08-05，见 §8.4）；**onebot11 adapter.ts 已实现（2026-08-05，见 §8.5）——订阅 kernel 消息事件 → OB11 消息事件 → network 广播（消息收链路打通）**；**P2-3 请求分发 + send_msg 真实化 + MessageUnique（2026-08-05，见 §8.6）——收发闭环打通**。**§9 实现顺序 5-6 已同步更新。**
 
 ---
 
@@ -295,3 +295,21 @@ class NapukettoOneBot11Adapter extends BaseProtocolAdapter<OB11Config> {
 **订阅/退订**：onStart 订阅 `Msg/onRecvMsg`（返回 unsubscribe），onStop 退订——协议层生命周期与 kernel 事件解耦。
 
 **请求分发尚未接**：动作注册表 → network onRequest 分发、send_msg 真实调用 kernel apis/msg——下一步（P2-3）。
+
+### 8.6 P2-3 请求分发 + send_msg 真实化 + MessageUnique（2026-08-05）
+
+**MessageUnique（helper/message-unique.ts）**：OneBot `message_id`(int32) ↔ NT `msgId`(雪花字符串) 双向稳定映射。设计：
+
+- 双向 Map + 递增计数器；溢出（>2^31-1）后从头分配已释放槽位（LRU 语义）。
+- `alloc(msgId: string): number`（新消息取 id）、`getMsgId(id: number): string | undefined`、`getMessageId(msgId: string): number | undefined`、`release(msgId)`。
+- 消息事件翻译用 `alloc`（收方向），send_msg 返回用 `getMessageId`。
+
+**send_msg 真实化（action/send-msg.ts）**：注入 `deps: { msgApi: MsgApi }`。
+
+- message 参数：string（CQ 码）→ `cqMessageToCanonical`；segment 数组 → `segmentsToCanonical`。
+- 目标：`group_id` → `Peer{ chatType: GROUP, peerUid: String(group_id) }`（群消息 peerUid=群号，无需 uin→uid）；`user_id` 私聊需 uin→uid（BuddyService 探测后 P2-4 补，先明确 reject）。
+- 返回真实 `message_id`（MessageUnique 映射 NT msgId）。
+
+**请求分发（adapter.ts）**：`handleRequest(req, respond)`——OB11 标准 `{ action, params, echo }` → registry.get → handle/websocketHandle → respond。由装配方挂到 network transport 的 `onRequest`。
+
+**动作注册表依赖注入（action/index.ts）**：`createOb11ActionRegistry(deps)`，SendMsgAction 收 msgApi。

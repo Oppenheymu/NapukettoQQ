@@ -1,18 +1,23 @@
 /**
- * NapukettoOneBot11Adapter：OneBot 11 协议适配器（消息收链路，P2-2）
+ * NapukettoOneBot11Adapter：OneBot 11 协议适配器（P2-3：收发闭环）
  *
- * 职责：订阅 kernel 消息事件通道（MsgBridge 持有）→ RawMessage 翻译成
- * OB11 消息事件 → network 广播。生命周期走 BaseProtocolAdapter 骨架
- * （start 校验配置 → onStart 订阅 → stop 退订）。
+ * - 收链路：订阅 kernel 消息事件通道 → RawMessage 翻译 OB11 消息事件 → network 广播
+ * - 发链路：handleRequest（OB11 标准 { action, params, echo }）→ 动作注册表 → kernel apis
  *
+ * 生命周期走 BaseProtocolAdapter 骨架（start 校验配置 → onStart 订阅 → stop 退订）。
  * 翻译为纯函数（ADR-008）：只读入参（RawMessage），不调 API、不读缓存。
- * 请求分发（动作注册表 → kernel apis）在 P2-3 接入。
  */
 
-import type { MsgEventChannel, RawMessage } from "@napuketto/kernel";
+import type { MsgApi, MsgEventChannel, RawMessage } from "@napuketto/kernel";
 import { ChatType, toCanonicalElements } from "@napuketto/kernel";
 import type { EventBroadcaster } from "@napuketto/network";
-import { BaseProtocolAdapter, type ProtocolConfig } from "../core/index.js";
+import {
+    type ActionRegistry,
+    type ActionResult,
+    BaseProtocolAdapter,
+    type ProtocolConfig,
+} from "../core/index.js";
+import { createOb11ActionRegistry } from "./action/index.js";
 import type {
     OB11GroupMessageEvent,
     OB11MessageEvent,
@@ -21,6 +26,7 @@ import type {
 import type { GroupSender } from "./event/message.js";
 import type { OB11Config } from "./helper/index.js";
 import { canonicalToCqMessage, canonicalToSegments, ob11ConfigSchema } from "./helper/index.js";
+import { MessageUnique } from "./helper/message-unique.js";
 import type { Sender } from "./types/index.js";
 
 /** 毫秒 → 秒（Unix 时间戳）。 */
@@ -34,19 +40,24 @@ export interface OneBot11AdapterOptions {
     broadcaster: EventBroadcaster;
     /** kernel 消息事件通道（消息收链路入口）。 */
     msgChannel: MsgEventChannel;
+    /** kernel 消息 API（send_msg 等动作用）。 */
+    msgApi: MsgApi;
     /** 机器人自身 QQ 号（self_id 与私聊自消息判定）。 */
     selfUin: string;
 }
 
 /** RawMessage → OB11 消息事件（纯函数，ADR-008）。 */
-function toOb11MessageEvent(msg: RawMessage, selfUin: string): OB11MessageEvent {
+function toOb11MessageEvent(
+    msg: RawMessage,
+    selfUin: string,
+    unique: MessageUnique,
+): OB11MessageEvent {
     const elements = toCanonicalElements(msg);
     const segments = canonicalToSegments(elements);
     const time = Math.floor(Number(msg.msgTime) / MS_TO_SEC);
     const selfId = Number(selfUin);
     const userId = Number(msg.senderUin);
-    // TODO(P2-3): MessageUnique——雪花 msgId → int32 稳定映射（当前用 msgSeq 近似）
-    const messageId = Number(msg.msgSeq);
+    const messageId = unique.alloc(msg.msgId);
     const base = {
         time,
         self_id: selfId,
@@ -103,6 +114,8 @@ export class NapukettoOneBot11Adapter extends BaseProtocolAdapter<OB11Config> {
 
     private readonly msgChannel: MsgEventChannel;
     private readonly selfUin: string;
+    private readonly messageUnique = new MessageUnique();
+    private readonly registry: ActionRegistry;
     private unsubscribe: (() => void) | null = null;
 
     constructor(opts: OneBot11AdapterOptions) {
@@ -126,6 +139,9 @@ export class NapukettoOneBot11Adapter extends BaseProtocolAdapter<OB11Config> {
         });
         this.msgChannel = opts.msgChannel;
         this.selfUin = opts.selfUin;
+        this.registry = createOb11ActionRegistry({
+            sendMsg: { msgApi: opts.msgApi, messageUnique: this.messageUnique },
+        });
     }
 
     /** 订阅 kernel 消息事件（幂等）。 */
@@ -134,7 +150,7 @@ export class NapukettoOneBot11Adapter extends BaseProtocolAdapter<OB11Config> {
             return;
         }
         this.unsubscribe = this.msgChannel.on("Msg/onRecvMsg", (msg) => {
-            this.broadcastEvent(toOb11MessageEvent(msg, this.selfUin));
+            this.broadcastEvent(toOb11MessageEvent(msg, this.selfUin, this.messageUnique));
         });
     }
 
@@ -142,5 +158,44 @@ export class NapukettoOneBot11Adapter extends BaseProtocolAdapter<OB11Config> {
     private unsubscribeAll(): void {
         this.unsubscribe?.();
         this.unsubscribe = null;
+    }
+
+    /**
+     * 请求分发（挂到 network transport 的 onRequest）：
+     * OB11 标准请求 { action, params, echo } → 动作注册表 → handle（HTTP）/websocketHandle（WS）。
+     */
+    async handleRequest(req: unknown, respond: (res: unknown) => void): Promise<void> {
+        const parsed = (req ?? {}) as { action?: unknown; params?: unknown; echo?: unknown };
+        const { action: rawAction, params, echo } = parsed;
+        let action = "";
+        if (typeof rawAction === "string") {
+            action = rawAction;
+        }
+        if (action === "") {
+            respond({
+                status: "failed",
+                retcode: 404,
+                data: null,
+                message: "请求缺少 action",
+            });
+            return;
+        }
+        const act = this.registry.get(action);
+        if (act === undefined) {
+            respond({
+                status: "failed",
+                retcode: 404,
+                data: null,
+                message: `未知动作: ${action}`,
+            });
+            return;
+        }
+        let result: ActionResult<unknown>;
+        if (echo === undefined) {
+            result = await act.handle(params);
+        } else {
+            result = await act.websocketHandle(params, echo);
+        }
+        respond(result);
     }
 }

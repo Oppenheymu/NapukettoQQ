@@ -21,3 +21,4 @@ export {
     segmentsToCanonical,
     segmentsToCqMessage,
 } from "./data.js";
+export { MessageUnique } from "./message-unique.js";

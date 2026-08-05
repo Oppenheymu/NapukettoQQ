@@ -9,12 +9,19 @@ import { GetGroupListAction } from "./get-group-list.js";
 import { GetGroupMemberInfoAction } from "./get-group-member-info.js";
 import { GetGroupMemberListAction } from "./get-group-member-list.js";
 import { GetLoginInfoAction } from "./get-login-info.js";
+import type { SendMsgDeps } from "./send-msg.js";
 import { SendMsgAction } from "./send-msg.js";
 
+/** 动作注册表依赖（各动作所需的 kernel API 由装配方注入）。 */
+export interface Ob11ActionDeps {
+    /** kernel 消息 API（send_msg 用）。 */
+    sendMsg: SendMsgDeps;
+}
+
 /** 构建 OB11 动作注册表（所有 OB11 动作在此注册）。 */
-export function createOb11ActionRegistry(): ActionRegistry {
+export function createOb11ActionRegistry(deps: Ob11ActionDeps): ActionRegistry {
     const registry = new ActionRegistry();
-    registry.register(new SendMsgAction());
+    registry.register(new SendMsgAction(deps.sendMsg));
     registry.register(new GetLoginInfoAction());
     registry.register(new GetGroupInfoAction());
     registry.register(new GetGroupListAction());
