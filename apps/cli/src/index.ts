@@ -20,6 +20,16 @@ function collectQq(value: string, prev: string[]): string[] {
     return prev;
 }
 
+/** 启动字符画（NapukettoQQ 品牌标识，内嵌；art 含反引号/反斜杠，用数组逐行转义）。 */
+const BANNER = [
+    "    _   __                  __        __  __        ____  ____ ",
+    "   / | / /___ _____  __  __/ /_____  / /_/ /_____  / __ \\/ __ \\",
+    "  /  |/ / __ `/ __ \\/ / / / //_/ _ \\/ __/ __/ __ \\/ / / / / / /",
+    " / /|  / /_/ / /_/ / /_/ / ,< /  __/ /_/ /_/ /_/ / /_/ / /_/ / ",
+    "/_/ |_/\\__,_/ .___/\\__,_/_/|_|\\___/\\__/\\__/\\____/\\___\\_\\___\\_\\ ",
+    "           /_/                                                 ",
+].join("\n");
+
 /** 统一错误输出。 */
 function reportError(err: unknown): void {
     let message = String(err);
@@ -157,6 +167,8 @@ function registerMainAction(program: Command): void {
 
 /** 入口：注册全部子命令与主命令后解析。 */
 function main(): void {
+    // 启动字符画（每次 cli 启动打印）
+    process.stdout.write(`${BANNER}\n`);
     const program = new Command();
     program
         .name("napuketto")
