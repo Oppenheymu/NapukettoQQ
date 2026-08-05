@@ -22,3 +22,4 @@ export {
     segmentsToCqMessage,
 } from "./data.js";
 export { MessageUnique } from "./message-unique.js";
+export { toOb11GroupInfo, toOb11GroupMemberInfo } from "./translate.js";

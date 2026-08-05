@@ -7,6 +7,8 @@
  * 后续模块（apis / cache / login）按 docs/design.md §9 依次接入。
  */
 
+export { FriendApi } from "./apis/friend.js";
+export { GroupApi } from "./apis/group.js";
 export { MsgApi } from "./apis/index.js";
 export type { ConfigOptions, ConfigSchema } from "./config.js";
 export { ConfigBase } from "./config.js";
@@ -33,6 +35,17 @@ export { ChatType } from "./types/entities.js";
 export type { MsgListener } from "./types/listeners/msg.js";
 export type { CanonicalElement } from "./types/message-element.js";
 export { toCanonicalElements, toSendElements } from "./types/message-element.js";
+export type {
+    BuddyCategory,
+    NodeIKernelBuddyService,
+} from "./types/services/buddy-service.js";
+export type {
+    Group,
+    GroupDetailInfo,
+    GroupMember,
+    NodeIKernelGroupService,
+} from "./types/services/group-service.js";
+export { NTGroupMemberRole } from "./types/services/group-service.js";
 export type {
     GeneralCallResult,
     NodeIKernelMsgService,

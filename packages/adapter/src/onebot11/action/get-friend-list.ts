@@ -1,9 +1,8 @@
 /**
- * get_friend_list 动作：获取好友列表
- *
- * 骨架实现：zod 校验 + 占位调用（P2 接入 kernel apis/friend + 缓存后替换）。
+ * get_friend_list 动作：获取好友列表（P2-4 接 kernel FriendApi）
  */
 
+import type { FriendApi } from "@napuketto/kernel";
 import { z } from "zod";
 import { BaseAction } from "../../core/index.js";
 import type { FriendInfo } from "../types/index.js";
@@ -16,14 +15,30 @@ const getFriendListSchema = z.object({
 
 type GetFriendListPayload = z.infer<typeof getFriendListSchema>;
 
-/** 获取好友列表（P2 接入 kernel 好友缓存后返回真实数据）。 */
+/** 获取好友列表（P2-4 接 kernel apis/friend）。 */
 export class GetFriendListAction extends BaseAction<GetFriendListPayload, FriendInfo[]> {
     readonly name = "get_friend_list";
     readonly schema = getFriendListSchema;
     protected readonly errorCodeMap = ob11ErrorCodeMap;
 
-    protected _handle(_payload: GetFriendListPayload): Promise<FriendInfo[]> {
-        // TODO(P2): 读 kernel 好友缓存（ADR-008：只读消费）
-        return Promise.reject(new Error("get_friend_list 尚未接入 kernel（P2 实现）"));
+    private readonly friendApi: FriendApi;
+
+    constructor(friendApi: FriendApi) {
+        super();
+        this.friendApi = friendApi;
+    }
+
+    protected async _handle(_payload: GetFriendListPayload): Promise<FriendInfo[]> {
+        const friends = await this.friendApi.getFriendList();
+        return friends.map((f) => {
+            const info: FriendInfo = {
+                user_id: Number(f.uin),
+                nickname: f.nickname,
+            };
+            if (f.remark !== "") {
+                info.remark = f.remark;
+            }
+            return info;
+        });
     }
 }

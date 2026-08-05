@@ -30,15 +30,24 @@ type SendMsgPayload = z.infer<typeof sendMsgSchema>;
 export interface SendMsgDeps {
     msgApi: MsgApi;
     messageUnique: MessageUnique;
+    /** uin→uid 转换（私聊发送需要）。 */
+    uinToUid: (uins: string[]) => Promise<Map<string, string>>;
 }
 
-/** 解析目标 Peer（group_id 直通；user_id 私聊待 uin→uid）。 */
-function resolvePeer(payload: SendMsgPayload): Peer {
+/** 解析目标 Peer（group_id 直通；user_id 经 uin→uid）。 */
+async function resolvePeer(payload: SendMsgPayload, deps: SendMsgDeps): Promise<Peer> {
     if (payload.group_id !== undefined) {
         return { chatType: ChatType.GROUP, peerUid: String(payload.group_id) };
     }
-    // TODO(P2-4): BuddyService uin→uid 探测后补私聊发送
-    throw new Error("send_msg 私聊（user_id）暂不支持：uin→uid 映射 P2-4 接入");
+    if (payload.user_id !== undefined) {
+        const uidMap = await deps.uinToUid([String(payload.user_id)]);
+        const uid = uidMap.get(String(payload.user_id));
+        if (uid === undefined) {
+            throw new Error(`用户 ${payload.user_id} 的 uid 解析失败`);
+        }
+        return { chatType: ChatType.C2C, peerUid: uid };
+    }
+    throw new Error("send_msg 需要 group_id 或 user_id");
 }
 
 /** 发送消息（P2-3 接 kernel apis/msg，返回真实 message_id）。 */
@@ -55,10 +64,7 @@ export class SendMsgAction extends BaseAction<SendMsgPayload, { message_id: numb
     }
 
     protected async _handle(payload: SendMsgPayload): Promise<{ message_id: number }> {
-        if (payload.group_id === undefined && payload.user_id === undefined) {
-            throw new Error("send_msg 需要 group_id 或 user_id");
-        }
-        const peer = resolvePeer(payload);
+        const peer = await resolvePeer(payload, this.deps);
         // message: CQ 码字符串 → canonical；segment 数组 → canonical
         let canonical: CanonicalElement[];
         if (Array.isArray(payload.message)) {

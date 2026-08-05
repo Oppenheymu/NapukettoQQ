@@ -313,3 +313,13 @@ class NapukettoOneBot11Adapter extends BaseProtocolAdapter<OB11Config> {
 **请求分发（adapter.ts）**：`handleRequest(req, respond)`——OB11 标准 `{ action, params, echo }` → registry.get → handle/websocketHandle → respond。由装配方挂到 network transport 的 `onRequest`。
 
 **动作注册表依赖注入（action/index.ts）**：`createOb11ActionRegistry(deps)`，SendMsgAction 收 msgApi。
+
+### 8.7 查询动作真实化（2026-08-05，P2-4）
+
+kernel 新增 `apis/group.ts`（GroupApi）与 `apis/friend.ts`（FriendApi），adapter 6 个查询动作从骨架变真实：
+
+- **GroupApi**：getGroupList / getGroupInfo / getGroupMemberList / getGroupMemberInfo / uinToUid / uidToUin（getUidByUins/getUinByUids——uin↔uid 转换，**私聊发送也因此可补**）。
+- **FriendApi**：getFriendList（buddyUids 拍平 + getBuddyNick/getBuddyRemark 补昵称备注）。
+- **翻译模块（helper/translate.ts）**：NT GroupMember → OB11 GroupMemberInfo（role 映射 owner/admin/member，card=cardName，shut_up_timestamp=shutUpTime×1000，join_time/last_sent_time 数值化）；Group → GroupInfo。
+- **动作改造**：GetGroupListAction / GetGroupInfoAction / GetGroupMemberListAction / GetGroupMemberInfoAction / GetFriendListAction 注入 GroupApi/FriendApi；GetLoginInfoAction 注入 self（uin/nickname）。deps 扩展 `{ sendMsg, groupApi, friendApi, self }`。
+- **send_msg 私聊补全**：user_id(uin) → groupApi.uinToUid → Peer{chatType: C2C, peerUid: uid}。

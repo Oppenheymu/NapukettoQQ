@@ -8,7 +8,7 @@
  * 翻译为纯函数（ADR-008）：只读入参（RawMessage），不调 API、不读缓存。
  */
 
-import type { MsgApi, MsgEventChannel, RawMessage } from "@napuketto/kernel";
+import type { FriendApi, GroupApi, MsgApi, MsgEventChannel, RawMessage } from "@napuketto/kernel";
 import { ChatType, toCanonicalElements } from "@napuketto/kernel";
 import type { EventBroadcaster } from "@napuketto/network";
 import {
@@ -42,8 +42,14 @@ export interface OneBot11AdapterOptions {
     msgChannel: MsgEventChannel;
     /** kernel 消息 API（send_msg 等动作用）。 */
     msgApi: MsgApi;
+    /** kernel 群 API（查询动作用）。 */
+    groupApi: GroupApi;
+    /** kernel 好友 API（get_friend_list 用）。 */
+    friendApi: FriendApi;
     /** 机器人自身 QQ 号（self_id 与私聊自消息判定）。 */
     selfUin: string;
+    /** 机器人昵称（get_login_info 用，缺省空）。 */
+    selfNickname?: string;
 }
 
 /** RawMessage → OB11 消息事件（纯函数，ADR-008）。 */
@@ -140,7 +146,14 @@ export class NapukettoOneBot11Adapter extends BaseProtocolAdapter<OB11Config> {
         this.msgChannel = opts.msgChannel;
         this.selfUin = opts.selfUin;
         this.registry = createOb11ActionRegistry({
-            sendMsg: { msgApi: opts.msgApi, messageUnique: this.messageUnique },
+            sendMsg: {
+                msgApi: opts.msgApi,
+                messageUnique: this.messageUnique,
+                uinToUid: (uins) => opts.groupApi.uinToUid(uins),
+            },
+            groupApi: opts.groupApi,
+            friendApi: opts.friendApi,
+            self: { uin: opts.selfUin, nickname: opts.selfNickname ?? "" },
         });
     }
 

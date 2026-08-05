@@ -1,9 +1,8 @@
 /**
- * get_group_info 动作：获取群信息
- *
- * 骨架实现：zod 校验 + 占位调用（P2 接入 kernel apis/group 后替换）。
+ * get_group_info 动作：获取群信息（P2-4 接 kernel GroupApi）
  */
 
+import type { GroupApi } from "@napuketto/kernel";
 import { z } from "zod";
 import { BaseAction } from "../../core/index.js";
 import type { GroupInfo } from "../types/index.js";
@@ -17,14 +16,26 @@ const getGroupInfoSchema = z.object({
 
 type GetGroupInfoPayload = z.infer<typeof getGroupInfoSchema>;
 
-/** 获取群信息（P2 接入 kernel apis/group 后返回真实数据）。 */
+/** 获取群信息（P2-4 接 kernel apis/group）。 */
 export class GetGroupInfoAction extends BaseAction<GetGroupInfoPayload, GroupInfo> {
     readonly name = "get_group_info";
     readonly schema = getGroupInfoSchema;
     protected readonly errorCodeMap = ob11ErrorCodeMap;
 
-    protected _handle(_payload: GetGroupInfoPayload): Promise<GroupInfo> {
-        // TODO(P2): 读 kernel 群缓存，缺则调 apis/group.getGroupInfo
-        return Promise.reject(new Error("get_group_info 尚未接入 kernel（P2 实现）"));
+    private readonly groupApi: GroupApi;
+
+    constructor(groupApi: GroupApi) {
+        super();
+        this.groupApi = groupApi;
+    }
+
+    protected async _handle(payload: GetGroupInfoPayload): Promise<GroupInfo> {
+        const detail = await this.groupApi.getGroupInfo(String(payload.group_id));
+        return {
+            group_id: Number(detail.groupCode),
+            group_name: detail.groupName,
+            member_count: detail.memberNum,
+            max_member_count: detail.maxMemberNum,
+        };
     }
 }
