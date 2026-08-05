@@ -4,7 +4,7 @@
  */
 
 export { ob11ErrorCodeMap } from "./action/error-map.js";
-export type { AtAllRemainInfo } from "./action/get-group-at-all-remain.js";
+export type { AtAllRemainInfo } from "./action/group/get-group-at-all-remain.js";
 export type { Ob11ActionDeps } from "./action/index.js";
 export { createOb11ActionRegistry } from "./action/index.js";
 export type { OneBot11AdapterOptions } from "./adapter.js";

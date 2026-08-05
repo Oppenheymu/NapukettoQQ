@@ -4,65 +4,71 @@
  */
 import type { FriendApi, GroupApi, GroupNotifyApi, TicketApi } from "@napuketto/kernel";
 import { ActionRegistry } from "../../core/index.js";
-import { CanSendImageAction } from "./can-send-image.js";
-import { CanSendRecordAction } from "./can-send-record.js";
-import type { CleanCacheDeps } from "./clean-cache.js";
-import { CleanCacheAction } from "./clean-cache.js";
-import { DeleteEssenceMsgAction } from "./delete-essence-msg.js";
-import { DeleteFriendAction } from "./delete-friend.js";
-import { DeleteMsgAction } from "./delete-msg.js";
-import type { DownloadFileDeps } from "./download-file.js";
-import { DownloadFileAction } from "./download-file.js";
-import { FetchPttTextAction } from "./fetch-ptt-text.js";
-import { ForwardFriendSingleMsgAction, ForwardGroupSingleMsgAction } from "./forward-single-msg.js";
-import { GetClientkeyAction } from "./get-clientkey.js";
-import { GetCookiesAction } from "./get-cookies.js";
-import { GetDoubtFriendsAddRequestAction } from "./get-doubt-friends-add-request.js";
-import { GetForwardMsgAction } from "./get-forward-msg.js";
-import { GetFriendListAction } from "./get-friend-list.js";
-import { GetFriendMsgHistoryAction } from "./get-friend-msg-history.js";
-import { GetFriendsWithCategoryAction } from "./get-friends-with-category.js";
-import { GetGroupAtAllRemainAction } from "./get-group-at-all-remain.js";
-import { GetGroupInfoAction } from "./get-group-info.js";
-import { GetGroupListAction } from "./get-group-list.js";
-import { GetGroupMemberInfoAction } from "./get-group-member-info.js";
-import { GetGroupMemberListAction } from "./get-group-member-list.js";
-import { GetGroupMsgHistoryAction } from "./get-group-msg-history.js";
-import { GetGroupShutListAction } from "./get-group-shut-list.js";
-import { GetGroupSystemMsgAction } from "./get-group-system-msg.js";
-import { GetLoginInfoAction } from "./get-login-info.js";
-import { GetMsgAction } from "./get-msg.js";
-import { GetRobotUinRangeAction } from "./get-robot-uin-range.js";
-import { GetStatusAction } from "./get-status.js";
-import { GetVersionInfoAction } from "./get-version-info.js";
-import { MarkMsgAsReadAction } from "./mark-msg-as-read.js";
+import { DeleteFriendAction } from "./friend/delete-friend.js";
+import { GetDoubtFriendsAddRequestAction } from "./friend/get-doubt-friends-add-request.js";
+import { GetFriendListAction } from "./friend/get-friend-list.js";
+import { GetFriendsWithCategoryAction } from "./friend/get-friends-with-category.js";
+import { SetDoubtFriendsAddRequestAction } from "./friend/set-doubt-friends-add-request.js";
+import { SetFriendAddRequestAction } from "./friend/set-friend-add-request.js";
+import { SetFriendRemarkAction } from "./friend/set-friend-remark.js";
+import { DeleteEssenceMsgAction } from "./group/delete-essence-msg.js";
+import { GetGroupAtAllRemainAction } from "./group/get-group-at-all-remain.js";
+import { GetGroupInfoAction } from "./group/get-group-info.js";
+import { GetGroupListAction } from "./group/get-group-list.js";
+import { GetGroupMemberInfoAction } from "./group/get-group-member-info.js";
+import { GetGroupMemberListAction } from "./group/get-group-member-list.js";
+import { GetGroupShutListAction } from "./group/get-group-shut-list.js";
+import { GetGroupSystemMsgAction } from "./group/get-group-system-msg.js";
+import { SetEssenceMsgAction } from "./group/set-essence-msg.js";
+import { SetGroupAddRequestAction } from "./group/set-group-add-request.js";
+import { SetGroupAdminAction } from "./group/set-group-admin.js";
+import { SetGroupBanAction } from "./group/set-group-ban.js";
+import { SetGroupCardAction } from "./group/set-group-card.js";
+import { SetGroupKickAction } from "./group/set-group-kick.js";
+import { SetGroupLeaveAction } from "./group/set-group-leave.js";
+import { SetGroupNameAction } from "./group/set-group-name.js";
+import { SetGroupWholeBanAction } from "./group/set-group-whole-ban.js";
+import { DeleteMsgAction } from "./message/delete-msg.js";
+import { FetchPttTextAction } from "./message/fetch-ptt-text.js";
+import {
+    ForwardFriendSingleMsgAction,
+    ForwardGroupSingleMsgAction,
+} from "./message/forward-single-msg.js";
+import { GetForwardMsgAction } from "./message/get-forward-msg.js";
+import { GetFriendMsgHistoryAction } from "./message/get-friend-msg-history.js";
+import { GetGroupMsgHistoryAction } from "./message/get-group-msg-history.js";
+import { GetMsgAction } from "./message/get-msg.js";
+import { MarkMsgAsReadAction } from "./message/mark-msg-as-read.js";
 import {
     MarkGroupMsgAsReadAction,
     MarkPrivateMsgAsReadAction,
-} from "./mark-msg-as-read-aliases.js";
-import type { ProcessControlDeps } from "./process-control.js";
-import { BotExitAction, SetRestartAction } from "./process-control.js";
-import { SendGroupForwardMsgAction, SendPrivateForwardMsgAction } from "./send-forward-msg.js";
-import { SendGroupMsgAction } from "./send-group-msg.js";
-import type { SendMsgDeps } from "./send-msg.js";
-import { SendMsgAction } from "./send-msg.js";
-import { SendPrivateMsgAction } from "./send-private-msg.js";
-import { SetDiyOnlineStatusAction } from "./set-diy-online-status.js";
-import { SetDoubtFriendsAddRequestAction } from "./set-doubt-friends-add-request.js";
-import { SetEssenceMsgAction } from "./set-essence-msg.js";
-import { SetFriendAddRequestAction } from "./set-friend-add-request.js";
-import { SetFriendRemarkAction } from "./set-friend-remark.js";
-import { SetGroupAddRequestAction } from "./set-group-add-request.js";
-import { SetGroupAdminAction } from "./set-group-admin.js";
-import { SetGroupBanAction } from "./set-group-ban.js";
-import { SetGroupCardAction } from "./set-group-card.js";
-import { SetGroupKickAction } from "./set-group-kick.js";
-import { SetGroupLeaveAction } from "./set-group-leave.js";
-import { SetGroupNameAction } from "./set-group-name.js";
-import { SetGroupWholeBanAction } from "./set-group-whole-ban.js";
-import { SetInputStatusAction } from "./set-input-status.js";
-import { SetMsgEmojiLikeAction } from "./set-msg-emoji-like.js";
-import { SetOnlineStatusAction } from "./set-online-status.js";
+} from "./message/mark-msg-as-read-aliases.js";
+import {
+    SendGroupForwardMsgAction,
+    SendPrivateForwardMsgAction,
+} from "./message/send-forward-msg.js";
+import { SendGroupMsgAction } from "./message/send-group-msg.js";
+import type { SendMsgDeps } from "./message/send-msg.js";
+import { SendMsgAction } from "./message/send-msg.js";
+import { SendPrivateMsgAction } from "./message/send-private-msg.js";
+import { SetInputStatusAction } from "./message/set-input-status.js";
+import { SetMsgEmojiLikeAction } from "./message/set-msg-emoji-like.js";
+import { CanSendImageAction } from "./system/can-send-image.js";
+import { CanSendRecordAction } from "./system/can-send-record.js";
+import type { CleanCacheDeps } from "./system/clean-cache.js";
+import { CleanCacheAction } from "./system/clean-cache.js";
+import type { DownloadFileDeps } from "./system/download-file.js";
+import { DownloadFileAction } from "./system/download-file.js";
+import { GetClientkeyAction } from "./system/get-clientkey.js";
+import { GetCookiesAction } from "./system/get-cookies.js";
+import { GetLoginInfoAction } from "./system/get-login-info.js";
+import { GetRobotUinRangeAction } from "./system/get-robot-uin-range.js";
+import { GetStatusAction } from "./system/get-status.js";
+import { GetVersionInfoAction } from "./system/get-version-info.js";
+import type { ProcessControlDeps } from "./system/process-control.js";
+import { BotExitAction, SetRestartAction } from "./system/process-control.js";
+import { SetDiyOnlineStatusAction } from "./system/set-diy-online-status.js";
+import { SetOnlineStatusAction } from "./system/set-online-status.js";
 
 /** 动作注册表依赖（各动作所需的 kernel API 由装配方注入）。 */
 export interface Ob11ActionDeps {
