@@ -171,10 +171,20 @@ function bootstrap() {
                         );
                         let loginResult = null;
                         if (typeof core.login === "function") {
-                            loginResult = await core.login({
-                                appid: "537237765",
-                                initTimeoutMs: 20000,
-                            });
+                            try {
+                                loginResult = await core.login({
+                                    appid: "537237765",
+                                    initTimeoutMs: 20000,
+                                });
+                            } catch (loginErr) {
+                                // 快速登录失败 → QR 回退（二维码写缓存目录，boot 日志提示）
+                                log(`bootstrap: 快速登录失败（${loginErr?.message ?? loginErr}），尝试 QR 登录`);
+                                loginResult = await core.login({
+                                    appid: "537237765",
+                                    initTimeoutMs: 20000,
+                                    qrFallback: true,
+                                });
+                            }
                             log(
                                 `bootstrap: login OK, uin=${loginResult.uin}, uid=${loginResult.uid}`,
                             );

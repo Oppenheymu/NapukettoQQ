@@ -405,7 +405,7 @@ function resolveWrapperPath(installDir: string, version: string): string;
 4. ✅ `wrapper-loader.ts` + `wrapper-version.ts`（2026-08-05，koffi + DLL 复制方案，真实环境验证 session 创建）
 5. ✅ 类型层：runtime 探测 + NapCat shell 模式参考确认（wrapper 类型 + service 契约，见 §8.5/§8.7；getService vtable 逆向**不再需要**——NAPI 范式下全部走普通 JS 对象调用）
 6. ✅ `core.ts` + `context.ts` 装配（2026-08-05，见 §8.8）
-7. `login.ts`（QR 状态机 + selfInfo；快速登录已可用，见 lifecycle.quickLogin）
+7. ✅ `login.ts`（QR 状态机 + selfInfo + core.login QR 回退，2026-08-05，见 §8.11）
 8. ⏳ `apis/`（**msg 完成**（sendMessage/recallMessage/fetchMessages/markRead，2026-08-05，见 §8.9）；group/friend/user/file/system 待做）
 9. `cache/`（随 apis 一起演进）
 
