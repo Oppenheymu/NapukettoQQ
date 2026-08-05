@@ -36,3 +36,6 @@ pnpm-debug.log*
 
 # probe scripts (研究工具，结论见 kernel/docs/design.md)
 packages/kernel/scripts/probe/
+
+# smoke-test 本地产物
+packages/loader/.smoke-cfg/

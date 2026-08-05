@@ -2,6 +2,7 @@
 
 > 职责：**把 Napuketto 业务代码引导进 QQ 定制版 Electron 主进程**，并从 `wrapper.node` 的 NAPI 注册中截获合法的 `module.exports`。这是 NapukettoQQ 的唯一 C++ 组件，但**只做注入与引导，绝不裸调 C++ ABI**。
 > 对应路线：ADR 决策「路线 A（进程注入 Loader），排除路线 B（改 QQ package.json）」。
+> **状态：2026-08-05 全链路实测打通**——注入 → IAT hook → boot JS → 截获 89 exports → startNapuketto OK（见 §5.1/§5.2）。
 
 ---
 
@@ -80,11 +81,36 @@ apps/cli 启动
 
 ## 5. 待实测项（C++ 工具链就绪后逐项验证）
 
-- [ ] hookdll 能否拿到 QQ.exe 主进程句柄并注入成功
-- [ ] `napi_module_register` 注册自研模块后如何触发 require（uv_dlopen hook / GetProcAddress hook / 轮询方案）
-- [ ] boot.cjs 截获 wrapper.node exports 的时机与完整性
-- [ ] engine.initWithDeskTopConfig 在 NAPI 下的真实调用（JS 对象 → napi 自动转换）
-- [ ] session.init 4 参（config / depends / dispatcher / listener 均为 TS 对象）
+- [x] hookdll 能否拿到 QQ.exe 主进程句柄并注入成功（**✅ v7 实测通过**）
+- [x] `napi_module_register` 注册自研模块后如何触发 require（**✅ v7 改为 IAT hook，实测触发**）
+- [x] boot.cjs 截获 wrapper.node exports 的时机与完整性（**✅ 实测截获 89 个 exports**）
+- [x] engine.initWithDeskTopConfig 在 NAPI 下的真实调用（**✅ startNapuketto OK, engine=object**）
+- [x] session.init 4 参（config / depends / dispatcher / listener 均为 TS 对象）（**✅ session=true**）
+- [ ] 登录握手（ticket 获取 + session.init 真实凭据）
+- [ ] service 获取（getMsgService 等）与事件回调
+
+### 5.1 注入方案演进（2026-08-05 实测，最终 v7 = IAT hook）
+
+**关键事实**：QQ.exe 的 `napi_*` 导出是 **delay-load stub**（`cmp [slot],0; jz helper; jmp [slot]`），slot 是 IAT 项，存真实函数指针，首次调用前为 0。inline hook stub 不可行（含分支搬移会崩）。
+
+**方案演进**：
+- v1 注册 napi_module 无触发机制 → 死路
+- v2 hook `napi_run_script` 未被调用（QQ 9.9.31 字节码化不走它）
+- v3 5 个 hook 自递归 → trampoline RIP 相对寻址崩（栈溢出 0xc00000fd）
+- v4 修复签名但 boot 拿不到 exports
+- v5 hook `napi_module_register` 但 stub 搬移崩
+- v6 `FF 25` 解析成 slot 地址（应读值）→ 全 00 无效
+- **v7（最终）**：**IAT hook**——改写 IAT slot 存的函数指针（不碰代码段 → 不触发 CFG）。slot 未初始化时登记后台轮询，delay-load 填充后改写。实测：4 hook 全装 → `napi_set_named_property` 触发 → boot JS 执行 → 截获 89 exports → kernel startNapuketto OK。
+
+**boot.cjs 截获机制（最终）**：hook `process.dlopen` + 轮询，实测 `process.dlopen(m, wrapperPath)` 在 QQ preload 已注册后**能命中 module 缓存**拿到 exports（89 个）——无需 C++ 侧手动生成。
+
+### 5.2 成功日志存档（2026-08-05）
+
+```
+hookdll.log: 4 IAT hook 安装 → napi_set_named_property -> env → boot JS 已执行, status=0
+boot.log: CAPTURED wrapper.node exports (89) → bootstrap: startNapuketto OK, engine=object, session=true
+QQ 6 进程全部 Responding（无崩溃无卡死）
+```
 
 ## 6. 依赖方向更新（写进根 AGENTS.md 第 2 条）
 

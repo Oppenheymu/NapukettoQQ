@@ -104,19 +104,14 @@ export function createWrapper(
     exports: WrapperNodeApi,
     versionInfo: QQVersionContext,
 ): WrapperContext {
-    if (!exports || typeof exports.NodeIQQNTWrapperEngine !== "object") {
+    const engineCtor = exports?.NodeIQQNTWrapperEngine;
+    if (!engineCtor || typeof engineCtor.get !== "function") {
         throw kernelError(
             "wrapper.node exports 无效（缺少 NodeIQQNTWrapperEngine）",
             "INVALID_PARAM",
         );
     }
-    if (typeof exports.NodeIQQNTWrapperEngine.get !== "function") {
-        throw kernelError(
-            "NodeIQQNTWrapperEngine.get 缺失（wrapper.node 未注册完整）",
-            "INVALID_PARAM",
-        );
-    }
-    const engine = exports.NodeIQQNTWrapperEngine.get();
+    const engine = engineCtor.get();
     if (!engine || typeof engine.initWithDeskTopConfig !== "function") {
         throw kernelError("NodeIQQNTWrapperEngine.get() 返回对象无效", "INVALID_PARAM");
     }
