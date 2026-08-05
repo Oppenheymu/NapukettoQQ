@@ -230,6 +230,25 @@ function bootstrap() {
                         );
                         let loginResult = null;
                         if (typeof core.login === "function") {
+                            // 打印可用快速登录账号（对齐 NapCat 启动横幅）
+                            try {
+                                const accounts = await kernel.listLoginAccounts(ctx);
+                                if (accounts.length > 0) {
+                                    log(`可用于快速登录 of QQ（${accounts.length} 个）：`);
+                                    accounts.forEach((acct, idx) => {
+                                        const nick = acct.nickName || acct.uin;
+                                        const marker = acct.isQuickLogin ? "（默认）" : "";
+                                        log(`${idx + 1}. ${acct.uin} ${nick}${marker}`);
+                                    });
+                                    const target =
+                                        accounts.find((a) => a.isQuickLogin) ?? accounts[0];
+                                    log(`正在快速登录 ${target.uin}`);
+                                } else {
+                                    log("没有历史登录账号，将使用二维码登录方式");
+                                }
+                            } catch (listErr) {
+                                log(`bootstrap: 获取登录列表失败: ${listErr?.message ?? listErr}`);
+                            }
                             try {
                                 loginResult = await core.login({
                                     appid: "537237765",
@@ -245,7 +264,7 @@ function bootstrap() {
                                 });
                             }
                             log(
-                                `bootstrap: login OK, uin=${loginResult.uin}, uid=${loginResult.uid}`,
+                                `bootstrap: 登录成功 uin=${loginResult.uin} uid=${loginResult.uid} nick=${loginResult.nick}`,
                             );
                         } else {
                             log("bootstrap: kernel core missing login fn");

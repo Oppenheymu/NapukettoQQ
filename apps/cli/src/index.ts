@@ -125,8 +125,8 @@ async function runSingleAccountBranch(
     await runSingleAccount(bootOptions);
 }
 
-/** 无 -q 时：读全局配置 accounts → 有则 supervisor 拉起；无则打印帮助。 */
-async function autoSupervisorOrHelp(program: Command, opts: { dataDir?: string }): Promise<void> {
+/** 无 -q 时：读全局配置 accounts → 有则 supervisor 拉起；无则单账号启动（boot.cjs 自动快速登录/QR）。 */
+async function autoStart(opts: { dataDir?: string }): Promise<void> {
     try {
         const dataRoot = resolveDataRoot(opts.dataDir);
         const config = await loadCliConfig(dataRoot);
@@ -135,17 +135,22 @@ async function autoSupervisorOrHelp(program: Command, opts: { dataDir?: string }
             return;
         }
     } catch {
-        // 配置读取失败忽略，走帮助
+        // 配置读取失败忽略，直接单账号启动
     }
-    program.help();
+    const bootOptions: { dataDir?: string } = {};
+    if (opts.dataDir !== undefined) {
+        bootOptions.dataDir = opts.dataDir;
+    }
+    process.stdout.write("[napuketto] 未指定 -q，自动快速登录（无历史账号则二维码登录）\n");
+    await runSingleAccount(bootOptions);
 }
 
-/** 注册主命令 action（-q 单账号 / 多 -q supervisor / 无 -q 自动读配置）。 */
+/** 注册主命令 action（-q 单账号 / 多 -q supervisor / 无 -q 自动读配置或单账号启动）。 */
 function registerMainAction(program: Command): void {
     program.action(async (opts: { qq?: string[]; dataDir?: string; qqPath?: string }) => {
         const qqs = opts.qq ?? [];
         if (qqs.length === 0) {
-            await autoSupervisorOrHelp(program, opts);
+            await autoStart(opts);
             return;
         }
         try {

@@ -52,20 +52,36 @@ export interface LoginResult {
     nick: string;
 }
 
+/** 登录列表项（getLoginList 返回，说明书参考）。 */
+export interface LoginAccountInfo {
+    uin: string;
+    uid?: string;
+    nickName?: string;
+    isQuickLogin?: boolean;
+}
+
+/** 登录服务形状（getLoginList / quickLoginWithUin，自研描述）。 */
+type LoginServiceShape = {
+    getLoginList(): Promise<{ result: number; LocalLoginInfoList: LoginAccountInfo[] }>;
+    quickLoginWithUin(uin: string): Promise<{ result: string; loginErrorInfo: { errMsg: string } }>;
+};
+
+/** 列出历史登录账号（boot.cjs 启动横幅用，对齐 NapCat「可用快速登录 of QQ」）。 */
+export async function listLoginAccounts(ctx: WrapperContext): Promise<LoginAccountInfo[]> {
+    const raw = ctx.loginService as unknown as LoginServiceShape | null;
+    if (raw === null) {
+        throw kernelError("loginService 无效（缺 getLoginList）", "INVALID_STATE");
+    }
+    const list = await raw.getLoginList();
+    return list.LocalLoginInfoList;
+}
+
 /** 快速登录：遍历历史登录列表尝试。 */
 export async function quickLogin(
     ctx: WrapperContext,
     opts: { uin?: string; timeoutMs?: number },
 ): Promise<LoginResult> {
-    const raw = ctx.loginService as unknown as {
-        getLoginList(): Promise<{
-            result: number;
-            LocalLoginInfoList: { uin: string; uid?: string; isQuickLogin?: boolean }[];
-        }>;
-        quickLoginWithUin(
-            uin: string,
-        ): Promise<{ result: string; loginErrorInfo: { errMsg: string } }>;
-    } | null;
+    const raw = ctx.loginService as unknown as LoginServiceShape | null;
     if (raw === null) {
         throw kernelError("loginService 无效（缺 getLoginList）", "INVALID_STATE");
     }
@@ -96,7 +112,7 @@ export async function quickLogin(
     return {
         uin: target.uin,
         uid: target.uid ?? "",
-        nick: "",
+        nick: target.nickName ?? "",
     };
 }
 

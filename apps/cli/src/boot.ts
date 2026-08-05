@@ -6,9 +6,9 @@
  *
  * 不写业务逻辑：kernel 装配 + 登录 + 协议装配全部在 QQ 主进程内的 boot.cjs 完成。
  */
-import { createRequire } from "node:module";
 import path from "node:path";
 import process from "node:process";
+import { fileURLToPath } from "node:url";
 import { resolveDataRoot } from "@napuketto/kernel";
 import { launchQqWithLoader, type QqInstallInfo, resolveQqInstall } from "@napuketto/loader";
 
@@ -22,10 +22,10 @@ export interface BootOptions {
     qqPath?: string;
 }
 
-/** 解析 workspace 包的 dist 入口（cli 依赖 kernel/adapter/network/loader）。 */
-function packageEntry(pkg: string): string {
-    const require = createRequire(import.meta.url);
-    return require.resolve(pkg);
+/** 解析 workspace 包的 dist 入口（ESM 解析：包是 ESM-only，exports 无 require 条件）。 */
+async function packageEntry(pkg: string): Promise<string> {
+    const url = await import.meta.resolve(pkg);
+    return fileURLToPath(url);
 }
 
 /** 启动单个 QQ 账号（注入 + 常驻）。 */
@@ -34,9 +34,9 @@ export async function runSingleAccount(opts: BootOptions = {}): Promise<void> {
     const qq: QqInstallInfo = resolveQqInstall(opts.qqPath);
     const cfgDir = path.join(dataRoot, opts.qq ?? "default");
 
-    const kernelEntry = packageEntry("@napuketto/kernel");
-    const adapterEntry = packageEntry("@napuketto/adapter");
-    const networkEntry = packageEntry("@napuketto/network");
+    const kernelEntry = await packageEntry("@napuketto/kernel");
+    const adapterEntry = await packageEntry("@napuketto/adapter");
+    const networkEntry = await packageEntry("@napuketto/network");
 
     process.stdout.write(
         `[napuketto] QQ: ${qq.version} (${qq.qqPath})\n` +
