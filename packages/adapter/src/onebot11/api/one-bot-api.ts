@@ -11,6 +11,7 @@
 import type {
     FriendApi,
     GroupApi,
+    GroupCache,
     GroupNotifyApi,
     MsgApi,
     ProfileApi,
@@ -50,6 +51,8 @@ export interface OneBotApiOptions {
     self: { uin: string; nickname: string };
     /** 系统类本地信息。 */
     system: OneBotSystemOptions;
+    /** 群/成员缓存（ADR-008，读缓存动作用；未装配时动作直查 api）。 */
+    groupCache?: GroupCache;
 }
 
 /**
@@ -75,6 +78,8 @@ export class OneBotApi {
     readonly profileLikeApi: ProfileLikeApi;
     /** kernel 群空间 web API（精华/荣誉用）。 */
     readonly webApi: WebApi;
+    /** 群/成员缓存（ADR-008；翻译层只读消费，缺失惰性回填）。 */
+    readonly groupCache: GroupCache | undefined;
     /** OB11 message_id ↔ NT msgId 双向映射（收链路与动作共用同一映射空间）。 */
     readonly messageUnique: MessageUnique;
     /** 登录身份（get_login_info 用）。 */
@@ -102,6 +107,7 @@ export class OneBotApi {
         this.profileApi = opts.profileApi;
         this.profileLikeApi = opts.profileLikeApi;
         this.webApi = opts.webApi;
+        this.groupCache = opts.groupCache;
         this.messageUnique = new MessageUnique();
         this.self = opts.self;
         this.selfUin = opts.self.uin;

@@ -60,6 +60,12 @@ async function startProtocols(kernel, ctx, loginResult, logger) {
         const friendApi = new kernel.FriendApi(session, {
             uidToUin: (uids) => groupApi.uidToUin(uids),
         });
+        // 群事件通道 + 桥 + 群缓存（ADR-008：事件主动维护 + 查询惰性回填）
+        const groupChannel = new kernel.NTEventChannel("Group");
+        const groupBridge = new kernel.GroupBridge(session, groupChannel);
+        groupBridge.register();
+        const groupCache = new kernel.GroupCache({ channel: groupChannel, groupApi });
+        groupCache.register();
         const groupNotifyApi = new kernel.GroupNotifyApi(session);
         const ticketApi = new kernel.TicketApi(session);
         const richMediaApi = new kernel.RichMediaApi(session);
@@ -113,6 +119,8 @@ async function startProtocols(kernel, ctx, loginResult, logger) {
                     process.exit(0);
                 },
             },
+            // P2-17：群/成员缓存（ADR-008，翻译层只读消费）
+            groupCache,
         });
         await ob11.start();
         logger("bootstrap: onebot11 adapter started");

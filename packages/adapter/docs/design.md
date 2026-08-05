@@ -2,7 +2,7 @@
 
 > 职责：**协议适配器容器**——一个共享的适配器框架（core），外加 OneBot 11 / OneBot 12 / Satori 三套协议语义。
 > 对应 ADR：002 / 003 / 008 / 009 / 013 / 014 / 017
-> 状态：core 框架已实现（BaseAction / ActionRegistry / AdapterRegistry / ProtocolConfig / BaseProtocolAdapter，2026-08-04，见 §8）；onebot11 第一梯队已实现（types / helper/config / action/send_msg，2026-08-04，见 §8.1）；onebot11 helper 翻译层已实现（cqcode/data，2026-08-04，见 §8.2）；onebot11 事件模型已实现（message/notice/request/meta，2026-08-05，见 §8.3）；onebot11 动作骨架扩充已实现（error-map + 6 个查询动作 + types 补全，2026-08-05，见 §8.4）；**onebot11 adapter.ts 已实现（2026-08-05，见 §8.5）——订阅 kernel 消息事件 → OB11 消息事件 → network 广播（消息收链路打通）**；**P2-3 请求分发 + send_msg 真实化 + MessageUnique（2026-08-05，见 §8.6）——收发闭环打通**；**P2-4 查询动作真实化（2026-08-05，见 §8.7）——apis/group + apis/friend + 6 查询动作接 kernel**；**P2-5 传输接入（2026-08-05，见 §8.8）——HTTP/WS server+client + 鉴权 + 心跳 meta 事件**；**P2-6 cli 启动编排（2026-08-05，见 §8.9）——boot.cjs 补协议装配 + cli 参数解析拉起 QQ**。**P2-16 api/ 聚合层（2026-08-05，见 §8.16）——OneBotApi 单类聚合 9 个 kernel apis + messageUnique + self/system，动作只依赖一个聚合对象（基础设施第一项）**。**§9 实现顺序 5-6 已同步更新。**
+> 状态：core 框架已实现（BaseAction / ActionRegistry / AdapterRegistry / ProtocolConfig / BaseProtocolAdapter，2026-08-04，见 §8）；onebot11 第一梯队已实现（types / helper/config / action/send_msg，2026-08-04，见 §8.1）；onebot11 helper 翻译层已实现（cqcode/data，2026-08-04，见 §8.2）；onebot11 事件模型已实现（message/notice/request/meta，2026-08-05，见 §8.3）；onebot11 动作骨架扩充已实现（error-map + 6 个查询动作 + types 补全，2026-08-05，见 §8.4）；**onebot11 adapter.ts 已实现（2026-08-05，见 §8.5）——订阅 kernel 消息事件 → OB11 消息事件 → network 广播（消息收链路打通）**；**P2-3 请求分发 + send_msg 真实化 + MessageUnique（2026-08-05，见 §8.6）——收发闭环打通**；**P2-4 查询动作真实化（2026-08-05，见 §8.7）——apis/group + apis/friend + 6 查询动作接 kernel**；**P2-5 传输接入（2026-08-05，见 §8.8）——HTTP/WS server+client + 鉴权 + 心跳 meta 事件**；**P2-6 cli 启动编排（2026-08-05，见 §8.9）——boot.cjs 补协议装配 + cli 参数解析拉起 QQ**。**P2-16 api/ 聚合层（2026-08-05，见 §8.16）——OneBotApi 单类聚合 9 个 kernel apis + messageUnique + self/system，动作只依赖一个聚合对象（基础设施第一项）**；**P2-17 GroupCache 消费（2026-08-05，见 §8.17）——群信息/群成员动作读 kernel cache（ADR-008，基础设施第二项）**。**§9 实现顺序 5-6 已同步更新。**
 
 ---
 
@@ -149,7 +149,7 @@ const OB11ErrorMap: Record<KernelErrorCode, number> = {
 1. `core/`（BaseProtocolAdapter + BaseAction + registry + config）+ package.json 子路径导出（ADR-014）
 2. `onebot11/types/` + `helper/config.ts`（zod schema）
 3. `onebot11/helper/cqcode.ts` + `data.ts`（翻译）
-4. ✅ `onebot11/api/`（聚合 + 缓存）——**聚合已落地（P2-16，OneBotApi 单类）**；缓存部分待 cache/（ADR-008）接入后 OneBotApi 增只读视图
+4. ✅ `onebot11/api/`（聚合 + 缓存）——**聚合已落地（P2-16，OneBotApi 单类）**；**缓存消费已落地（P2-17，GroupCache 只读视图）**；好友缓存待 kernel BuddyCache 接入后补齐
 5. `onebot11/adapter.ts`：订阅 kernel 事件 → OB11 事件 → network 广播
 6. `onebot11/action/` 按痛点排序：`send_msg` 系列 → `get_*` 系列 → 群管 → 文件 → go-cqhttp 扩展
 7. `onebot12/`（P5）→ `satori/`（P6）：复用 core，各写薄映射
@@ -338,6 +338,18 @@ adapter onStart：装配传输 → 打开 server/client → 广播 lifecycle ena
 ### 8.9 P2-6 cli 启动编排（2026-08-05）
 
 **boot.cjs 补协议装配**（loader runtime）：登录成功后动态 import adapter/network 入口（launcher 环境变量 NAPUTO_ADAPTER_ENTRY / NAPUTO_NETWORK_ENTRY）→ 创建 MsgChannel + MsgBridge + MsgApi/GroupApi/FriendApi + EventBroadcaster + NapukettoOneBot11Adapter → start。
+
+### 8.17 P2-17 GroupCache 消费（群信息/群成员动作读缓存，2026-08-05 设计 + 实现）
+
+**目标**：HANDOVER.md §8.1-2 的消费侧。kernel GroupCache（ADR-008，见 kernel design §6.1/§8.18）已实现；本批把群查询动作从「每次直查原生」改为「读缓存 + 缺失回填」。**已实现并 pnpm check 全绿（156 文件）+ 全量构建通过。**
+
+- **OneBotApi 增 `groupCache`**（`GroupCache | undefined`，OneBotApiOptions 可选字段；exactOptionalPropertyTypes 用显式联合）。
+- **GetGroupInfoAction**：deps 改 `Pick<OneBotApi, "groupApi" | "groupCache">`；`no_cache !== true` 且装配了缓存 → `groupCache.getGroupDetail`；否则 `groupApi.getGroupInfo`。返回翻译抽 `toOb11GroupInfoDetail`（translate.ts，GroupDetailInfo→GroupInfo）。
+- **GetGroupMemberListAction**：deps 同上；缓存命中 `getMembers`（缺失回填 getAllMemberList），no_cache/未装配直查。
+- **GetGroupMemberInfoAction**：deps 同上；uin→uid 后 `getMember(groupCode, uid)`（缺失先整群拉再单查），no_cache 直查 getMemberInfo；成员不存在抛错保持原语义。
+- **boot.cjs**：装配 `groupChannel + GroupBridge + GroupCache`（与 MsgBridge 同层，kernel 导出）→ adapter options 传 `groupCache`。
+
+**踩坑**：noTernary 禁三元（改 if 分支赋值）；`no_cache` 分支的 forceFetch 语义保持（no_cache=true 仍直查原生）。
 
 ### 8.16 P2-16 api/ 聚合层（OneBotApi 单类聚合，2026-08-05 设计 + 实现）
 

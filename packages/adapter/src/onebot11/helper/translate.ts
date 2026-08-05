@@ -4,7 +4,7 @@
  * 纯函数（ADR-008）：只读入参，不调 API、不读缓存。
  * 群成员/群信息等 NT 实体 → OB11 返回结构的薄映射。
  */
-import { type Group, GroupApi, type GroupMember } from "@napuketto/kernel";
+import { type Group, GroupApi, type GroupDetailInfo, type GroupMember } from "@napuketto/kernel";
 import type { GroupInfo, GroupMemberInfo } from "../types/index.js";
 
 /** NT Group → OB11 GroupInfo。 */
@@ -18,6 +18,21 @@ export function toOb11GroupInfo(group: Group): GroupInfo {
     }
     if (typeof group.maxMember === "number") {
         info.max_member_count = group.maxMember;
+    }
+    return info;
+}
+
+/** NT GroupDetailInfo → OB11 GroupInfo（getGroupDetailInfo / GroupCache 用）。 */
+export function toOb11GroupInfoDetail(detail: GroupDetailInfo): GroupInfo {
+    const info: GroupInfo = {
+        group_id: Number(detail.groupCode),
+        group_name: detail.groupName,
+    };
+    if (typeof detail.memberNum === "number") {
+        info.member_count = detail.memberNum;
+    }
+    if (typeof detail.maxMemberNum === "number") {
+        info.max_member_count = detail.maxMemberNum;
     }
     return info;
 }

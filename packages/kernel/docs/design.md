@@ -120,6 +120,49 @@ class KernelError extends Error {
 - **消费**：协议翻译层只读缓存，禁止调 API（翻译 = 纯函数，可并行、可测试、多协议共享）。
 - 对外只暴露只读接口（`getMember(groupId, uid): Member | undefined`）。
 
+### 6.1 GroupCache 设计（2026-08-05 实现，P2-17）
+
+**依赖**（kernel 内部，无循环）：`GroupCache → { GroupEventChannel, GroupApi }`——事件通道主动更新，GroupApi 惰性回填。
+
+```ts
+// types/listeners/group.ts —— GroupListener（说明书自研描述，仿 MsgListener）
+export type GroupListener = {
+    onGroupListInited: (listEmpty: boolean) => void;
+    onGroupListUpdate: (updateType: GroupListUpdateType, groupList: Group[]) => void;
+    onGroupDetailInfoChange: (detailInfo: GroupDetailInfo) => void;
+    onMemberListChange: (arg: GroupMemberListChange) => void;   // sceneId=groupCode, infos=Map<uid, GroupMember>
+    onMemberInfoChange: (groupCode: string, dataSource: DataSource, members: Map<string, GroupMember>) => void;
+    onGroupNotifiesUpdated: (doubt: boolean, notifies: GroupNotify[]) => void;
+    onGroupSingleScreenNotifies: (doubt: boolean, seq: string, notifies: GroupNotify[]) => void;
+    onShutUpMemberListChanged: (groupCode: string, members: ShutUpGroupMember[]) => void;
+};
+
+// group-bridge.ts —— 仿 MsgBridge：addKernelGroupListener（普通 JS 对象）→ emit channel
+export type GroupEventChannel = NTEventChannel<GroupListener, "Group">;
+
+// cache/group-cache.ts
+export class GroupCache {
+    // 内部：groups: Map<groupCode, GroupDetailInfo>；members: Map<groupCode, Map<uid, GroupMember>>
+    constructor(opts: { channel: GroupEventChannel; groupApi: GroupApi });
+    register(): void;    // 订阅 channel（幂等）
+    unregister(): void;
+    // 只读接口（缺失惰性回填 + in-flight 去重）
+    getGroupDetail(groupCode): Promise<GroupDetailInfo | undefined>;
+    getMembers(groupCode): Promise<GroupMember[]>;       // 缺失拉 getAllMemberList(forceFetch=true)
+    getMember(groupCode, uid): Promise<GroupMember | undefined>;  // 缺失拉 getMemberInfo
+    hasGroup(groupCode): boolean;
+}
+```
+
+**事件 → 缓存规则**：
+- `onGroupListInited(false)` / `onGroupListUpdate(全量)` → 全量替换 groups；增量 updateType → 合并
+- `onGroupDetailInfoChange` → 单群 upsert（detailInfo 单独缓存，不并入列表项）
+- `onMemberListChange`（sceneId=groupCode）→ infos 合并进该群成员 Map
+- `onMemberInfoChange(groupCode, _, members)` → 合并进该群成员 Map（dataSource 不参与判定，最新回调为准）
+- 惰性回填并发去重：in-flight `Map<key, Promise>` 防同 key 重复拉取
+
+**消费方**（adapter）：`OneBotApi.groupCache` 只读视图 → GetGroupInfoAction / GetGroupMemberInfoAction / GetGroupMemberListAction 优先读缓存，`no_cache: true` 绕过；翻译函数保持纯函数（入参实体），调用处换数据源。
+
 ### 6.1 canonical 消息元素模型（ADR-008 延伸，多协议翻译不重复的关键）
 
 kernel 定义协议无关的规范消息元素模型，描述 QQ 消息的事实结构（从 `RawMessage.elements` 规范化而来）：
@@ -504,6 +547,25 @@ function resolveWrapperPath(installDir: string, version: string): string;
 - `getGroupHonorInfo(groupCode, type)`：getCookies → `https://qun.qq.com/interactive/honorlist?gc=&type=` → 正则提取 `window.__INITIAL_STATE__={...};` JSON → type 1=talkativeList / 2/3/6=actorList
 
 **跳过**：set_group_sign / get_rkey / 闪传 / 戳一戳（OIDB）；ocr_image（NodeMiscService）；upload_group_file / get_group_file_url（FileApi 复杂）。
+
+### 8.18 P2-17 cache/ 群成员缓存（2026-08-05 设计 + 实现，ADR-008）
+
+**目标**：HANDOVER.md §8.1-2（基础设施第二项）。**已实现并 pnpm check 全绿（156 文件）+ 全量构建通过。** 设计见 §6.1。
+
+**新增 `types/listeners/group.ts`**：GroupListener（type 别名，仿 MsgListener，8 个回调：onGroupListInited / onGroupListUpdate / onGroupDetailInfoChange / onMemberListChange / onMemberInfoChange / onGroupNotifiesUpdated / onGroupSingleScreenNotifies / onShutUpMemberListChanged）+ GroupListUpdateType / GroupMemberDataSource 枚举 + GroupMemberListChange 接口。签名参考 NapCat NodeIKernelGroupListener（说明书，零复制）。
+
+**新增 `group-bridge.ts`**：GroupBridge（仿 MsgBridge）——`session.getGroupService().addKernelGroupListener(listener)`（普通 JS 对象）→ emit `GroupEventChannel = NTEventChannel<GroupListener, "Group">`。
+
+**新增 `cache/group-cache.ts`**：GroupCache——订阅 channel 主动维护（群列表全量替换/增量合并、群详情 upsert、成员 upsert）+ 只读接口惰性回填（in-flight 去重）：
+- `getGroup(groupCode)`：列表项，缺失回填 getGroupList
+- `getGroupDetail(groupCode)`：详情，缺失回填 getGroupInfo
+- `getMembers(groupCode)`：缺失回填 getAllMemberList(forceFetch=true)
+- `getMember(groupCode, uid)`：缺失先整群拉，再单查 getMemberInfo
+- `hasGroup` / `register` / `unregister`（幂等）
+
+**消费**（adapter）：OneBotApi 增 `groupCache` 只读字段；GetGroupInfoAction / GetGroupMemberInfoAction / GetGroupMemberListAction 优先读缓存，`no_cache: true` 或未装配时直查 api；translate.ts 新增 `toOb11GroupInfoDetail`（GroupDetailInfo→GroupInfo）。boot.cjs 装配 GroupBridge + GroupCache（与 MsgBridge 同层）。
+
+**踩坑**：TS 7.0.2 对 NTEventChannel.on 的复杂条件类型 handler 推导失败（implicit any）→ on 回调参数显式标注类型；dedupe 泛型推断回退 unknown → 调用点显式类型参数 `<T>`；相对路径 `../apis/group.js` / `../group-bridge.js`（cache/ 在 src/cache/）；biome organizeImports 会合并同源 import 且 `../` 排 `./` 前（--write 修）。
 
 ### 8.3 P0-1 实现记录（2026-08-04）
 

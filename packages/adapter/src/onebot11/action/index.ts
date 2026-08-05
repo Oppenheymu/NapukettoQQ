@@ -195,13 +195,13 @@ function registerMsgActions(registry: ActionRegistry, deps: Ob11ActionDeps): voi
     registry.register(new GetRecordAction(deps.api));
 }
 
-/** 查询类动作（P2-4）。 */
+/** 查询类动作（P2-4；P2-17 群信息/成员动作读 GroupCache）。 */
 function registerQueryActions(registry: ActionRegistry, deps: Ob11ActionDeps): void {
     registry.register(new GetLoginInfoAction(deps.api.self));
-    registry.register(new GetGroupInfoAction(deps.api.groupApi));
+    registry.register(new GetGroupInfoAction(deps.api));
     registry.register(new GetGroupListAction(deps.api.groupApi));
-    registry.register(new GetGroupMemberInfoAction(deps.api.groupApi));
-    registry.register(new GetGroupMemberListAction(deps.api.groupApi));
+    registry.register(new GetGroupMemberInfoAction(deps.api));
+    registry.register(new GetGroupMemberListAction(deps.api));
     registry.register(new GetFriendListAction(deps.api.friendApi));
 }
 

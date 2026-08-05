@@ -23,6 +23,8 @@ export type {
     HonorListItem,
 } from "./apis/webapi.js";
 export { WebApi, WebHonorType } from "./apis/webapi.js";
+export type { GroupCacheOptions } from "./cache/index.js";
+export { GroupCache } from "./cache/index.js";
 export type { ConfigOptions, ConfigSchema } from "./config.js";
 export { ConfigBase } from "./config.js";
 export type { CoreContext, CoreContextOptions } from "./context.js";
@@ -33,6 +35,8 @@ export type { KernelErrorCode } from "./errors.js";
 export { isKernelError, KERNEL_ERROR_CODES, KernelError, kernelError } from "./errors.js";
 export type { ListenerEvents } from "./event-channel.js";
 export { NTEventChannel } from "./event-channel.js";
+export type { GroupEventChannel } from "./group-bridge.js";
+export { GroupBridge } from "./group-bridge.js";
 export type { LoginResult } from "./lifecycle.js";
 export { initAndStartSession, quickLogin } from "./lifecycle.js";
 export type { LoggerOptions, LogLevel } from "./logger.js";
@@ -55,6 +59,12 @@ export type {
     TipGroupElement,
 } from "./types/entities.js";
 export { ChatType, GrayTipSubType, TipGroupElementType } from "./types/entities.js";
+export type {
+    GroupListener,
+    GroupMemberDataSource,
+    GroupMemberListChange,
+} from "./types/listeners/group.js";
+export { GroupListUpdateType } from "./types/listeners/group.js";
 export type { MsgListener } from "./types/listeners/msg.js";
 export type { CanonicalElement } from "./types/message-element.js";
 export { toCanonicalElements, toSendElements } from "./types/message-element.js";

@@ -1,10 +1,11 @@
 /**
- * get_group_info 动作：获取群信息（P2-4 接 kernel GroupApi）
+ * get_group_info 动作：获取群信息（P2-4 接 kernel GroupApi；P2-17 读缓存）
  */
 
-import type { GroupApi } from "@napuketto/kernel";
 import { z } from "zod";
 import { BaseAction } from "../../../core/index.js";
+import type { OneBotApi } from "../../api/one-bot-api.js";
+import { toOb11GroupInfoDetail } from "../../helper/translate.js";
 import type { GroupInfo } from "../../types/index.js";
 import { ob11ErrorCodeMap } from "../error-map.js";
 
@@ -16,26 +17,26 @@ const getGroupInfoSchema = z.object({
 
 type GetGroupInfoPayload = z.infer<typeof getGroupInfoSchema>;
 
-/** 获取群信息（P2-4 接 kernel apis/group）。 */
+/** 获取群信息（P2-4 接 kernel apis/group；P2-17 优先读 GroupCache）。 */
 export class GetGroupInfoAction extends BaseAction<GetGroupInfoPayload, GroupInfo> {
     readonly name = "get_group_info";
     readonly schema = getGroupInfoSchema;
     protected readonly errorCodeMap = ob11ErrorCodeMap;
 
-    private readonly groupApi: GroupApi;
+    private readonly deps: Pick<OneBotApi, "groupApi" | "groupCache">;
 
-    constructor(groupApi: GroupApi) {
+    constructor(deps: Pick<OneBotApi, "groupApi" | "groupCache">) {
         super();
-        this.groupApi = groupApi;
+        this.deps = deps;
     }
 
     protected async _handle(payload: GetGroupInfoPayload): Promise<GroupInfo> {
-        const detail = await this.groupApi.getGroupInfo(String(payload.group_id));
-        return {
-            group_id: Number(detail.groupCode),
-            group_name: detail.groupName,
-            member_count: detail.memberNum,
-            max_member_count: detail.maxMemberNum,
-        };
+        const groupCode = String(payload.group_id);
+        if (payload.no_cache !== true && this.deps.groupCache !== undefined) {
+            const detail = await this.deps.groupCache.getGroupDetail(groupCode);
+            return toOb11GroupInfoDetail(detail);
+        }
+        const detail = await this.deps.groupApi.getGroupInfo(groupCode);
+        return toOb11GroupInfoDetail(detail);
     }
 }
