@@ -19,12 +19,37 @@
 ```bash
 napuketto -q 123456              # 单账号（当前）
 napuketto -q 123456 -q 789012    # 多账号：cli 拉起两个子进程
-napuketto --config accounts.json  # 从文件读账号列表批量启动
+napuketto supervisor             # 从主配置 napuketto.json 的 accounts 批量拉起
 ```
 
 - 每个子进程独立 `--data-dir`（`<数据根>/<qq号>/`，ADR-016），日志/配置/缓存天然隔离。
 - cli 父进程职责：拉起子进程、崩溃自动重启、信号转发（SIGINT/SIGTERM → 优雅退出）。
 - **kernel 无全局单例**（ADR-015 推论）：每进程一份实例，由子进程持有。
+
+### 2.1 主配置 napuketto.json（P6，2026-08-05 设计）
+
+跨账号主配置放**数据根**（非账号目录），路径 `<dataRoot>/napuketto.json`：
+
+```json
+{
+    "dataDir": "C:\\Users\\xxx\\.napuketto",
+    "autoRestart": true,
+    "restartDelayMs": 2000,
+    "accounts": [
+        { "qq": "123456", "enabled": true }
+    ]
+}
+```
+
+- 校验器：cli 手写 `parse`（不引入 zod，适配 kernel ConfigBase 的 ConfigSchema 形状）。
+- `config init` 生成默认主配置；账号协议配置（onebot11.json 等）由运行时 `ProtocolConfig.load()` 自动生成（文件缺失落默认值）。
+
+### 2.2 supervisor 子进程编排（P6）
+
+- 入口：`supervisor` 子命令（读主配置 accounts）或 `-q A -q B`（多值参数，临时列表）。
+- 每账号 spawn `node <当前入口> -q <uin> --data-dir <dataRoot>`（子进程走 runSingleAccount 单账号逻辑零改动）。
+- 重启：子进程异常退出（code≠0 / 被信号杀）且 `autoRestart` → 延迟 `restartDelayMs` 重启；`enabled:false` 跳过。
+- 信号转发：父进程 SIGINT/SIGTERM → 逐个 kill 子进程 → 全部退出后父进程退出。
 
 ## 3. 目录结构
 
@@ -60,19 +85,22 @@ sequenceDiagram
 
 ```bash
 napuketto -q 123456               # 指定 QQ 号启动
-napuketto config init             # 生成默认配置文件（napcat.json + 各协议配置）
-napuketto config list             # 列出配置与生效值
-napuketto config apply <file>     # 应用配置变更（触发热更新）
+napuketto -d <dir> config init    # 生成默认主配置（napuketto.json + 目录骨架）
+napuketto -d <dir> config list    # 列出主配置与各账号配置
+napuketto -d <dir> config apply <file>  # 应用外部配置（校验后写回主配置）
+napuketto -d <dir> supervisor     # 多账号编排（读主配置 accounts）
 ```
 
-配置均为 JSON + zod 校验（schema 在各自包），cli 只做文件读写与流程编排。
+> ⚠️ commander 限制：主命令已定义 `-d/--data-dir` 时，子命令定义同名 option 会解析失效（实测）——因此 `-d` 只定义在主命令，config/supervisor 子命令经 `program.opts()` 读取。
+
+配置均为 JSON + zod 校验（schema 在各自包，主配置 cli 手写校验器包装），cli 只做文件读写与流程编排。
 
 ## 6. 实现顺序
 
-1. `config-cmds.ts` + `index.ts`（参数解析骨架，P0 可先行）
-2. `boot.ts` + `login-render.ts`（P1 与 kernel 登录打通）
-3. 常驻进程管理（信号处理、优雅退出、崩溃重启策略，P2 前补）
-4. `supervisor.ts` 多账号编排（P6）
+1. ✅ `config-cmds.ts` + `index.ts`（参数解析骨架，P0 可先行）
+2. ✅ `boot.ts` + `login-render.ts`（P1 与 kernel 登录打通）
+3. ✅ 常驻进程管理（信号处理、优雅退出、崩溃重启策略，P2 前补）
+4. ✅ `supervisor.ts` 多账号编排（**P6，2026-08-05 实现**：config init/list/apply + supervisor 子命令 + 多 -q）
 
 ## 7. 待验证事项
 
