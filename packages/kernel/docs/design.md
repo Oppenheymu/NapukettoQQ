@@ -2,7 +2,7 @@
 
 > 职责：**唯一原生交互层 + 唯一共享状态层**。协议层只认识 kernel，不认识 QQ。
 > 对应 ADR：001 / 003 / 006 / 007 / 008 / 009 / 010 / 012 / 016 / 017 / 018
-> 状态：P0-1 已完成（errors / paths / logger / config，2026-08-04，见 §8.3）；P0-2 已完成（event-channel + 占位 Listener 类型，2026-08-04，见 §4.1）；P1-1 已完成（wrapper-version + wrapper-loader，2026-08-05，见 §8.4）；P1-2 探测完成（RTTI 继承树 + service 类名/方法签名大全，2026-08-05，见 §8.5）；**P1-3 路线定稿：NAPI 范式重构（2026-08-05，见 §8.6）——wrapper-loader 从 koffi 改为 NAPI bootstrap，loader 包负责注入引导，业务层全走 NAPI；startNapuketto 装配入口 + smoke-test 已补（2026-08-05）；全链路实测打通（注入→IAT hook→boot JS→89 exports→startNapuketto OK）。** P1-4 设计定稿：QQ 进程内探测 + session 复用（2026-08-05，见 §8.7）。
+> 状态：P0-1 已完成（errors / paths / logger / config，2026-08-04，见 §8.3）；P0-2 已完成（event-channel + 占位 Listener 类型，2026-08-04，见 §4.1）；P1-1 已完成（wrapper-version + wrapper-loader，2026-08-05，见 §8.4）；P1-2 探测完成（RTTI 继承树 + service 类名/方法签名大全，2026-08-05，见 §8.5）；**P1-3 路线定稿：NAPI 范式重构（2026-08-05，见 §8.6）——wrapper-loader 从 koffi 改为 NAPI bootstrap，loader 包负责注入引导，业务层全走 NAPI；startNapuketto 装配入口 + smoke-test 已补（2026-08-05）；全链路实测打通（注入→IAT hook→boot JS→89 exports→startNapuketto OK）。** P1-4 设计定稿：QQ 进程内探测 + session 复用（2026-08-05，见 §8.7）；P1-5 装配层完成（core + context，2026-08-05，见 §8.8）；**P2-1 apis/msg 实现（2026-08-05，见 §8.9）——sendMessage / recallMessage / fetchMessages / markRead + canonical→NT 发送元素映射（text/at/face/image/voice/reply 核心五类）。**
 
 ---
 
@@ -279,6 +279,37 @@ interface CoreContext {
 
 **用法**：boot.cjs 截获 exports 后即可 `NapukettoCore.create(...)` + `attachWrapper` + `login`，替代手工拼 startNapuketto/quickLogin/initAndStartSession；协议层从 ctx 拿 logger/paths/wrapper。
 
+### 8.9 apis/msg（2026-08-05 实现，P2-1）
+
+**msg service 类型依据**：`getMsgService()` 运行时反射 + NapCat 公开类型作说明书（接口签名是外部系统事实，自研描述，零复制）。核心方法面：
+
+```ts
+interface NodeIKernelMsgService {
+    addKernelMsgListener(listener: NodeIKernelMsgListener): number;
+    sendMsg(msgId: string, peer: Peer, elements: SendMessageElement[], map: Map<number, unknown>): Promise<GeneralCallResult>;
+    recallMsg(peer: Peer, msgIds: string[]): Promise<GeneralCallResult>;
+    getMsgs(peer: Peer, msgId: string, count: number, queryOrder: boolean): Promise<GeneralCallResult & { msgList: RawMessage[] }>;
+    setMsgRead(peer: Peer): Promise<GeneralCallResult>;
+    removeKernelMsgListener(listenerId: number): void;
+}
+```
+
+**MsgApi（apis/msg.ts）**：内部解包 `{ result, errMsg }` → 成功纯业务值 / 失败抛 `KernelError`（ADR-009）。
+
+```ts
+class MsgApi {
+    constructor(session: NodeIQQNTWrapperSession) {}
+    sendMessage(target: Peer, elements: CanonicalElement[]): Promise<{ msgId: string }>;
+    recallMessage(target: Peer, msgIds: string[]): Promise<void>;
+    fetchMessages(target: Peer, opts: { count: number; msgId?: string }): Promise<RawMessage[]>;
+    markRead(target: Peer): Promise<void>;
+}
+```
+
+**错误映射**：result !== 0 → 按 errMsg 语义映射（`SEND_FAILED` / `NOT_FOUND` / `NOT_LOGIN` / `PERMISSION_DENIED` / 兜底 `UNKNOWN`），协议层只维护 KernelErrorCode → 协议错误码表。
+
+**canonical → NT 发送元素**：`toSendElements` 实现 text（含 at）/ face / image / voice / reply 五类核心映射（ElementType 枚举 1/6/2/4/7），file/video/forward/json/xml 标记 TODO（P2-2 探测后补）。
+
 ### 8.1 路径布局（ADR-016）
 
 数据（日志/配置/缓存）放**用户数据目录**而非程序目录（程序目录可能只读；多账号需要分离）：
@@ -331,7 +362,7 @@ function resolveWrapperPath(installDir: string, version: string): string;
 5. ✅ 类型层：runtime 探测 + NapCat shell 模式参考确认（wrapper 类型 + service 契约，见 §8.5/§8.7；getService vtable 逆向**不再需要**——NAPI 范式下全部走普通 JS 对象调用）
 6. ✅ `core.ts` + `context.ts` 装配（2026-08-05，见 §8.8）
 7. `login.ts`（QR 状态机 + selfInfo；快速登录已可用，见 lifecycle.quickLogin）
-8. `apis/`（先 msg，后 group/friend/user/file/system）
+8. ⏳ `apis/`（**msg 完成**（sendMessage/recallMessage/fetchMessages/markRead，2026-08-05，见 §8.9）；group/friend/user/file/system 待做）
 9. `cache/`（随 apis 一起演进）
 
 ## 10. 待验证事项

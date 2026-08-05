@@ -7,6 +7,7 @@
  * 后续模块（apis / cache / login）按 docs/design.md §9 依次接入。
  */
 
+export { MsgApi } from "./apis/index.js";
 export type { ConfigOptions, ConfigSchema } from "./config.js";
 export { ConfigBase } from "./config.js";
 export type { CoreContext, CoreContextOptions } from "./context.js";
@@ -26,9 +27,16 @@ export { DEFAULT_DATA_ROOT_NAME, PathWrapper, resolveDataRoot } from "./paths.js
 export { probeRuntime } from "./probe.js";
 export { getExistingSession, getMainSession } from "./session-resolver.js";
 export type { RawMessage } from "./types/entities.js";
+export { ChatType } from "./types/entities.js";
 export type { MsgListener } from "./types/listeners/msg.js";
 export type { CanonicalElement } from "./types/message-element.js";
 export { toCanonicalElements, toSendElements } from "./types/message-element.js";
+export type {
+    ElementType,
+    GeneralCallResult,
+    NodeIKernelMsgService,
+    SendMessageElement,
+} from "./types/services/msg-service.js";
 export type {
     DesktopPathConfig,
     DeviceInfo,

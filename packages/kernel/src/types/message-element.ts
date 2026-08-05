@@ -6,7 +6,9 @@
  * 各协议（onebot11/onebot12/satori）只写薄映射 canonical ↔ 协议格式。
  */
 
+import { kernelError } from "../errors.js";
 import type { RawMessage } from "./entities.js";
+import { ElementType, type SendMessageElement } from "./services/msg-service.js";
 
 /** 协议无关的规范消息元素。 */
 export type CanonicalElement =
@@ -25,12 +27,64 @@ export type CanonicalElement =
 
 /** NT RawMessage → canonical 元素（P1 探测 RawElement 真实结构后实现，ADR-006）。 */
 export function toCanonicalElements(_msg: RawMessage): CanonicalElement[] {
-    // TODO(P1): 等 scripts/probe 产出 RawElement 字段后实现映射
+    // TODO(P2-2): 等 scripts/probe 产出 RawElement 字段后实现映射
     return [];
 }
 
-/** canonical 元素 → NT 发送元素（P1 探测 SendMessageElement 结构后实现）。 */
-export function toSendElements(_elements: CanonicalElement[]): unknown[] {
-    // TODO(P1): 等 scripts/probe 产出 SendMessageElement 结构后实现
-    return [];
+/** canonical 元素 → NT 发送元素（text/at/face/image/voice/reply 核心五类）。 */
+export function toSendElements(elements: CanonicalElement[]): SendMessageElement[] {
+    const out: SendMessageElement[] = [];
+    for (const el of elements) {
+        switch (el.type) {
+            case "text":
+                out.push({ elementType: ElementType.TEXT, textElement: { content: el.text } });
+                break;
+            case "at":
+                if (el.target === "all") {
+                    out.push({
+                        elementType: ElementType.TEXT,
+                        textElement: { content: el.display ?? "@", atType: 1 },
+                    });
+                } else {
+                    out.push({
+                        elementType: ElementType.TEXT,
+                        textElement: { content: el.display ?? "@", atType: 2, atUid: el.target },
+                    });
+                }
+                break;
+            case "face":
+                out.push({
+                    elementType: ElementType.FACE,
+                    faceElement: { faceIndex: Number(el.id) },
+                });
+                break;
+            case "image":
+                out.push({ elementType: ElementType.PIC, picElement: { picPath: el.path } });
+                break;
+            case "voice":
+                out.push({ elementType: ElementType.PTT, pttElement: { filePath: el.path } });
+                break;
+            case "reply":
+                out.push({
+                    elementType: ElementType.REPLY,
+                    replyElement: {
+                        replayMsgId: el.messageId,
+                        replayMsgSeq: el.messageId,
+                        replayMsgTime: "0",
+                    },
+                });
+                break;
+            case "video":
+            case "file":
+            case "forward":
+            case "json":
+            case "xml":
+            case "unknown":
+                throw kernelError(`发送元素 ${el.type} 暂不支持（P2-2 探测后补）`, "INVALID_PARAM");
+            default:
+                // exhaustive：CanonicalElement 无其他成员
+                break;
+        }
+    }
+    return out;
 }
