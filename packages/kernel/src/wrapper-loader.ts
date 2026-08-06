@@ -14,6 +14,7 @@ import { kernelError } from "./errors.js";
 import type {
     EnginInitDesktopConfig,
     NodeIKernelSessionListener,
+    NodeIQQNTStartupSessionWrapper,
     NodeIQQNTWrapperEngine,
     NodeIQQNTWrapperSession,
     WrapperNodeApi,
@@ -72,6 +73,8 @@ export interface WrapperContext {
     versionInfo: QQVersionContext;
     /** 会话（QQ 拦截捕获 / createSession 后填充）。 */
     session: NodeIQQNTWrapperSession | null;
+    /** 启动会话包装（NapCat 同款：StartupSessionWrapper.create()，start() 替代 startNT）。 */
+    startupSession: NodeIQQNTStartupSessionWrapper | null;
     /** QQ 的 loginService 实例（拦截 new 捕获，可为 null）。 */
     loginService: unknown;
 }
@@ -97,7 +100,14 @@ export function createWrapper(
     if (!engine || typeof engine.initWithDeskTopConfig !== "function") {
         throw kernelError("NodeIQQNTWrapperEngine.get() 返回对象无效", "INVALID_PARAM");
     }
-    return { exports, engine, versionInfo, session: null, loginService: null };
+    return {
+        exports,
+        engine,
+        versionInfo,
+        session: null,
+        startupSession: null,
+        loginService: null,
+    };
 }
 
 /** engine 初始化（wrapper 契约：先 engine 后 session）。config 为普通 JS 对象。 */
@@ -105,17 +115,62 @@ export function initEngine(ctx: WrapperContext, config: EnginInitDesktopConfig):
     ctx.engine.initWithDeskTopConfig(config, new GlobalAdapter());
 }
 
-/** 创建会话：`NodeIQQNTWrapperSession.create()`（2026-08-05 实测确认）。
- * 注：`new NodeIQQNTWrapperSession()` 构造的对象缺 cpp_impl，session.init 断言
- * "implementation of IQQNTWrapperSession is not valid"；create() 返回带完整实现的实例。 */
+/**
+ * 创建会话（2026-08-06 P2-0 实测修正——NapCat 方式自研等价）：
+ *  1. StartupSessionWrapper.create()（启动会话包装）
+ *  2. getNTWrapperSession("nt_1")（QQ 主 session，带完整 cpp_impl）
+ *  3. S.create() 回退
+ *
+ * 背景：`new NodeIQQNTWrapperSession()` 构造对象缺 cpp_impl，session.init 断言
+ * "implementation of IQQNTWrapperSession is not valid"（P2-0 实测确认）。
+ * NapCat 用 StartupSessionWrapper.create() + getNTWrapperSession('nt_1') 解决——
+ * 返回带完整实现的实例。worker（utilityProcess）继承 QQ env 后同样有效。
+ */
 export function createSession(ctx: WrapperContext): NodeIQQNTWrapperSession {
-    const S = ctx.exports.NodeIQQNTWrapperSession;
-    let session: NodeIQQNTWrapperSession;
-    if (typeof S.create === "function") {
-        session = S.create();
-    } else {
+    const X = ctx.exports;
+    const S = X.NodeIQQNTWrapperSession;
+    let session: NodeIQQNTWrapperSession | null = null;
+
+    // 1. StartupSessionWrapper.create()（NapCat 同款，建立启动 session）
+    try {
+        const Ssw = X.NodeIQQNTStartupSessionWrapper as
+            | { create?: () => NodeIQQNTStartupSessionWrapper }
+            | undefined;
+        if (Ssw !== undefined && typeof Ssw.create === "function") {
+            ctx.startupSession = Ssw.create();
+        }
+    } catch {
+        // 可选，失败继续
+    }
+
+    // 2. getNTWrapperSession("nt_1")（QQ 主 session，带 cpp_impl）
+    try {
+        if (typeof S.getNTWrapperSession === "function") {
+            const got = S.getNTWrapperSession("nt_1") as NodeIQQNTWrapperSession | null;
+            if (got !== null && got !== undefined) {
+                session = got;
+            }
+        }
+    } catch {
+        // 回退
+    }
+
+    // 3. S.create() 回退
+    if (session === null) {
+        try {
+            if (typeof S.create === "function") {
+                session = S.create() as NodeIQQNTWrapperSession;
+            }
+        } catch {
+            session = null;
+        }
+    }
+
+    // 4. 最终回退：new S()（可能断言失败，作为最后手段）
+    if (session === null) {
         session = new S();
     }
+
     ctx.session = session;
     return session;
 }
@@ -130,11 +185,15 @@ export function initSession(
     session.init(config, new DependsAdapter(), new DispatcherAdapter(), listener);
 }
 
-/** 启动会话（startNT(0)）。 */
+/** 启动会话（NapCat 同款：有 startupSession 用 start()，否则 startNT(0)）。 */
 export function startSession(ctx: WrapperContext): void {
-    const { session } = ctx;
+    const { session, startupSession } = ctx;
     if (session === null) {
-        throw kernelError("session 未创建，无法 startNT", "INVALID_STATE");
+        throw kernelError("session 未创建，无法启动", "INVALID_STATE");
+    }
+    if (startupSession !== null && typeof startupSession.start === "function") {
+        startupSession.start();
+        return;
     }
     session.startNT(0);
 }

@@ -208,6 +208,19 @@ async function bootstrap(state) {
             dataDir: process.env.NAPUTO_CFG_DIR,
             wrapperPath: process.env.NAPUTO_WRAPPER_PATH,
         };
+
+        // ⭐ appid 动态解析（2026-08-06 P2-0 实测：硬编码 537237765 在 9.9.33 扫码失败
+        // 「请下载最新版」；major.node 解析的 537376818 成功）。自研，参考 NapCat 思路。
+        const APPID =
+            (typeof kernel.parseAppidFromMajor === "function" &&
+                bootEnv.wrapperPath &&
+                kernel.parseAppidFromMajor(
+                    path.join(path.dirname(bootEnv.wrapperPath), "major.node"),
+                )) ||
+            (typeof kernel.resolveAppidQua === "function" &&
+                kernel.resolveAppidQua(bootEnv.qqVersion || "").appid) ||
+            "537237765";
+        log(`bootstrap: appid=${APPID}（wrapper=${bootEnv.wrapperPath}）`);
         try {
             if (typeof kernel.NapukettoCore === "function") {
                 // 装配层路径：NapukettoCore.create → attachWrapper → login
@@ -249,7 +262,7 @@ async function bootstrap(state) {
                     const ref = { targetUin: undefined };
                     await pickLoginAccount(kernel, ctx, ref);
                     const loginOpts = {
-                        appid: "537237765",
+                        appid: APPID,
                         initTimeoutMs: 20000,
                         ...(ref.targetUin !== undefined ? { quickUin: ref.targetUin } : {}),
                     };
@@ -282,7 +295,7 @@ async function bootstrap(state) {
                         log("bootstrap: 对激活 session 执行 init（挂载 service）...");
                         try {
                             const sessionConfig = kernel.buildSessionConfig({
-                                appid: "537237765",
+                                appid: APPID,
                                 fullVersion: bootEnv.qqVersion || "",
                                 selfUin: loginResult.uin,
                                 selfUid: loginResult.uid,
@@ -348,7 +361,7 @@ async function bootstrap(state) {
                     typeof kernel.initAndStartSession === "function") {
                     if (typeof kernel.buildLoginConfig === "function" && ctx.loginService) {
                         const loginCfg = kernel.buildLoginConfig(
-                            "537237765",
+                            APPID,
                             bootEnv.qqVersion || "",
                             bootEnv.dataDir || ".",
                         );
@@ -360,7 +373,7 @@ async function bootstrap(state) {
                     const loginResult = await kernel.quickLogin(ctx, {});
                     log(`bootstrap: quickLogin OK, uin=${loginResult.uin}, uid=${loginResult.uid}`);
                     const sessionConfig = kernel.buildSessionConfig({
-                        appid: "537237765",
+                        appid: APPID,
                         fullVersion: bootEnv.qqVersion || "",
                         selfUin: loginResult.uin,
                         selfUid: loginResult.uid,

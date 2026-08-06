@@ -144,6 +144,8 @@ export {
     buildEngineConfig,
     buildLoginConfig,
     buildSessionConfig,
+    parseAppidFromMajor,
+    resolveAppidQua,
 } from "./wrapper-config.js";
 export type {
     BootEnv,

@@ -10,7 +10,9 @@
  * 字段为 wrapper.node 外部契约（appid/qua/版本），运行时实测确认，自研描述。
  */
 
+import { existsSync, readFileSync } from "node:fs";
 import { hostname } from "node:os";
+import { dirname } from "node:path";
 import type {
     DeviceInfo,
     EnginInitDesktopConfig,
@@ -27,22 +29,88 @@ function systemInfo(): { platVer: string; osVersion: string; devType: string } {
     };
 }
 
-/** Windows 兜底 appid / qua（9.9.31 起 appid.json 缺失时）。 */
-function resolveAppidQua(fullVersion: string): { appid: string; qua: string } {
-    // 预留：后续可从 appid.json 表扩展
+/** 纯数字串（major.node 提取的 appid 判定）。 */
+const DIGITS_ONLY_RE = /^\d+$/;
+
+/**
+ * 从 major.node 提取 appid（NapCat parseAppidFromMajorV2 的自研等价实现）。
+ * major.node 含 `QQAppId/` 标记后跟数字（腾讯工具链产物，实测确认）。
+ * 返回 null 表示解析失败（调用方回退硬编码表）。
+ */
+export function parseAppidFromMajor(majorPath: string): string | null {
+    if (!existsSync(majorPath)) {
+        return null;
+    }
+    let buf: Buffer;
+    try {
+        buf = readFileSync(majorPath);
+    } catch {
+        return null;
+    }
+    const marker = Buffer.from("QQAppId/", "utf-8");
+    let pos = 0;
+    while (pos < buf.length) {
+        const idx = buf.indexOf(marker, pos);
+        if (idx === -1) {
+            return null;
+        }
+        const start = idx + marker.length;
+        let end = start;
+        while (end < buf.length && buf[end] !== 0) {
+            end += 1;
+        }
+        const str = buf.subarray(start, end).toString("utf-8");
+        if (DIGITS_ONLY_RE.test(str)) {
+            return str;
+        }
+        pos = end + 1;
+    }
+    return null;
+}
+
+/** 解析 wrapper.node 所在目录（含 major.node 与 appid 表）。 */
+export function resolveWrapperAppDir(wrapperPath: string): string {
+    return dirname(wrapperPath);
+}
+
+/** Windows 兜底 appid / qua（major.node 解析失败时）。 */
+function fallbackAppidQua(fullVersion: string): { appid: string; qua: string } {
     return {
         appid: "537237765",
         qua: `V1_WIN_NQ_${fullVersion}_${fullVersion.split("-")[1] ?? ""}_GW_B`,
     };
 }
 
-/** 生成 engine 桌面配置（wrapper 契约字段）。 */
+/**
+ * 解析 appid / qua（自研，参考 NapCat QQBasicInfoWrapper 思路但独立实现）：
+ *  1. 优先从 major.node 提取 appid（实测 9.9.33-51802 = 537376818）
+ *  2. 回退硬编码表（旧版 537237765）
+ * majorPath 传 wrapper.node 同目录 major.node；不传则跳过 major 解析。
+ */
+export function resolveAppidQua(
+    fullVersion: string,
+    majorPath?: string,
+): { appid: string; qua: string } {
+    if (majorPath !== undefined) {
+        const appid = parseAppidFromMajor(majorPath);
+        if (appid !== null) {
+            return {
+                appid,
+                qua: `V1_WIN_NQ_${fullVersion}_${fullVersion.split("-")[1] ?? ""}_GW_B`,
+            };
+        }
+    }
+    return fallbackAppidQua(fullVersion);
+}
+
+/** 生成 engine 桌面配置（wrapper 契约字段）。majorPath 可选（解析 appid/qua）。 */
 export function buildEngineConfig(
     fullVersion: string,
     dataPathGlobal: string,
+    majorPath?: string,
 ): EnginInitDesktopConfig {
     const { osVersion } = systemInfo();
-    const { qua } = resolveAppidQua(fullVersion);
+    const { qua } = resolveAppidQua(fullVersion, majorPath);
     return {
         base_path_prefix: "",
         platform_type: PlatformTypeValue.KWINDOWS,
@@ -58,7 +126,7 @@ export function buildEngineConfig(
     };
 }
 
-/** 生成登录初始化配置。 */
+/** 生成登录初始化配置（externalVersion: false 与 NapCat 同款，扫码兼容关键）。 */
 export function buildLoginConfig(
     appid: string,
     fullVersion: string,
@@ -72,6 +140,7 @@ export function buildLoginConfig(
         commonPath,
         clientVer: fullVersion,
         hostName: hostname(),
+        externalVersion: false,
     };
 }
 
