@@ -21,16 +21,20 @@ static std::string getEnv(const char* name) {
     return (n > 0 && n < sizeof(buf)) ? std::string(buf) : std::string();
 }
 
-// 找进程主窗口就绪（Electron 主进程 UI 起来后可注入）
-static bool waitForProcess(HANDLE proc, DWORD pid, DWORD timeoutMs) {
-    // 简单方案：等待进程句柄可等待 / 或固定 sleep 后直接注入
-    (void)proc;
-    (void)pid;
-    Sleep(timeoutMs);
-    return true;
+// 检查目标进程是否存活（GetExitCodeProcess == STILL_ACTIVE）
+static bool isProcessAlive(DWORD pid) {
+    HANDLE h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+    if (!h) return false;
+    DWORD code = 0;
+    BOOL ok = GetExitCodeProcess(h, &code);
+    CloseHandle(h);
+    return ok && code == STILL_ACTIVE;
 }
 
-// 注入 hook DLL 到目标进程
+// 注入 DLL 到目标进程，并校验 LoadLibraryA 真实返回（HMODULE != 0）。
+// 关键（2026-08-06 修复）：CreateRemoteThread 成功 ≠ DLL 已加载。进程早期
+// （loader lock 被初始线程持有）LoadLibraryA 可能阻塞/失败——之前不查返回值，
+// bootmain 误报注入成功 → hookdll 未进 → boot.cjs 未执行（交接 §11 遗留 1）。
 static bool injectDll(DWORD pid, const std::string& dllPath) {
     HANDLE hProc = OpenProcess(PROCESS_ALL_ACCESS, FALSE, pid);
     if (!hProc) {
@@ -59,10 +63,22 @@ static bool injectDll(DWORD pid, const std::string& dllPath) {
         return false;
     }
 
-    WaitForSingleObject(hThread, 10000);
+    // 等 LoadLibrary 线程结束，GetExitCodeThread 取返回值（HMODULE）
+    bool loaded = false;
+    DWORD waitRet = WaitForSingleObject(hThread, 10000);
+    DWORD exitCode = 0;
+    if (waitRet == WAIT_OBJECT_0 && GetExitCodeThread(hThread, &exitCode)) {
+        loaded = (exitCode != 0);
+        if (!loaded) {
+            printf("[boot] LoadLibraryA in remote returned NULL（进程未就绪或加载失败），重试注入\n");
+        }
+    } else {
+        printf("[boot] remote thread wait failed: waitRet=%lu err=%lu\n", waitRet, GetLastError());
+    }
     CloseHandle(hThread);
     VirtualFreeEx(hProc, remoteMem, 0, MEM_RELEASE);
     CloseHandle(hProc);
+    if (!loaded) return false;
     printf("[boot] injected: %s\n", dllPath.c_str());
     return true;
 }
@@ -135,34 +151,58 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
     // 权限不足等），再按快照找存活实例兜底——避免注入用户已打开的旧 QQ 实例
     // （QQ 单实例：新启动进程会转发参数后退场，findQqProcess 取 PID 最大会命中旧实例）。
     DWORD pid = pi.dwProcessId;
-    if (!injectDll(pid, g_hookDllPath)) {
+
+    // ⚠️ 注入时序修复（2026-08-06，交接 §11 遗留 1）：
+    //   之前 CreateProcess 后立即注入 → 进程 loader 早期 LoadLibraryA 阻塞/失败，
+    //   且 injectDll 不查返回值 → 误报成功 → hookdll 未进 → boot.cjs 未执行。
+    //   现在：① WaitForInputIdle 等主进程 GUI 线程初始化完成（≈Electron 启动早期，
+    //   早于 wrapper.node preload 注册——hookdll 必须在 preload 前注入才能触发 boot）
+    //         ② 注入失败则等待重试（每次重试进程更成熟）。
+    WaitForInputIdle(pi.hProcess, 15000);
+
+    // ① hookdll（引导 boot JS）：重试式注入，最长 ~15s
+    bool hooked = false;
+    for (int i = 0; i < 50 && !hooked; i++) {
+        if (!isProcessAlive(pid)) break; // 进程已退出（单实例转发场景）
+        hooked = injectDll(pid, g_hookDllPath);
+        if (!hooked) Sleep(300);
+    }
+    printf("[boot] hookdll 注入结果: %s (pid=%lu)\n", hooked ? "成功" : "失败", pid);
+
+    // ② 兜底：hookdll 未注入 → 快照重试（进程可能 fork/已退出，重新定位存活实例）
+    if (!hooked) {
         pid = 0;
         for (int i = 0; i < 30; i++) {
             pid = findQqProcess(qqPath);
-            if (pid) break;
+            if (pid && injectDll(pid, g_hookDllPath)) {
+                hooked = true;
+                break;
+            }
             Sleep(500);
         }
-        if (pid) {
-            printf("[boot] 重试注入 (pid=%lu)...\n", pid);
-            injectDll(pid, g_hookDllPath);
+        if (hooked) {
+            printf("[boot] 快照兜底注入成功 (pid=%lu)\n", pid);
         }
     }
     if (pid == 0) pid = pi.dwProcessId;
 
-    // V2 载具 DLL（NapukettoVehicle.dll）：激活 session cpp_impl + 无头。
+    // ③ V2 载具 DLL（NapukettoVehicle.dll）：激活 session cpp_impl + 无头。
     // 注入顺序：先 hookdll（引导 boot JS），再 vehicle（激活 session）。
     // 载具 DLL 路径经环境变量 NAPUTO_VEHICLE_DLL 传入（launcher.ts 设置），
     // 若未设置（未启用 V2）则跳过，保持 V1 行为兼容。
     std::string vehicleDll = getEnv("NAPUTO_VEHICLE_DLL");
     if (!vehicleDll.empty()) {
         printf("[boot] injecting vehicle: %s\n", vehicleDll.c_str());
-        injectDll(pid, vehicleDll);
+        bool injected = false;
+        for (int i = 0; i < 20 && !injected; i++) {
+            if (!isProcessAlive(pid)) break;
+            injected = injectDll(pid, vehicleDll);
+            if (!injected) Sleep(300);
+        }
+        printf("[boot] vehicle 注入结果: %s\n", injected ? "成功" : "失败");
     } else {
         printf("[boot] NAPUTO_VEHICLE_DLL 未设置，跳过载具注入（V1 模式）\n");
     }
-
-    // 等 UI 起来（注入已完成，此等待仅确保 QQ 正常启动）
-    waitForProcess(pi.hProcess, pid, 3000);
 
     // 保持存活直到 QQ 进程退出：cli（boot.ts child.on("exit")）观察的是本进程
     // 生命周期，必须等到 QQ 真正退出才能结束——原实现注入后立即 return 0，
