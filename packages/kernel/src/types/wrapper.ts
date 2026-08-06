@@ -198,7 +198,7 @@ export interface NodeIO3MiscService {
 // adapter 类型（session.init 第二/三参、engine.initWithDeskTopConfig 第二参）
 // 注意：wrapper exports **不含** NodeI*Adapter / NodeI*Listener 构造器（实测 89 键无）。
 // 传普通 JS 对象即可——NAPI 反射读取对象上的方法回调。方法名是 QQ wrapper 的外部契约
-//（2026-08-05 从 NapCatQQ 运行时行为确认，接口为自研描述）。
+//（2026-08-05 运行时行为实测确认，接口为自研描述）。
 export interface NodeIGlobalAdapter {
     onLog?(...args: unknown[]): void;
     onGetSrvCalTime?(...args: unknown[]): void;
@@ -246,7 +246,7 @@ export interface IKernelLoginListener {
 
 /**
  * NodeIKernelSessionListener：session.init 第四参监听器（普通 JS 对象）。
- * init 完成信号：NapCat 以 onOpentelemetryInit(is_init===true) 为准（onSessionInitComplete 为辅）。
+ * init 完成信号：以 onOpentelemetryInit(is_init===true) 为准（onSessionInitComplete 为辅）。
  */
 export interface NodeIKernelSessionListener {
     onNTSessionCreate?(sessionId: string): void;

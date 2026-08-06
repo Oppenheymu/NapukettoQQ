@@ -89,7 +89,7 @@ export class NTEventChannel<L extends ListenerShape, Name extends string> {
 
     /**
      * 请求-响应桥：注册临时监听 → filter 命中 → resolve；超时自动清理并 reject。
-     * 替代 NapCat 的魔法字符串方案。
+     * 替代魔法字符串事件名方案。
      */
     waitFor<E extends EventName<L, Name>>(
         event: E,

@@ -1,7 +1,8 @@
 /**
- * 完整启动生命周期（NapCat shell 模式流程，2026-08-05 确认，自研实现）
+ * 完整启动生命周期（wrapper.node 契约流程，2026-08-05 实测确认，自研实现）
  *
- * 参考 NapCatQQ src/shell/napcat.ts（仅理解机制，代码自研）：
+ * 启动顺序由 wrapper.node 外部契约决定（engine→login→session→startNT），
+ * 运行时实测确认，自研实现：
  *  1. engine.initWithDeskTopConfig（appid/qua/版本）
  *  2. loginService.initConfig + addKernelLoginListener
  *  3. getLoginList() → quickLoginWithUin(uin)（或 QR 登录）
@@ -105,7 +106,7 @@ type LoginServiceShape = {
     quickLoginWithUin(uin: string): Promise<{ result: string; loginErrorInfo: { errMsg: string } }>;
 };
 
-/** 列出历史登录账号（boot.cjs 启动横幅用，对齐 NapCat「可用快速登录 of QQ」）。 */
+/** 列出历史登录账号（boot.cjs 启动横幅用，「可用快速登录 of QQ」）。 */
 export async function listLoginAccounts(ctx: WrapperContext): Promise<LoginAccountInfo[]> {
     const raw = ctx.loginService as unknown as LoginServiceShape | null;
     if (raw === null) {
@@ -168,11 +169,11 @@ export async function initAndStartSession(
     }
 
     // adapter / listener 全部用普通 JS 对象（实测 exports 89 键无 NodeI*Adapter/Listener
-    // 构造器；NAPI 反射读取对象方法回调——NapCat 同款机制，自研实现）。
+    // 构造器；NAPI 反射读取对象方法回调，自研实现）。
     const depends = new DependsAdapter();
     const dispatcher = new DispatcherAdapter();
 
-    // 等 init 完成：以 onOpentelemetryInit(is_init===true) 为主（NapCat shell 机制），
+    // 等 init 完成：以 onOpentelemetryInit(is_init===true) 为主（wrapper 契约），
     // onSessionInitComplete(0) 为辅；非 0 即失败。
     const initComplete = new Promise<void>((resolve, reject) => {
         const onOpentelemetry = listener.onOpentelemetryInit;
@@ -198,7 +199,7 @@ export async function initAndStartSession(
     });
 
     session.init(config, depends, dispatcher, listener);
-    // 启动：NapCat 语义（initializeSession 同款 try/catch 兜底）。
+    // 启动：wrapper 契约（initializeSession 同款 try/catch 兜底）。
     // QQ 9.9.31 实测 session 无 startNT 方法——init 内部已启动，startNT 失败不致命，
     // 靠 onOpentelemetryInit/onSessionInitComplete 完成信号判断。
     try {

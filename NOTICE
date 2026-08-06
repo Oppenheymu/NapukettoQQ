@@ -1,0 +1,44 @@
+# NapukettoQQ NOTICE
+
+Copyright (c) 2026 睦 <oppenheymu@gmail.com>
+
+## 许可证双轨声明
+
+本仓库包含**开源**与**私有**两类资产，许可范围不同：
+
+### 开源部分（MIT License）
+
+以下内容以 MIT License 授权（见根目录 `LICENSE` 文件），允许自由使用、修改、
+分发、商用：
+
+- 全部业务层源码：`packages/kernel`、`packages/adapter`、`packages/network`、
+  `packages/media`、`apps/cli`
+- `packages/loader` 内的**注入框架**：`src/`、`runtime/`、`native/bootmain.cpp`、
+  `native/hookdll.cpp`、`scripts/`
+- 根目录配置、文档（`docs/` 目录为本地文件，不在公共仓库）
+
+### 私有部分（不适用 MIT License）
+
+以下内容为**私有资产**，版权归作者所有，**不随公共仓库分发**，不适用 MIT
+License：
+
+- `packages/loader/native-private/`（若本地存在）
+- `packages/loader/native/vehicle.cpp`（若本地存在）
+- 由私有构建流程编译生成的**载具二进制**（`.dll` / `.node`，混淆/加壳后分发）
+
+载具二进制仅在整体发行包中提供，源码不开源。任何人在公共仓库中看到的内容
+均为开源部分，不包含逆向细节（RVA/Offset 表）。
+
+## 第三方版权
+
+- **wrapper.node** 及其导出的 QQNT 接口（`NodeIQQNTWrapperSession`、
+  `NodeIKernelMsgService` 等）版权归**腾讯公司**所有。本项目仅通过官方 NAPI
+  导出接口进行**互操作**（接口签名是外部系统事实，自研描述），不复制、
+  不修改腾讯任何二进制文件。
+- 本项目**不含 NapCat 任何代码、类型定义或二进制**。NapCat 为 GPL-2.0-only
+  项目，与本项目（MIT）许可证不兼容，本项目坚持零引入。
+
+## 使用声明
+
+本项目为功能中立的 OneBot 框架，仅供学习研究。使用者须遵守腾讯《软件许可
+及服务协议》及当地法律法规；因使用本项目产生的任何责任由使用者自行承担。

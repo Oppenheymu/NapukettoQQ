@@ -23,7 +23,7 @@
         "@types/ws": "^8.18.1",
         "tsdown": "^0.22.14"
     },
-    "license": "GPL-3.0",
+    "license": "MIT",
     "dependencies": {
         "@hono/node-server": "^2.0.12",
         "hono": "^4.12.34",

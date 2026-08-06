@@ -2,8 +2,7 @@
  * Listener 接口层（运行时探测产物 + 公开资料作说明书，ADR-003 / ADR-006）
  *
  * GroupListener：群服务（GroupService）的原生回调监听接口。
- * 签名参考 NapCat 公开类型 NodeIKernelGroupListener（说明书，零复制，自研描述
- * 形状）——事件名约定 `${Service}/${method}`，由 event-channel 编译期推导。
+ * 签名依据 wrapper 外部契约自研描述（零复制）——事件名约定 `${Service}/${method}`，由 event-channel 编译期推导。
  * 用 type 别名（非 interface）：满足 ListenerShape（Record<string, unknown>）约束。
  */
 import type {

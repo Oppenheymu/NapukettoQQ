@@ -5,8 +5,7 @@
  * 职责：
  *  1. hook process.dlopen：截获 wrapper.node 的 module.exports（QQ preload 注册后）。
  *  2. **Proxy 拦截 exports 构造器的 `new`**：捕获 QQ 自己创建的
- *     NodeIQQNTWrapperSession / NodeIKernelLoginService 实例（NapCat 同款机制，
- *     2026-08-05 从 NapCatQQ 参考确认）。
+ *     NodeIQQNTWrapperSession / NodeIKernelLoginService 实例（2026-08-05 实测确认）。
  *  3. 等 QQ 完成 session init（onSessionInitComplete）后，用**已 init 的 session**
  *     import kernel 启动 Napuketto。
  *
@@ -503,7 +502,7 @@ function bootstrap() {
                             logLevel: "info",
                         });
                         // 不传 qqSession/qqLoginService（登录前捕获的旧实例已失效/会干扰；
-                        // NapCat framework 语义：登录成功后 kernel 自己 create+init）
+                        // framework 语义：登录成功后 kernel 自己 create+init）
                         const ctx = core.attachWrapper(wrapperExports, bootEnv);
                         log(
                             `bootstrap: attachWrapper OK, engine=${typeof ctx.engine}, session=${ctx.session !== null}`,
@@ -569,7 +568,7 @@ function bootstrap() {
                         }
                         let loginResult = null;
                         if (typeof core.login === "function") {
-                            // 打印可用快速登录账号（对齐 NapCat 启动横幅）
+                            // 打印可用快速登录账号（启动横幅）
                             try {
                                 const accounts = await kernel.listLoginAccounts(ctx);
                                 if (accounts.length > 0) {
@@ -606,7 +605,7 @@ function bootstrap() {
                                 `bootstrap: 登录成功 uin=${loginResult.uin} uid=${loginResult.uid} nick=${loginResult.nick}`,
                             );
                             // ⭐ 登录后替换 session：Proxy 捕获的 QQ 新实例（登录后重建）才有效，
-                            // 替换 kernel 登录时自建的 session（NapCat framework 语义）。
+                            // 替换 kernel 登录时自建的 session（framework 语义）。
                             // 候选来源：construct / get() / getNTWrapperSession 捕获的 qqSession。
                             if (typeof core.setSession === "function") {
                                 let replaced = false;

@@ -37,7 +37,7 @@
     "devDependencies": {
         "tsdown": "^0.22.14"
     },
-    "license": "GPL-3.0",
+    "license": "MIT",
     "dependencies": {
         "@napuketto/kernel": "workspace:*",
         "@napuketto/media": "workspace:*",

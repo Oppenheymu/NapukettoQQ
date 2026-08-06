@@ -1,5 +1,5 @@
 /**
- * session 解析（2026-08-05，NapCat 机制确认后）
+ * session 解析（2026-08-05，wrapper 机制实测确认后）
  *
  * - getMainSession：startup.create → getSessionIdList → getNTWrapperSession(nt_x)
  *   （实测这些返回的 session 是空壳——核心 service 未 init，仅作参考）

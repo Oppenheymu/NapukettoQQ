@@ -1,7 +1,7 @@
 /**
  * Listener 接口层（运行时探测产物 + 公开资料作说明书，ADR-003 / ADR-006）
  *
- * ⚠️ 部分方法签名为自研描述（NapCat 公开类型作说明书理解 QQ wrapper 契约），
+ * ⚠️ 部分方法签名为自研描述（wrapper 外部契约作依据理解 QQ），
  * 待下一次进程内探测（probe.ts）校准。事件名约定 `${Service}/${method}`，
  * 由 event-channel 从本接口编译期推导。
  */

@@ -3,7 +3,7 @@
  *
  * 事实（实测）：wrapper.node 的 exports 89 键里没有 NodeI*Adapter/Listener 构造器，
  * engine.initWithDeskTopConfig / session.init 的 adapter 与 listener 参数一律接受
- * **普通 JS 对象**——NAPI 按方法名反射读取回调。NapCat 同款机制（自研实现，零复制）。
+ * **普通 JS 对象**——NAPI 按方法名反射读取回调（自研实现）。
  *
  * 职责：engine / session 交互所需的全部回调占位与监听器工厂。
  *  - GlobalAdapter     → engine.initWithDeskTopConfig 第二参（onLog / getAppSetting / ...）

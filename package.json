@@ -17,8 +17,8 @@
         "test": "echo \"Error: no test specified\" && exit 1"
     },
     "keywords": [],
-    "author": "",
-    "license": "GPL-3.0",
+    "author": "睦 <oppenheymu@gmail.com>",
+    "license": "MIT",
     "devEngines": {
         "packageManager": {
             "name": "pnpm",

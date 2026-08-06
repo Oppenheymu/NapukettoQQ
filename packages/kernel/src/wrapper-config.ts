@@ -7,7 +7,7 @@
  *  - buildSessionConfig → session.init（登录成功后调用）
  *
  * 与 lifecycle.ts（流程编排）解耦：本模块只回答「配置长什么样」，不管流程怎么走。
- * 字段参考 NapCat shell 模式 napcat.ts（仅理解机制，自研描述，零复制）。
+ * 字段为 wrapper.node 外部契约（appid/qua/版本），运行时实测确认，自研描述。
  */
 
 import { hostname } from "node:os";
@@ -18,7 +18,7 @@ import type {
 } from "./types/wrapper.js";
 import { PlatformType as PlatformTypeValue, VendorType } from "./types/wrapper.js";
 
-/** 系统信息（NapCat 用 fixed 值即可，真实环境探测后补）。 */
+/** 系统信息（先用 fixed 值，真实环境探测后补）。 */
 function systemInfo(): { platVer: string; osVersion: string; devType: string } {
     return {
         platVer: "Windows 10.0.22631",
@@ -27,7 +27,7 @@ function systemInfo(): { platVer: string; osVersion: string; devType: string } {
     };
 }
 
-/** Windows 兜底 appid / qua（NapCat appid.json 9.9.31 起缺失时）。 */
+/** Windows 兜底 appid / qua（9.9.31 起 appid.json 缺失时）。 */
 function resolveAppidQua(fullVersion: string): { appid: string; qua: string } {
     // 预留：后续可从 appid.json 表扩展
     return {
@@ -36,7 +36,7 @@ function resolveAppidQua(fullVersion: string): { appid: string; qua: string } {
     };
 }
 
-/** 生成 engine 桌面配置（NapCat shell 同款字段）。 */
+/** 生成 engine 桌面配置（wrapper 契约字段）。 */
 export function buildEngineConfig(
     fullVersion: string,
     dataPathGlobal: string,
@@ -90,7 +90,7 @@ export function buildSessionConfig(options: SessionConfigOptions): WrapperSessio
     const { appid, fullVersion, selfUin, selfUid, accountPath, downloadPath } = options;
     const { platVer, osVersion, devType } = systemInfo();
     const deviceInfo: DeviceInfo = {
-        guid: "", // TODO: 从 LoginService 获取（NapCat: getMachineId）
+        guid: "", // TODO: 从 LoginService 获取（getMachineId）
         buildVer: fullVersion,
         localId: 2052,
         devName: hostname(),

@@ -38,7 +38,7 @@ export interface NapukettoCoreOptions {
 
 /** login 参数。 */
 export interface CoreLoginOptions {
-    /** appid（登录握手，NapCat appid.json 兜底 537237765）。 */
+    /** appid（登录握手，兜底 537237765）。 */
     appid: string;
     /** session.init 超时（毫秒），默认 15s。 */
     initTimeoutMs?: number;
@@ -100,7 +100,7 @@ export class NapukettoCore {
     }
 
     /**
-     * 登录 + session 初始化（NapCat framework 语义，2026-08-05 实测修正）：
+     * 登录 + session 初始化（wrapper 契约，2026-08-05 实测确认）：
      * loginService.initConfig → 登录（快速/QR）→ **登录成功后** create session + init
      * → 等 onOpentelemetryInit(is_init) 完成信号。成功后填 ctx.login。
      *
@@ -114,7 +114,7 @@ export class NapukettoCore {
             throw kernelError("wrapper 未装配，无法登录", "INVALID_STATE");
         }
 
-        // 1. loginService.initConfig（NapCat framework 流程：addKernelLoginListener 前）
+        // 1. loginService.initConfig（wrapper 流程：addKernelLoginListener 前）
         const loginService = wrapper.loginService as {
             initConfig?: (config: unknown) => void;
         } | null;

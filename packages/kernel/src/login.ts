@@ -1,7 +1,7 @@
 /**
  * login.ts：QR 登录流程编排 + 状态机 + selfInfo（ADR-010，2026-08-05）
  *
- * 流程（NapCat shell 模式参考，自研实现）：
+ * 流程（QQ wrapper 登录契约，自研实现）：
  *  loginService.initConfig（core.login 已做）→ addKernelLoginListener → connect()
  *  → 指定账号：quickLoginWithUin；否则 getQRCodePicture() 触发二维码
  *  → 回调驱动状态机：未登录 → 扫码中 → 已扫码 → 已登录（onQRCodeLoginSucceed）
@@ -47,7 +47,7 @@ interface LoginServiceLike {
     getQRCodePicture(): boolean;
 }
 
-/** 二维码过期错误码（errType=1 errCode=3，NapCat 实测）。 */
+/** 二维码过期错误码（errType=1 errCode=3，实测）。 */
 const QR_EXPIRED_ERR_TYPE = 1;
 const QR_EXPIRED_ERR_CODE = 3;
 

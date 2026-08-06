@@ -100,12 +100,12 @@ export function createWrapper(
     return { exports, engine, versionInfo, session: null, loginService: null };
 }
 
-/** engine 初始化（NapCat 语义：先 engine 后 session）。config 为普通 JS 对象。 */
+/** engine 初始化（wrapper 契约：先 engine 后 session）。config 为普通 JS 对象。 */
 export function initEngine(ctx: WrapperContext, config: EnginInitDesktopConfig): void {
     ctx.engine.initWithDeskTopConfig(config, new GlobalAdapter());
 }
 
-/** 创建会话：`NodeIQQNTWrapperSession.create()`（NapCat shell 正解，2026-08-05 实测修正）。
+/** 创建会话：`NodeIQQNTWrapperSession.create()`（2026-08-05 实测确认）。
  * 注：`new NodeIQQNTWrapperSession()` 构造的对象缺 cpp_impl，session.init 断言
  * "implementation of IQQNTWrapperSession is not valid"；create() 返回带完整实现的实例。 */
 export function createSession(ctx: WrapperContext): NodeIQQNTWrapperSession {
@@ -130,7 +130,7 @@ export function initSession(
     session.init(config, new DependsAdapter(), new DispatcherAdapter(), listener);
 }
 
-/** 启动会话（startNT(0)，NapCat 语义）。 */
+/** 启动会话（startNT(0)）。 */
 export function startSession(ctx: WrapperContext): void {
     const { session } = ctx;
     if (session === null) {
@@ -144,7 +144,7 @@ export function startSession(ctx: WrapperContext): void {
  *
  * **session 来源（2026-08-05 修正）**：
  *  1. qqSession（boot.cjs 拦截 `new` 窃取的 QQ 已 init session）——尚未落地
- *  2. createSession（`new NodeIQQNTWrapperSession()`）——NapCat shell 正解，默认路径
+ *  2. createSession（`new NodeIQQNTWrapperSession()`）——实测可用，默认路径
  *  （getMainSession 实测为空壳：service 全 null + 缺 startNT，仅 probe 探测参考）
  *
  * 由 loader runtime/boot.cjs 在 QQ 主进程内调用（import kernel dist 后）。
@@ -159,7 +159,7 @@ export function startNapuketto(options: StartNapukettoOptions): WrapperContext {
     const ctx = createWrapper(wrapperExports, versionInfo);
     initEngine(ctx, engineConfig ?? defaultEngineConfig(env ?? {}));
 
-    // loginService：优先 QQ 捕获实例，否则 new（NapCat shell 模式）
+    // loginService：优先 QQ 捕获实例，否则 new（实测确认）
     if (qqLoginService !== undefined && qqLoginService !== null) {
         ctx.loginService = qqLoginService;
     } else {
@@ -170,7 +170,7 @@ export function startNapuketto(options: StartNapukettoOptions): WrapperContext {
         }
     }
 
-    // session：NapCat shell 正解 = `new NodeIQQNTWrapperSession()`（createSession）。
+    // session：实测可用 = `new NodeIQQNTWrapperSession()`（createSession）。
     // getMainSession 实测返回空壳——核心 service 全 null 且缺 startNT（2026-08-05
     // 快速登录 startNT 失败定位）；qqSession 拦截机制尚未在 boot.cjs 落地。
     if (qqSession !== undefined && qqSession !== null) {
@@ -208,7 +208,7 @@ export interface StartNapukettoOptions {
     engineConfig?: EnginInitDesktopConfig;
     /** 覆盖 session 配置（联调用，提供则自动 init+start）。 */
     sessionConfig?: WrapperSessionInitConfig;
-    /** QQ 已 init 的 session（boot.cjs 拦截 new 捕获，NapCat 机制）。 */
+    /** QQ 已 init 的 session（boot.cjs 拦截 new 捕获）。 */
     qqSession?: NodeIQQNTWrapperSession | null;
     /** QQ 的 loginService 实例（boot.cjs 拦截 new 捕获）。 */
     qqLoginService?: unknown;

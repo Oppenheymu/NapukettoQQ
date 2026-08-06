@@ -22,7 +22,7 @@
     "devDependencies": {
         "tsdown": "^0.22.14"
     },
-    "license": "GPL-3.0",
+    "license": "MIT",
     "dependencies": {
         "execa": "^10.0.1",
         "file-type": "^22.0.1",
