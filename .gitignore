@@ -47,5 +47,8 @@ packages/loader/native-private/
 packages/loader/native/*.dll
 packages/loader/native/*.node
 
+# 临时观察 DLL（运行时验证 qq_magic_napi_register 调用，实验产物）
+packages/loader/native/magic-observer.cpp
+
 # 临时实验脚本（逆向验证 / PE 分析 / host 测试，不留仓库）
 scripts-tmp/
