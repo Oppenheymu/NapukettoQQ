@@ -144,6 +144,23 @@ apps/cli             kernel + adapter + loader
 > 拿到的 `NodeIQQNTWrapperSession` 全是**无 cpp_impl 的空壳**（构造函数 `napi_wrap` NULL）。
 > Ghidra 逆向已定位「创建有效 session」的导出链，载具 DLL 借此**主动创建并激活** session。
 
+### 8.0 路线 B 定稿（2026-08-06，P2-0 全通）
+
+> **用户拍板**：路线 B（NapCat 同款：注入 QQ 主进程 → utilityProcess Worker）全链路验证通过，
+> 取代路线 A（自建宿主 + env 兼容层，P0-B 判死）。详见 `docs/HANDOVER-V5-route-b.md`。
+
+**链路**：boot.cjs（NAPUTO_ROUTE_B=1）→ `electron.utilityProcess.fork(route-b-worker.cjs)`
+（继承 QQ env，事件分发对象天然可用）→ worker 内 `process.dlopen(wrapper.node)`（98 exports，
+无需 IAT 改写）→ boot-bootstrap.js 复用（kernel 装配 → 登录 → session → 协议装配）。
+
+**P2-1（2026-08-06）launcher 默认开启路线 B**：`LaunchOptions.routeB`（默认 true）→ env
+`NAPUTO_ROUTE_B=1`。cli 默认走 worker 模式（V1 主进程直接引导仅作历史回退，`routeB: false` 关闭）。
+
+**P2-1 冒烟自检（runtime/boot-smoke.js）**：`NAPUTO_SMOKE=1` 时，登录 + session 就绪后执行
+业务层最后试金石——MsgBridge 注册 → 订阅 onRecvMsg → MsgApi.sendMessage（NAPUTO_SMOKE_PEER
+指定目标，缺省发给自己）→ fetchMessages 落库核对 → 日志输出结论。build-native 已整目录拷贝
+runtime/（含新文件），无需改构建脚本。
+
 ### ⚠️ 闭源红线（2026-08-06 用户拍板）
 
 - **逆向腾讯 QQ 的产物（RVA/Offset 表）绝不进公共仓库**（含本文档、源码、注释）。

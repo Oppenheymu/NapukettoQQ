@@ -581,6 +581,22 @@ function resolveWrapperPath(installDir: string, version: string): string;
 
 **踩坑**：smol-toml `stringify` 对对象数组输出 `[[accounts]]`（正确）；嵌套表 `[onebot11.http]` 正常；TS 7 对 `as Record<string, unknown>` 转换 CliConfig 报 TS2352 → 先转 unknown（`toRecord` helper）；`ConfigOptions.seed/format` 透传需显式联合。
 
+### 8.20 P2-1 快速登录网络重试（2026-08-06，路线 B 端到端）
+
+**目标**：HANDOVER-V5 P2-1（worker 端到端跑通）第三项——快速登录报 1006511 网络异常（QQ 刚拉起、网络栈未初始化）时，等 MSF 连接就绪后重试（NapCat waitForNetworkConnection 语义，自研实现，零复制）。**已实现并 pnpm check 全绿（157 文件）+ 全量构建通过。**
+
+**lifecycle.ts 增强**：
+- `MSF_STATUS_CONNECTED = 3`（getMsfStatus() 已连接状态码，NapCat 语义自研描述）
+- `waitForNetworkConnection(ctx, { timeoutMs })`：轮询 `loginService.getMsfStatus() === 3`（复用内部 waitFor），缺 getMsfStatus 返回 false
+- `quickLogin` 重试循环：失败 errMsg 含 `1006511` → 等网络就绪 → 重试（最多 `NETWORK_RETRY_MAX=3` 次）；非网络错误或重试耗尽直接抛 KernelError
+- `LoginServiceShape` 补 `getMsfStatus(): number`
+
+**配套（loader 侧，boot-bootstrap.js）**：
+- launcher 透传 `NAPUTO_ROUTE_B=1`（默认开启，`LaunchOptions.routeB` 可关）——cli 默认走路线 B（utilityProcess Worker）
+- 新增 `runtime/boot-smoke.js`（`NAPUTO_SMOKE=1` 触发）：登录 + session 就绪后，MsgBridge 注册 → 订阅 onRecvMsg → MsgApi.sendMessage 发一条（`NAPUTO_SMOKE_PEER` 指定 c2c:<uin>/group:<uin>，缺省发给自己）→ fetchMessages 落库核对 → 打印结果。业务层最后试金石入口。
+
+**踩坑**：`waitForNetworkConnection` 非 async 直接 return Promise（biome noAsyncPromiseExecutor 提示去掉 async）；非 async 内 `return false` 需 `Promise.resolve(false)`（TS2322）；快速登录循环内 `const result` 作用域——errMsg 提升为循环外 `lastErrMsg` 再抛。
+
 ### 8.3 P0-1 实现记录（2026-08-04）
 
 `errors.ts` / `paths.ts` / `logger.ts` / `config.ts` 已实现，通过 `pnpm check` + 运行时冒烟测试（26 项）。关键决策：

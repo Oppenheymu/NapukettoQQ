@@ -17,6 +17,7 @@
 const path = require("node:path");
 const { log } = require("./boot-util.js");
 const { startProtocols } = require("./boot-protocols.js");
+const { runSmokeTest } = require("./boot-smoke.js");
 
 /** 对象有效性判断：getMsgService() 调用不抛断言（cpp_impl 已激活）。
  * 与 isSessionUsable 的区别：这里允许返回 null（未 init 但对象有效）。 */
@@ -318,6 +319,15 @@ async function bootstrap(state) {
                         log("bootstrap: QQ session 就绪（getMsgService 可用）");
                     } catch (readyErr) {
                         log(`bootstrap: 等待 session 就绪失败: ${readyErr?.message ?? readyErr}`);
+                    }
+                    // P2-1 收发消息冒烟自检（NAPUTO_SMOKE=1）：MsgBridge + MsgApi 真发/收一条
+                    if (process.env.NAPUTO_SMOKE === "1" && loginResult !== null) {
+                        try {
+                            const ok = await runSmokeTest(kernel, ctx, loginResult);
+                            log(`bootstrap: 冒烟自检${ok ? "通过" : "未完全通过"}（见上文 smoke 日志）`);
+                        } catch (smokeErr) {
+                            log(`bootstrap: 冒烟自检异常: ${smokeErr?.message ?? smokeErr}`);
+                        }
                     }
                 } else {
                     log("bootstrap: kernel core missing login fn");

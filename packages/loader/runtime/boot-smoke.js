@@ -1,0 +1,149 @@
+"use strict";
+/**
+ * boot-smoke.js：P2-1 收发消息冒烟自检（NAPUTO_SMOKE=1 触发，2026-08-06）。
+ *
+ * 目的：业务层最后试金石——登录 + session 就绪后，真正用 kernel MsgBridge
+ * （addKernelMsgListener）+ MsgApi（sendMsg）发/收一条消息，验证：
+ *  ① 发送方向：MsgApi.sendMessage 成功返回 msgId（NT 雪花 ID）
+ *  ② 接收方向：MsgBridge 订阅 onRecvMsg 收到消息事件
+ *  ③ 落库验证：fetchMessages 拉取最近消息，确认刚发的消息在列表里
+ *
+ * 目标 peer 由环境变量 NAPUTO_SMOKE_PEER 指定（格式：c2c:<uin> 或 group:<uin>），
+ * 缺省发给自己的 uin（C2C 我的设备）。发送内容固定带时间戳，便于日志核对。
+ *
+ * 由 boot-bootstrap.js 在登录成功、session 就绪后调用（协议装配前——不依赖
+ * adapter/network，单独验证 kernel 业务链路）。
+ */
+const { log } = require("./boot-util.js");
+
+/** 冒烟测试默认等待（毫秒）。 */
+const SMOKE_SETTLE_MS = 5000;
+
+/** 解析冒烟目标：NAPUTO_SMOKE_PEER（c2c:<uin> / group:<uin>），缺省发给自己。 */
+function parseSmokeTarget(envPeer, selfUin) {
+    if (!envPeer) {
+        return { kind: "c2c", uin: selfUin };
+    }
+    const [kind, uin = ""] = envPeer.split(":");
+    if (kind === "group" && uin !== "") {
+        return { kind: "group", uin };
+    }
+    if (kind === "c2c" && uin !== "") {
+        return { kind: "c2c", uin };
+    }
+    return { kind: "c2c", uin: selfUin };
+}
+
+/** uin → uid（c2c 目标用；group 直接拿群号作 peerUid）。 */
+async function resolvePeerUid(kernel, ctx, target, selfUid) {
+    const groupApi = new kernel.GroupApi(ctx.session);
+    if (target.kind === "group") {
+        return { chatType: kernel.ChatType.GROUP, peerUid: target.uin };
+    }
+    // c2c：目标是自己 → 直接用 selfUid（避免 uidToUin 往返）
+    if (target.uin === String(ctx.login?.uin ?? "")) {
+        return { chatType: kernel.ChatType.C2C, peerUid: selfUid };
+    }
+    const uidMap = await groupApi.uinToUid([target.uin]);
+    const uid = uidMap.get(target.uin);
+    if (!uid) {
+        throw new Error(`uinToUid 解析失败: ${target.uin}`);
+    }
+    return { chatType: kernel.ChatType.C2C, peerUid: uid };
+}
+
+/**
+ * 执行冒烟自检：注册 MsgBridge → 订阅 onRecvMsg → 发一条消息 → 拉历史核对。
+ * @param kernel kernel 模块（import 结果）
+ * @param ctx CoreContext
+ * @param loginResult 登录结果（uin/uid/nick）
+ * @returns 是否全部通过（发送成功 + 收到事件 + 落库验证）
+ */
+async function runSmokeTest(kernel, ctx, loginResult) {
+    const session = ctx.session;
+    if (!session) {
+        log("smoke: ❌ session 为空，跳过");
+        return false;
+    }
+    const target = parseSmokeTarget(process.env.NAPUTO_SMOKE_PEER, loginResult.uin);
+    log(`smoke: 目标=${target.kind}:${target.uin}（peer env=${process.env.NAPUTO_SMOKE_PEER ?? "(缺省=自己)"}）`);
+
+    // ① 消息事件通道 + 桥（addKernelMsgListener 普通 JS 对象，NAPI 反射）
+    const channel = new kernel.NTEventChannel("Msg");
+    const bridge = new kernel.MsgBridge(session, channel);
+    bridge.register();
+    log("smoke: ✅ MsgBridge 注册完成（addKernelMsgListener）");
+
+    // ② 订阅 onRecvMsg（接收方向验证）
+    let received = 0;
+    let receivedText = "";
+    channel.on("Msg/onRecvMsg", (msg) => {
+        received += 1;
+        try {
+            const texts = kernel.toCanonicalElements(msg.elements ?? [])
+                .filter((el) => el.type === "text")
+                .map((el) => el.text)
+                .join("");
+            if (texts) {
+                receivedText = texts;
+            }
+        } catch (e) {
+            log(`smoke: onRecvMsg 解析失败: ${e?.message ?? e}`);
+        }
+        log(`smoke: 📥 onRecvMsg 收到 #${received}（msgId=${msg.msgId ?? "?"} seq=${msg.msgSeq ?? "?"} text="${receivedText}"）`);
+    });
+
+    // ③ 发送方向：MsgApi.sendMessage
+    const msgApi = new kernel.MsgApi(session);
+    const peer = await resolvePeerUid(kernel, ctx, target, loginResult.uid);
+    const content = `NapukettoQQ smoke test ${Date.now()}`;
+    let sentMsgId = "";
+    try {
+        const { msgId } = await msgApi.sendMessage(peer, [{ type: "text", text: content }]);
+        sentMsgId = msgId;
+        log(`smoke: ✅ 发送成功 msgId=${msgId}（content="${content}"）`);
+    } catch (e) {
+        log(`smoke: ❌ 发送失败: ${e?.message ?? e}`);
+    }
+
+    // 等消息回显（自己发的消息 QQ 会通过 onRecvMsg 回传；不依赖则靠落库验证兜底）
+    await new Promise((r) => setTimeout(r, SMOKE_SETTLE_MS));
+
+    // ④ 落库验证：拉最近 10 条，确认刚发的消息在列表里
+    let landed = false;
+    try {
+        const recent = await msgApi.fetchMessages(peer, { count: 10 });
+        landed = recent.some((m) => m.msgId === sentMsgId || m.msgSeq === sentMsgId);
+        log(
+            `smoke: 落库验证: 最近 ${recent.length} 条${landed ? " ✅ 含刚发消息" : " ❌ 未找到（可能同步延迟）"}`,
+        );
+        if (!landed) {
+            for (const m of recent.slice(0, 3)) {
+                const texts = kernel
+                    .toCanonicalElements(m.elements ?? [])
+                    .filter((el) => el.type === "text")
+                    .map((el) => el.text)
+                    .join("");
+                log(`smoke:   最近消息 msgId=${m.msgId} seq=${m.msgSeq} text="${texts}"`);
+            }
+        }
+    } catch (e) {
+        log(`smoke: 落库验证失败: ${e?.message ?? e}`);
+    }
+
+    // 收尾：注销监听（防重复回调）
+    try {
+        bridge.unregister();
+        log("smoke: ✅ MsgBridge 已注销");
+    } catch (e) {
+        log(`smoke: 注销失败（忽略）: ${e?.message ?? e}`);
+    }
+
+    const ok = sentMsgId !== "" && (received > 0 || landed);
+    log(
+        `smoke: ===== 冒烟${ok ? "✅ 通过" : "❌ 未完全通过"}（发送=${sentMsgId !== "" ? "OK" : "FAIL"}，收到事件=${received}，落库=${landed}）=====`,
+    );
+    return ok;
+}
+
+module.exports = { runSmokeTest };

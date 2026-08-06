@@ -100,11 +100,57 @@ export interface LoginAccountInfo {
     isQuickLogin?: boolean;
 }
 
-/** 登录服务形状（getLoginList / quickLoginWithUin，自研描述）。 */
+/** 登录服务形状（getLoginList / quickLoginWithUin / getMsfStatus，自研描述）。 */
 type LoginServiceShape = {
     getLoginList(): Promise<{ result: number; LocalLoginInfoList: LoginAccountInfo[] }>;
     quickLoginWithUin(uin: string): Promise<{ result: string; loginErrorInfo: { errMsg: string } }>;
+    getMsfStatus(): number;
 };
+
+/**
+ * 网络状态（MSF）常量。
+ * 3 = 已连接（NapCat waitForNetworkConnection 语义，自研描述）。
+ */
+const MSF_STATUS_CONNECTED = 3;
+
+/** 快速登录网络异常错误码（1006511，P2-1 实测：登录前网络未就绪时报此错）。 */
+const NETWORK_ERROR_CODE = "1006511";
+
+/** 网络重试最大次数（每次重试前等网络就绪）。 */
+const NETWORK_RETRY_MAX = 3;
+
+/** 网络就绪等待超时（毫秒）。 */
+const NETWORK_READY_TIMEOUT_MS = 15_000;
+
+/** 网络就绪轮询间隔（毫秒）。 */
+const NETWORK_READY_POLL_MS = 1000;
+
+/**
+ * 等待网络连接就绪（loginService.getMsfStatus() === 3）。
+ * 参考 NapCat waitForNetworkConnection 思路（自研实现）：快速登录在 QQ 刚拉起、
+ * 网络栈未初始化时报 1006511 网络异常——等待 MSF 连接后再重试。
+ * @returns 是否在超时前就绪。
+ */
+export function waitForNetworkConnection(
+    ctx: WrapperContext,
+    opts: { timeoutMs?: number } = {},
+): Promise<boolean> {
+    const raw = ctx.loginService as unknown as LoginServiceShape | null;
+    if (raw === null || typeof raw.getMsfStatus !== "function") {
+        return Promise.resolve(false);
+    }
+    return waitFor(
+        () => {
+            try {
+                return raw.getMsfStatus() === MSF_STATUS_CONNECTED;
+            } catch {
+                return false;
+            }
+        },
+        opts.timeoutMs ?? NETWORK_READY_TIMEOUT_MS,
+        NETWORK_READY_POLL_MS,
+    );
+}
 
 /** 列出历史登录账号（boot.cjs 启动横幅用，「可用快速登录 of QQ」）。 */
 export async function listLoginAccounts(ctx: WrapperContext): Promise<LoginAccountInfo[]> {
@@ -116,7 +162,10 @@ export async function listLoginAccounts(ctx: WrapperContext): Promise<LoginAccou
     return list.LocalLoginInfoList;
 }
 
-/** 快速登录：遍历历史登录列表尝试。 */
+/**
+ * 快速登录：遍历历史登录列表尝试。
+ * P2-1：失败且错误为网络异常（1006511）时，等网络就绪后重试（最多 NETWORK_RETRY_MAX 次）。
+ */
 export async function quickLogin(
     ctx: WrapperContext,
     opts: { uin?: string; timeoutMs?: number },
@@ -145,15 +194,33 @@ export async function quickLogin(
     if (target === undefined) {
         throw kernelError(`账号 ${opts.uin ?? ""} 不在登录列表`, "NOT_FOUND");
     }
-    const result = await loginService.quickLoginWithUin(target.uin);
-    if (result.loginErrorInfo.errMsg) {
-        throw kernelError(`快速登录失败: ${result.loginErrorInfo.errMsg}`, "NOT_LOGIN");
+
+    // 网络重试循环：1006511（网络未就绪）→ 等 MSF 连接 → 重试
+    let lastErrMsg = "";
+    for (let attempt = 1; attempt <= NETWORK_RETRY_MAX; attempt++) {
+        const result = await loginService.quickLoginWithUin(target.uin);
+        const errMsg = result.loginErrorInfo.errMsg;
+        if (!errMsg) {
+            return {
+                uin: target.uin,
+                uid: target.uid ?? "",
+                nick: target.nickName ?? "",
+            };
+        }
+        lastErrMsg = errMsg;
+        const isNetworkError = errMsg.includes(NETWORK_ERROR_CODE);
+        if (!isNetworkError || attempt >= NETWORK_RETRY_MAX) {
+            break;
+        }
+        // 网络未就绪 → 等连接后重试（不无限重试）
+        const ready = await waitForNetworkConnection(ctx, {
+            timeoutMs: opts.timeoutMs ?? NETWORK_READY_TIMEOUT_MS,
+        });
+        if (!ready) {
+            break;
+        }
     }
-    return {
-        uin: target.uin,
-        uid: target.uid ?? "",
-        nick: target.nickName ?? "",
-    };
+    throw kernelError(`快速登录失败: ${lastErrMsg}`, "NOT_LOGIN");
 }
 
 /** session 初始化（4 参全为普通 JS 对象，等 init 完成信号）。 */

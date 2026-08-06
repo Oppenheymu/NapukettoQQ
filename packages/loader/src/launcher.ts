@@ -42,6 +42,8 @@ export interface LaunchOptions {
     vehicleDll?: string;
     /** 无头模式（阻断 UI/GPU，boot.cjs 侧实现，默认 false）。 */
     headless?: boolean;
+    /** 路线 B（utilityProcess Worker 模式，2026-08-06 定稿默认开启）。 */
+    routeB?: boolean;
     /** BootMain.exe 路径（默认 dist/native/NapukettoBootMain.exe）。 */
     bootMain?: string;
 }
@@ -92,6 +94,11 @@ export function launchQqWithLoader(options: LaunchOptions): LaunchResult {
     if (hasVehicle) {
         env[ENV.VEHICLE_DLL] = vehicleDllPath;
     }
+    // 路线 B（默认开启，2026-08-06 定稿）：boot.cjs fork utilityProcess Worker →
+    // worker 内 dlopen wrapper.node + kernel 引导（QQ env 原生，P0-B 纯 Node 崩溃点消失）。
+    if (options.routeB !== false) {
+        env[ENV.ROUTE_B] = "1";
+    }
     if (options.headless === true) {
         env[ENV.HEADLESS] = "1";
         // 无头低内存命令行参数（bootmain CreateProcess 附加，2026-08-06）：
@@ -135,6 +142,8 @@ export const ENV = {
     QQ_ARGS: "NAPUTO_QQ_ARGS",
     /** 深度无头：压制非关键渲染进程（boot-headless.js，screenshot/blank）。 */
     DEEP_HEADLESS: "NAPUTO_DEEP_HEADLESS",
+    /** 路线 B：utilityProcess Worker 模式（boot.cjs 分支）。 */
+    ROUTE_B: "NAPUTO_ROUTE_B",
     /** adapter 包入口（boot.cjs 协议装配用）。 */
     ADAPTER_ENTRY: "NAPUTO_ADAPTER_ENTRY",
     /** network 包入口（boot.cjs 协议装配用）。 */

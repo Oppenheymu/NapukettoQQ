@@ -42,6 +42,7 @@ export {
     initAndStartSession,
     listLoginAccounts,
     quickLogin,
+    waitForNetworkConnection,
     waitSessionReady,
 } from "./lifecycle.js";
 export type { LoggerOptions, LogLevel } from "./logger.js";
