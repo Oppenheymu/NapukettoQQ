@@ -3,7 +3,7 @@
  *
  * 描述 QQ 消息的事实结构，是各协议翻译层的公共中间表示：
  * kernel 只做一次 NT ↔ canonical（toCanonicalElements / toSendElements），
- * 各协议（onebot11/onebot12/satori）只写薄映射 canonical ↔ 协议格式。
+ * 各协议（onebot11/satori）只写薄映射 canonical ↔ 协议格式。
  */
 
 import { kernelError } from "../errors.js";

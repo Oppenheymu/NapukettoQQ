@@ -1,5 +1,9 @@
 # @napuketto/adapter 设计
 
+> **文档整理说明（2026-08-06）**：下文历史实现记录（§8.x）中引用的 `HANDOVER.md §5.3 / §8.1` 等章节
+> 已随 docs 整理归档（旧 HANDOVER.md 合并进 `docs/STATUS.md` / `docs/DECISIONS.md`，原始内容在 git 历史
+> 归档提交 `d9a790e`）。引用内容均已实现，仅作追溯。
+
 > 职责：**协议适配器容器**——一个共享的适配器框架（core），外加 OneBot 11（当前）/ Satori（规划）协议语义。**OneBot 12 已放弃（2026-08-05 用户拍板：规范过于模糊，删除占位入口 commit ac5ebba）**。
 > 对应 ADR：002 / 003 / 008 / 009 / 013 / 014 / 017
 > 状态：core 框架已实现（BaseAction / ActionRegistry / AdapterRegistry / ProtocolConfig / BaseProtocolAdapter，2026-08-04，见 §8）；onebot11 第一梯队已实现（types / helper/config / action/send_msg，2026-08-04，见 §8.1）；onebot11 helper 翻译层已实现（cqcode/data，2026-08-04，见 §8.2）；onebot11 事件模型已实现（message/notice/request/meta，2026-08-05，见 §8.3）；onebot11 动作骨架扩充已实现（error-map + 6 个查询动作 + types 补全，2026-08-05，见 §8.4）；**onebot11 adapter.ts 已实现（2026-08-05，见 §8.5）——订阅 kernel 消息事件 → OB11 消息事件 → network 广播（消息收链路打通）**；**P2-3 请求分发 + send_msg 真实化 + MessageUnique（2026-08-05，见 §8.6）——收发闭环打通**；**P2-4 查询动作真实化（2026-08-05，见 §8.7）——apis/group + apis/friend + 6 查询动作接 kernel**；**P2-5 传输接入（2026-08-05，见 §8.8）——HTTP/WS server+client + 鉴权 + 心跳 meta 事件**；**P2-6 cli 启动编排（2026-08-05，见 §8.9）——boot.cjs 补协议装配 + cli 参数解析拉起 QQ**。**P2-16 api/ 聚合层（2026-08-05，见 §8.16）——OneBotApi 单类聚合 9 个 kernel apis + messageUnique + self/system，动作只依赖一个聚合对象（基础设施第一项）**；**P2-17 GroupCache 消费（2026-08-05，见 §8.17）——群信息/群成员动作读 kernel cache（ADR-008，基础设施第二项）**。**§9 实现顺序 5-6 已同步更新。**

@@ -9,9 +9,9 @@ user-invocable: true
 
 ## 项目要点
 
-- NapukettoQQ：基于 QQ NT 客户端原生模块（`wrapper.node`）的机器人框架，对外提供 OneBot 11（当前）/ OneBot 12 / Satori（规划）多协议接口。全自研，pnpm monorepo + TypeScript + tsdown + biome。
-- 开工前先读 `AGENTS.md` 与 `docs/architecture.md`，再读对应包的 `docs/design.md`。
-- 硬性约束：许可证 GPL-3.0，零引入 NapCat 代码；kernel 是唯一原生交互层；network 协议无关；media 严格解耦；不做 framework 模式 / webui。
+- NapukettoQQ：基于 QQ NT 客户端原生模块（`wrapper.node`）的机器人框架，对外提供 OneBot 11（当前）/ Satori（规划）多协议接口（OneBot 12 已放弃）。全自研，pnpm monorepo + TypeScript + tsdown + biome。
+- 开工前先读 `AGENTS.md` 与 `docs/STATUS.md`（现状 + 关键决策点）→ `docs/architecture.md`，再读对应包的 `docs/design.md`。
+- 硬性约束：许可证 MIT，零引入 NapCat 代码；kernel 是唯一原生交互层；network 协议无关；media 严格解耦；不做 framework 模式 / webui。
 - 工作流：`pnpm check`（biome + tsc，提交前必跑）、`pnpm fix`（自动修复）、`pnpm -r build`（全量构建）。
 - 代码风格：space+4 缩进、LF 行尾、strict 全家桶、类型导入一律 `import type`、禁止 `any`、异步调用必须 `await` 或显式 `.catch`、业务错误抛类型化 `KernelError`、日志统一走 pino。
 - 实现模式：设计先行（写代码前先更新对应包 `docs/design.md`）；一个模块一个模块实现，每完成一个模块跑一次 `pnpm check`。

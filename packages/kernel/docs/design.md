@@ -1,5 +1,9 @@
 # @napuketto/kernel 设计
 
+> **文档整理说明（2026-08-06）**：下文历史实现记录（§8.x）中引用的 `HANDOVER.md §5.3 / §8.1` 等章节
+> 已随 docs 整理归档（旧 HANDOVER.md 合并进 `docs/STATUS.md` / `docs/DECISIONS.md`，原始内容在 git 历史
+> 归档提交 `d9a790e`）。引用内容均已实现，仅作追溯。
+
 > 职责：**唯一原生交互层 + 唯一共享状态层**。协议层只认识 kernel，不认识 QQ。
 > 对应 ADR：001 / 003 / 006 / 007 / 008 / 009 / 010 / 012 / 016 / 017 / 018
 > 状态：P0-1 已完成（errors / paths / logger / config，2026-08-04，见 §8.3）；P0-2 已完成（event-channel + 占位 Listener 类型，2026-08-04，见 §4.1）；P1-1 已完成（wrapper-version + wrapper-loader，2026-08-05，见 §8.4）；P1-2 探测完成（RTTI 继承树 + service 类名/方法签名大全，2026-08-05，见 §8.5）；**P1-3 路线定稿：NAPI 范式重构（2026-08-05，见 §8.6）——wrapper-loader 从 koffi 改为 NAPI bootstrap，loader 包负责注入引导，业务层全走 NAPI；startNapuketto 装配入口 + smoke-test 已补（2026-08-05）；全链路实测打通（注入→IAT hook→boot JS→89 exports→startNapuketto OK）。** P1-4 设计定稿：QQ 进程内探测 + session 复用（2026-08-05，见 §8.7）；P1-5 装配层完成（core + context，2026-08-05，见 §8.8）；**P2-1 apis/msg 实现（2026-08-05，见 §8.9）——sendMessage / recallMessage / fetchMessages / markRead + canonical→NT 发送元素映射（text/at/face/image/voice/reply 核心五类）。** P2-2 消息事件链路完成（MsgBridge + toCanonicalElements，2026-08-05，见 §8.10）。
@@ -177,7 +181,6 @@ function toSendElements(e: CanonicalElement[]): SendMessageElement[];  // 规范
 
 ```
 onebot11: canonical → CQ 码 / segment 数组（反向：解析 CQ 码 → canonical）
-onebot12: canonical → segment（几乎同构，只差字段命名）
 satori:   canonical → 元素（type/attrs，img/audio 等重命名）
 ```
 
@@ -583,7 +586,7 @@ function resolveWrapperPath(installDir: string, version: string): string;
 
 ### 8.20 P2-1 快速登录网络重试（2026-08-06，路线 B 端到端）
 
-**目标**：HANDOVER-V5 P2-1（worker 端到端跑通）第三项——快速登录报 1006511 网络异常（QQ 刚拉起、网络栈未初始化）时，等 MSF 连接就绪后重试（NapCat waitForNetworkConnection 语义，自研实现，零复制）。**已实现并 pnpm check 全绿（157 文件）+ 全量构建通过。**
+**目标**：`docs/STATUS.md` P2-1（worker 端到端跑通）第三项——快速登录报 1006511 网络异常（QQ 刚拉起、网络栈未初始化）时，等 MSF 连接就绪后重试（NapCat waitForNetworkConnection 语义，自研实现，零复制）。**已实现并 pnpm check 全绿（157 文件）+ 全量构建通过。**
 
 **lifecycle.ts 增强**：
 - `MSF_STATUS_CONNECTED = 3`（getMsfStatus() 已连接状态码，NapCat 语义自研描述）

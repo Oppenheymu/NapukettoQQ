@@ -147,7 +147,7 @@ apps/cli             kernel + adapter + loader
 ### 8.0 路线 B 定稿（2026-08-06，P2-0 全通）
 
 > **用户拍板**：路线 B（NapCat 同款：注入 QQ 主进程 → utilityProcess Worker）全链路验证通过，
-> 取代路线 A（自建宿主 + env 兼容层，P0-B 判死）。详见 `docs/HANDOVER-V5-route-b.md`。
+> 取代路线 A（自建宿主 + env 兼容层，P0-B 判死）。详见 `docs/STATUS.md`（现状，含自建宿主可救决策点）。
 
 **链路**：boot.cjs（NAPUTO_ROUTE_B=1）→ `electron.utilityProcess.fork(route-b-worker.cjs)`
 （继承 QQ env，事件分发对象天然可用）→ worker 内 `process.dlopen(wrapper.node)`（98 exports，

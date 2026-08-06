@@ -1,10 +1,10 @@
 # NapukettoQQ 工程指南
 
-> 本文件是项目级指令（VS Code Copilot 自动加载）。开始任何工作前，先读本文件与 `docs/architecture.md`，再读对应包的 `docs/design.md`。
+> 本文件是项目级指令（VS Code Copilot 自动加载）。开始任何工作前，先读本文件与 `docs/STATUS.md`（现状 + 关键决策点）→ `docs/architecture.md`（架构书）→ 对应包的 `docs/design.md`。
 
 ## 项目是什么
 
-NapukettoQQ：基于 QQ NT 客户端原生模块（`wrapper.node`）的机器人框架，对外提供 OneBot 11（当前）、OneBot 12 / Satori（规划）多协议接口。**全自研**，pnpm monorepo + TypeScript + tsdown + biome。
+NapukettoQQ：基于 QQ NT 客户端原生模块（`wrapper.node`）的机器人框架，对外提供 OneBot 11（当前）、Satori（规划）多协议接口（**OneBot 12 已放弃**，规范过于模糊）。**全自研**，pnpm monorepo + TypeScript + tsdown + biome。
 
 ## 硬性约束（违反 = 错误）
 
@@ -16,7 +16,7 @@ NapukettoQQ：基于 QQ NT 客户端原生模块（`wrapper.node`）的机器人
    @napuketto/kernel    无内部依赖（仅 pino + smol-toml）
    @napuketto/media     无内部依赖
    @napuketto/network   无内部依赖（协议无关传输原语）
-   @napuketto/adapter   kernel + network + media（协议适配器容器：core 框架 + onebot11/onebot12/satori）
+   @napuketto/adapter   kernel + network + media（协议适配器容器：core 框架 + onebot11/satori）
    @napuketto/loader    kernel（boot 引导）+ 无其他（唯一 C++ 组件：注入 + 引导 + Native Bypass 载具）
    apps/cli             kernel + adapter + loader
    ```
@@ -26,9 +26,10 @@ NapukettoQQ：基于 QQ NT 客户端原生模块（`wrapper.node`）的机器人
 5. **不做的事**：framework 模式（QQNT 插件）、webui、NapCat 的 Proxy 事件老方案、无理由的 `any`。
 6. **media 严格解耦**：`@napuketto/media` 只被协议层（adapter）依赖，kernel 不背媒体依赖。
 7. **技术路线（2026-08-06 定稿，V2：Native C++ Bypass 载具 + NAPI 业务层混合模式）**：
-   - **完整架构书**：`docs/architecture-v2-native-bypass.md`（决策背景/三步走/反检测/工具链，新对话必读）。
+   - **⚠️ 关键决策点**：先读 `docs/STATUS.md` 顶部——**自建宿主按「可救」规划**（标准 Node 纯 Node 模式，NapCat 实证 ~237MB），路线 B（注入 worker）为已验证兜底。
+   - **完整架构书**：`docs/architecture.md`（分层/ADR/路线图/红线/工具链，新对话必读）。
    - **业务层（JS/NAPI）**：kernel/adapter/network/media/cli 继续纯 NAPI 调用 `wrapper.node` 业务 API（getMsgService 等），现有 78 个 OneBot 动作全保留。
-   - **载具层（C++ Native，私有）**：`@napuketto/loader` 注入 QQ 主进程（**复用 V1 bootmain/hookdll 基础设施**），载具 DLL 负责：① NOP `wrapper.node` 环境自检与 self-register 校验 ② 激活 session `cpp_impl`（伪造 C++ 层初始化信号，解除对渲染进程依赖）③ 阻断 Chromium UI/GPU/Renderer 进程（无头 + 低内存）。
+   - **载具层（C++ Native，私有）**：`@napuketto/loader` 负责注入引导（**复用 V1 bootmain/hookdll 基础设施**）+ 无头阻断。路线 B（已验证）：注入 QQ 主进程 → fork utilityProcess Worker（继承 QQ env）→ worker 内 dlopen；自建宿主（主攻，待验证）：标准 Node + QQNT.dll + 窗口类。载具 DLL 职责：① NOP `wrapper.node` 环境自检与 self-register 校验 ② 激活 session `cpp_impl`（路线 B 用不上）③ 阻断 Chromium UI/GPU/Renderer 进程（无头 + 低内存）。
    - **⚠️ 逆向界限与红线（Strict Boundary，第一原则）**：
      - **目的单一性**：C++ Native 逆向与 Hook **有且仅有一个目的**——内存中阻断 UI/GPU 进程降内存 + 模拟触发 `cpp_impl` 激活信号。
      - **业务逻辑零逆向**：QQNT 业务功能（收发消息/事件监听/数据解析）**必须 100% 走官方 NAPI 导出的 JS 接口**，严禁 C++ 层业务 Hook 或协议篡改。
@@ -57,10 +58,10 @@ pnpm --filter @napuketto/kernel dev   # 单包 watch 构建
 
 ## 实现模式（重要）
 
-- **一个模块一个模块实现**：开工前先读 `docs/architecture.md` 与对应包的 `docs/design.md`，按其中的「实现顺序」推进，不跨模块跳跃；每完成一个模块跑一次 `pnpm check`。
+- **一个模块一个模块实现**：开工前先读 `docs/STATUS.md` 与 `docs/architecture.md`、对应包的 `docs/design.md`，按其中的「实现顺序」推进，不跨模块跳跃；每完成一个模块跑一次 `pnpm check`。
 - **类型层来自运行时探测**：`services/listeners/entities` 的类型通过加载 `wrapper.node` 后的运行时反射 + 实体 JSON 日志观察产出，不是拍脑袋或抄别家。探测脚本放 `packages/kernel/scripts/probe/`。
 - **kernel 无全局单例**（ADR-015 推论）：logger / cache / event-channel 等都是实例化对象，由 `CoreContext` 持有——多账号多进程场景每进程一份，避免跨账号状态污染。
-- **新增协议**（OneBot 12 / Satori）→ 在 `packages/adapter` 内新增 `onebot12/`、`satori/` 目录，复用 core 框架（生命周期/订阅/广播/校验），**不改 network、不改 kernel**。
+- **新增协议**（Satori）→ 在 `packages/adapter` 内新增 `satori/` 目录，复用 core 框架（生命周期/订阅/广播/校验），**不改 network、不改 kernel**。
 - **写代码前先更新对应包的 `docs/design.md`**，设计先行。
 
 ## 环境

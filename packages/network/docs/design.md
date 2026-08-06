@@ -52,7 +52,7 @@ NapCat 的 `OB11NetworkAdapter` 把事件类型绑死 OB11（`onEvent<T extends 
 
 ## 5. 复用规则
 
-- 新增协议（OneBot 12 / Satori）→ 新建平级包，依赖 `kernel + network`，**network 零改动**。
+- 新增协议（Satori）→ 新建平级包，依赖 `kernel + network`，**network 零改动**。
 - 鉴权（token 校验）以可配置钩子提供，具体校验规则由协议层决定。
 
 ## 6. 实现顺序

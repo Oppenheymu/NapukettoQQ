@@ -1,7 +1,7 @@
 {
     "name": "@napuketto/adapter",
     "version": "0.0.1",
-    "description": "Protocol adapters (OneBot11 / OneBot12 / Satori) for NapukettoQQ",
+    "description": "Protocol adapters (OneBot11 / Satori) for NapukettoQQ",
     "type": "module",
     "files": [
         "dist"
