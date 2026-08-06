@@ -14,7 +14,7 @@
  * `{ name, fn }` 联合精确提取 handler / 参数类型，保证实例化后签名精确。
  */
 import { EventEmitter } from "node:events";
-import { KernelError } from "./errors.js";
+import { KernelError } from "./infra/errors.js";
 
 /** waitFor 默认超时（毫秒）。 */
 const DEFAULT_WAIT_TIMEOUT_MS = 30_000;

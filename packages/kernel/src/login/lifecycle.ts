@@ -19,10 +19,10 @@
  *  - 本文件只保留流程编排：快速登录 + session 初始化 + init 完成信号等待。
  */
 
-import { kernelError } from "./errors.js";
-import type { NodeIKernelSessionListener, WrapperSessionInitConfig } from "./types/wrapper.js";
-import { DependsAdapter, DispatcherAdapter } from "./wrapper-adapters.js";
-import type { WrapperContext } from "./wrapper-loader.js";
+import { kernelError } from "../infra/errors.js";
+import type { NodeIKernelSessionListener, WrapperSessionInitConfig } from "../types/wrapper.js";
+import { DependsAdapter, DispatcherAdapter } from "../wrapper/wrapper-adapters.js";
+import type { WrapperContext } from "../wrapper/wrapper-loader.js";
 
 /** 等待条件满足（轮询，带超时）。 */
 function waitFor(predicate: () => boolean, timeoutMs: number, intervalMs = 500): Promise<boolean> {
@@ -195,11 +195,24 @@ export async function quickLogin(
         throw kernelError(`账号 ${opts.uin ?? ""} 不在登录列表`, "NOT_FOUND");
     }
 
-    // 网络重试循环：1006511（网络未就绪）→ 等 MSF 连接 → 重试
+    // 网络重试循环：1006511（网络未就绪）→ 等 MSF 连接 → 重试（最多 NETWORK_RETRY_MAX 次）
+    return loginWithNetworkRetry(ctx, loginService, target, opts);
+}
+
+/**
+ * 带网络重试的快速登录（P2-1）。
+ * 重试语义：仅当失败为网络异常（1006511）且未达上限时，等网络就绪后重试。
+ */
+async function loginWithNetworkRetry(
+    ctx: WrapperContext,
+    loginService: LoginServiceShape,
+    target: LoginAccountInfo,
+    opts: { uin?: string; timeoutMs?: number },
+): Promise<LoginResult> {
     let lastErrMsg = "";
-    for (let attempt = 1; attempt <= NETWORK_RETRY_MAX; attempt++) {
+    for (let attempt = 1; attempt <= NETWORK_RETRY_MAX; attempt += 1) {
         const result = await loginService.quickLoginWithUin(target.uin);
-        const errMsg = result.loginErrorInfo.errMsg;
+        const { errMsg } = result.loginErrorInfo;
         if (!errMsg) {
             return {
                 uin: target.uin,

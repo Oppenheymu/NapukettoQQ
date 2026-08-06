@@ -9,7 +9,7 @@
  */
 
 import type { GroupApi } from "../apis/group.js";
-import type { GroupEventChannel } from "../group-bridge.js";
+import type { GroupEventChannel } from "../bridge/group-bridge.js";
 import type { GroupMemberDataSource, GroupMemberListChange } from "../types/listeners/group.js";
 import { GroupListUpdateType } from "../types/listeners/group.js";
 import type { Group, GroupDetailInfo, GroupMember } from "../types/services/group-service.js";

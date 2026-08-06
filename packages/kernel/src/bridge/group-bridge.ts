@@ -13,11 +13,12 @@
  *   cache.register();    // 订阅 channel 主动维护
  *   bridge.unregister(); // 停止时清理
  */
-import { kernelError } from "./errors.js";
-import type { NTEventChannel } from "./event-channel.js";
-import type { GroupListener } from "./types/listeners/group.js";
-import type { NodeIKernelGroupService } from "./types/services/group-service.js";
-import type { NodeIQQNTWrapperSession } from "./types/wrapper.js";
+
+import type { NTEventChannel } from "../event-channel.js";
+import { kernelError } from "../infra/errors.js";
+import type { GroupListener } from "../types/listeners/group.js";
+import type { NodeIKernelGroupService } from "../types/services/group-service.js";
+import type { NodeIQQNTWrapperSession } from "../types/wrapper.js";
 
 /** 群事件通道的固定类型（事件名前缀 "Group"）。 */
 export type GroupEventChannel = NTEventChannel<GroupListener, "Group">;

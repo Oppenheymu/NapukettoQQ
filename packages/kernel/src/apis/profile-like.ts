@@ -3,7 +3,7 @@
  *
  * sendLike：send_like（sourceId=71 赞来源，doLikeCount 次数）。
  */
-import { kernelError } from "../errors.js";
+import { kernelError } from "../infra/errors.js";
 import type { NodeIKernelProfileLikeService } from "../types/services/profile-like-service.js";
 import type { NodeIQQNTWrapperSession } from "../types/wrapper.js";
 

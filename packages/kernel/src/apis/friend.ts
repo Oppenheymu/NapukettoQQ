@@ -6,7 +6,7 @@
  * （getBuddyReq / approvalFriendRequest / setBuddyRemark / delBuddy /
  * getDoubtBuddyReq / approvalDoubtBuddyReq）。
  */
-import { kernelError } from "../errors.js";
+import { kernelError } from "../infra/errors.js";
 import type {
     BuddyCategory,
     BuddyReq,

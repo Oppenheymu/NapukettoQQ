@@ -63,9 +63,6 @@ export function launchQqWithLoader(options: LaunchOptions): LaunchResult {
     const bootMainPath = options.bootMain ?? join(nativeDirPath, "NapukettoBootMain.exe");
     const hookDllPath = options.hookDll ?? join(nativeDirPath, "NapukettoWinBootHook.dll");
     const bootJsPath = options.bootJs ?? join(nativeDirPath, "runtime", "boot.cjs");
-    // V2 载具 DLL：存在则注入（激活 session cpp_impl + 无头）
-    const vehicleDllPath = options.vehicleDll ?? join(nativeDirPath, "NapukettoVehicle.dll");
-    const hasVehicle = existsSync(vehicleDllPath);
 
     for (const [name, p] of [
         ["BootMain.exe", bootMainPath],
@@ -76,6 +73,28 @@ export function launchQqWithLoader(options: LaunchOptions): LaunchResult {
             throw new Error(`${name} 缺失: ${p}（先运行 pnpm --filter @napuketto/loader build）`);
         }
     }
+
+    const env = buildLaunchEnv(options, bootJsPath, hookDllPath);
+
+    // BootMain 负责 CreateProcess(QQ) + 注入
+    const child = spawn(bootMainPath, [], {
+        env,
+        stdio: "inherit",
+        windowsHide: false,
+    });
+
+    return { child, bootJsPath, hookDllPath };
+}
+
+/** 装配注入环境变量（含路线 B / 无头 / vehicle 注入策略）。 */
+function buildLaunchEnv(
+    options: LaunchOptions,
+    bootJsPath: string,
+    hookDllPath: string,
+): Record<string, string> {
+    const nativeDirPath = nativeDir();
+    const vehicleDllPath = options.vehicleDll ?? join(nativeDirPath, "NapukettoVehicle.dll");
+    const hasVehicle = existsSync(vehicleDllPath);
 
     // 配置目录兜底
     const cfg = resolve(options.cfgDir);
@@ -121,15 +140,7 @@ export function launchQqWithLoader(options: LaunchOptions): LaunchResult {
     if (options.networkEntry !== undefined) {
         env[ENV.NETWORK_ENTRY] = resolve(options.networkEntry);
     }
-
-    // BootMain 负责 CreateProcess(QQ) + 注入
-    const child = spawn(bootMainPath, [], {
-        env,
-        stdio: "inherit",
-        windowsHide: false,
-    });
-
-    return { child, bootJsPath, hookDllPath };
+    return env;
 }
 
 /** 环境变量名（hook DLL 与 boot JS 读取）。 */

@@ -23,38 +23,36 @@ export type {
     HonorListItem,
 } from "./apis/webapi.js";
 export { WebApi, WebHonorType } from "./apis/webapi.js";
+export type { GroupEventChannel } from "./bridge/group-bridge.js";
+export { GroupBridge } from "./bridge/group-bridge.js";
+export type { MsgEventChannel } from "./bridge/msg-bridge.js";
+export { MsgBridge } from "./bridge/msg-bridge.js";
 export type { GroupCacheOptions } from "./cache/index.js";
 export { GroupCache } from "./cache/index.js";
-export type { ConfigFormat, ConfigOptions, ConfigSchema } from "./config.js";
-export { ConfigBase, parseToml, stringifyToml } from "./config.js";
 export type { CoreContext, CoreContextOptions } from "./context.js";
 export { createCoreContext } from "./context.js";
 export type { CoreLoginOptions, NapukettoCoreOptions } from "./core.js";
 export { NapukettoCore } from "./core.js";
-export type { KernelErrorCode } from "./errors.js";
-export { isKernelError, KERNEL_ERROR_CODES, KernelError, kernelError } from "./errors.js";
 export type { ListenerEvents } from "./event-channel.js";
 export { NTEventChannel } from "./event-channel.js";
-export type { GroupEventChannel } from "./group-bridge.js";
-export { GroupBridge } from "./group-bridge.js";
-export type { LoginAccountInfo, LoginResult } from "./lifecycle.js";
+export type { ConfigFormat, ConfigOptions, ConfigSchema } from "./infra/config.js";
+export { ConfigBase, parseToml, stringifyToml } from "./infra/config.js";
+export type { KernelErrorCode } from "./infra/errors.js";
+export { isKernelError, KERNEL_ERROR_CODES, KernelError, kernelError } from "./infra/errors.js";
+export type { LoggerOptions, LogLevel } from "./infra/logger.js";
+export { createLogger } from "./infra/logger.js";
+export type { PathOptions } from "./infra/paths.js";
+export { DEFAULT_DATA_ROOT_NAME, PathWrapper, resolveDataRoot } from "./infra/paths.js";
+export type { LoginAccountInfo, LoginResult } from "./login/lifecycle.js";
 export {
     initAndStartSession,
     listLoginAccounts,
     quickLogin,
     waitForNetworkConnection,
     waitSessionReady,
-} from "./lifecycle.js";
-export type { LoggerOptions, LogLevel } from "./logger.js";
-export { createLogger } from "./logger.js";
-export type { LoginListItem, LoginState, QrCodeData, SelfInfo } from "./login.js";
-export { QrLoginSession } from "./login.js";
-export type { MsgEventChannel } from "./msg-bridge.js";
-export { MsgBridge } from "./msg-bridge.js";
-export type { PathOptions } from "./paths.js";
-export { DEFAULT_DATA_ROOT_NAME, PathWrapper, resolveDataRoot } from "./paths.js";
-export { probeRuntime } from "./probe.js";
-export { getExistingSession, getMainSession } from "./session-resolver.js";
+} from "./login/lifecycle.js";
+export type { LoginListItem, LoginState, QrCodeData, SelfInfo } from "./login/login.js";
+export { QrLoginSession } from "./login/login.js";
 export type {
     GrayTipElement,
     GrayTipRevokeElement,
@@ -135,25 +133,27 @@ export type {
     WrapperNodeApi,
     WrapperSessionInitConfig,
 } from "./types/wrapper.js";
+export { probeRuntime } from "./wrapper/probe.js";
+export { getExistingSession, getMainSession } from "./wrapper/session-resolver.js";
 export {
     createLoginListener,
     createSessionListener,
     createSessionListener as createLifecycleSessionListener,
-} from "./wrapper-adapters.js";
-export type { SessionConfigOptions } from "./wrapper-config.js";
+} from "./wrapper/wrapper-adapters.js";
+export type { SessionConfigOptions } from "./wrapper/wrapper-config.js";
 export {
     buildEngineConfig,
     buildLoginConfig,
     buildSessionConfig,
     parseAppidFromMajor,
     resolveAppidQua,
-} from "./wrapper-config.js";
+} from "./wrapper/wrapper-config.js";
 export type {
     BootEnv,
     QQVersionContext,
     StartNapukettoOptions,
     WrapperContext,
-} from "./wrapper-loader.js";
+} from "./wrapper/wrapper-loader.js";
 export {
     createSession,
     createWrapper,
@@ -163,6 +163,6 @@ export {
     resolveQqUserDataRoot,
     startNapuketto,
     startSession,
-} from "./wrapper-loader.js";
-export type { QQVersionInfo } from "./wrapper-version.js";
-export { listQQVersions, resolveQQVersion, resolveWrapperPath } from "./wrapper-version.js";
+} from "./wrapper/wrapper-loader.js";
+export type { QQVersionInfo } from "./wrapper/wrapper-version.js";
+export { listQQVersions, resolveQQVersion, resolveWrapperPath } from "./wrapper/wrapper-version.js";

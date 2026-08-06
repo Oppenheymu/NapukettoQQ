@@ -6,7 +6,7 @@
  *   （fetch 会吞掉 Set-Cookie 头，故用 node:https 手动请求）
  */
 import { get as httpsGet } from "node:https";
-import { kernelError } from "../errors.js";
+import { kernelError } from "../infra/errors.js";
 import type {
     ForceFetchClientKeyRetType,
     NodeIKernelTicketService,

@@ -9,9 +9,9 @@
  *
  * 不含 UI 渲染（cli 只做二维码渲染/URL 打印）。
  */
-import { kernelError } from "./errors.js";
-import type { IKernelLoginListener } from "./types/wrapper.js";
-import { createLoginListener } from "./wrapper-adapters.js";
+import { kernelError } from "../infra/errors.js";
+import type { IKernelLoginListener } from "../types/wrapper.js";
+import { createLoginListener } from "../wrapper/wrapper-adapters.js";
 
 /** 登录状态。 */
 export type LoginState = "idle" | "waiting_scan" | "scanned" | "logged_in" | "failed";

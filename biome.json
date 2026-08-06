@@ -87,7 +87,7 @@
     },
     "overrides": [
         {
-            "includes": ["packages/kernel/src/probe.ts"],
+            "includes": ["packages/kernel/src/wrapper/probe.ts"],
             "linter": {
                 "rules": {
                     "complexity": {

@@ -17,8 +17,8 @@ import type {
     DeviceInfo,
     EnginInitDesktopConfig,
     WrapperSessionInitConfig,
-} from "./types/wrapper.js";
-import { PlatformType as PlatformTypeValue, VendorType } from "./types/wrapper.js";
+} from "../types/wrapper.js";
+import { PlatformType as PlatformTypeValue, VendorType } from "../types/wrapper.js";
 
 /** 系统信息（先用 fixed 值，真实环境探测后补）。 */
 function systemInfo(): { platVer: string; osVersion: string; devType: string } {

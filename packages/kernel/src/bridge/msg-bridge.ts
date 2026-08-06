@@ -12,11 +12,12 @@
  *   // 协议层订阅：channel.on("Msg/onRecvMsg", handler)
  *   bridge.unregister(); // 停止时清理
  */
-import { kernelError } from "./errors.js";
-import type { NTEventChannel } from "./event-channel.js";
-import type { MsgListener } from "./types/listeners/msg.js";
-import type { NodeIKernelMsgService } from "./types/services/msg-service.js";
-import type { NodeIQQNTWrapperSession } from "./types/wrapper.js";
+
+import type { NTEventChannel } from "../event-channel.js";
+import { kernelError } from "../infra/errors.js";
+import type { MsgListener } from "../types/listeners/msg.js";
+import type { NodeIKernelMsgService } from "../types/services/msg-service.js";
+import type { NodeIQQNTWrapperSession } from "../types/wrapper.js";
 
 /** 消息事件通道的固定类型（事件名前缀 "Msg"）。 */
 export type MsgEventChannel = NTEventChannel<MsgListener, "Msg">;

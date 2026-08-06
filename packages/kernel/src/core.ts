@@ -16,20 +16,20 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { type CoreContext, createCoreContext } from "./context.js";
-import { kernelError } from "./errors.js";
-import { type LoginResult, quickLogin } from "./lifecycle.js";
-import { createLogger, type LogLevel } from "./logger.js";
-import { QrLoginSession } from "./login.js";
-import { type PathOptions, PathWrapper } from "./paths.js";
+import { kernelError } from "./infra/errors.js";
+import { createLogger, type LogLevel } from "./infra/logger.js";
+import { type PathOptions, PathWrapper } from "./infra/paths.js";
+import { type LoginResult, quickLogin } from "./login/lifecycle.js";
+import { QrLoginSession } from "./login/login.js";
 import type { NodeIQQNTWrapperSession, WrapperNodeApi } from "./types/wrapper.js";
-import { buildLoginConfig } from "./wrapper-config.js";
+import { buildLoginConfig } from "./wrapper/wrapper-config.js";
 import {
     type BootEnv,
     electronProcessType,
     resolveQqUserDataRoot,
     startNapuketto,
     type WrapperContext,
-} from "./wrapper-loader.js";
+} from "./wrapper/wrapper-loader.js";
 
 export interface NapukettoCoreOptions {
     /** 数据根 / 账号（透传给 PathWrapper，见 ADR-016）。 */
@@ -128,8 +128,10 @@ export class NapukettoCore {
             // worker（utilityProcess）模式下 loginService 是 new 的，commonPath 必须
             // 指向 QQ 真实数据路径（getNTUserDataInfoConfig）才能读到历史账号——
             // cli 的 `.napuketto\default` 读不到（getLoginList 空，P2-1 实测 2026-08-06）。
-            const qqDataPath =
-                electronProcessType() === "utility" ? resolveQqUserDataRoot(wrapper.exports) : null;
+            let qqDataPath: string | null = null;
+            if (electronProcessType() === "utility") {
+                qqDataPath = resolveQqUserDataRoot(wrapper.exports);
+            }
             const commonPath = qqDataPath ?? this.ctx.paths.accountDir;
             const loginCfg = buildLoginConfig(
                 opts.appid,

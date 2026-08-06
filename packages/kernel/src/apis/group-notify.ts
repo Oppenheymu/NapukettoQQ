@@ -5,7 +5,7 @@
  * getSingleScreenNotifies / getGroupShutUpMemberList 的列表可能走 listener 回调，
  * 直接调用返回形状待探测校准：兼容 result 数组 / 字段 / 直接数组。
  */
-import { kernelError } from "../errors.js";
+import { kernelError } from "../infra/errors.js";
 import type {
     GroupMember,
     GroupNotify,

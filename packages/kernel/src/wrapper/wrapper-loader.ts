@@ -12,7 +12,7 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
 import process from "node:process";
-import { kernelError } from "./errors.js";
+import { kernelError } from "../infra/errors.js";
 import type {
     EnginInitDesktopConfig,
     NodeIKernelSessionListener,
@@ -21,8 +21,9 @@ import type {
     NodeIQQNTWrapperSession,
     WrapperNodeApi,
     WrapperSessionInitConfig,
-} from "./types/wrapper.js";
-import { PlatformType } from "./types/wrapper.js";
+} from "../types/wrapper.js";
+import { PlatformType } from "../types/wrapper.js";
+import { extractDataRoot } from "./qq-data-path.js";
 import {
     createSessionListener,
     DependsAdapter,
@@ -92,46 +93,6 @@ export function resolveQqUserDataRoot(exports: WrapperNodeApi): string | null {
     }
     // 回退：QQNT 默认数据根
     return join(homedir(), "Documents", "Tencent Files");
-}
-
-/** 从 getNTUserDataInfoConfig 返回值提取数据根（JSON 字符串解析或纯路径）。 */
-function extractDataRoot(raw: string): string | null {
-    if (raw.startsWith("{") || raw.startsWith("[")) {
-        try {
-            return findPathInValue(JSON.parse(raw));
-        } catch {
-            return null;
-        }
-    }
-    return raw;
-}
-
-/** 递归在对象/数组里找含 QQ 数据路径特征的字符串值。 */
-function findPathInValue(value: unknown): string | null {
-    if (typeof value === "string") {
-        if (value.includes("Tencent Files") || value.includes("nt_qq")) {
-            return value;
-        }
-        return null;
-    }
-    if (Array.isArray(value)) {
-        for (const item of value) {
-            const found = findPathInValue(item);
-            if (found !== null) {
-                return found;
-            }
-        }
-        return null;
-    }
-    if (typeof value === "object" && value !== null) {
-        for (const v of Object.values(value)) {
-            const found = findPathInValue(v);
-            if (found !== null) {
-                return found;
-            }
-        }
-    }
-    return null;
 }
 
 // ---------------------------------------------------------------
@@ -300,8 +261,10 @@ export function startNapuketto(options: StartNapukettoOptions): WrapperContext {
     // worker（utilityProcess）模式下 desktopGlobalPath 必须指向 QQ 真实数据路径
     //（getNTUserDataInfoConfig），否则登录数据读写错位（P2-1 实测，2026-08-06）。
     // 主进程（V1）模式 QQ 自己已配置 engine，保持 env.dataDir 原行为。
-    const qqDataPath =
-        electronProcessType() === "utility" ? resolveQqUserDataRoot(wrapperExports) : null;
+    let qqDataPath: string | null = null;
+    if (electronProcessType() === "utility") {
+        qqDataPath = resolveQqUserDataRoot(wrapperExports);
+    }
     initEngine(ctx, engineConfig ?? defaultEngineConfig(env ?? {}, qqDataPath ?? undefined));
 
     // loginService：优先 QQ 捕获实例，否则 new（实测确认）

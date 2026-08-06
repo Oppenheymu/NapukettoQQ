@@ -6,7 +6,7 @@
  * - setHeader：set_qq_avatar
  * - getStrangerInfo：get_stranger_info（uin → uid → 详情扁平化）
  */
-import { kernelError } from "../errors.js";
+import { kernelError } from "../infra/errors.js";
 import type {
     NodeIKernelProfileService,
     UserDetailInfoByUin,

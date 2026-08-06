@@ -6,7 +6,7 @@
  * - 真正可用的 session 是 `new wrapper.NodeIQQNTWrapperSession()` + init（见 lifecycle.ts）
  */
 
-import type { NodeIQQNTWrapperSession } from "./types/wrapper.js";
+import type { NodeIQQNTWrapperSession } from "../types/wrapper.js";
 import type { WrapperContext } from "./wrapper-loader.js";
 
 /** 从 getSessionIdList 的 Map 提取主 sessionId（nt_ 前缀优先）。 */

@@ -4,7 +4,7 @@
  * - translateWords：translate_en2zh
  * - 群文件：列表 / 空间 / 建夹 / 删除文件 / 删除夹 / 重命名 / 移动 / 转存
  */
-import { kernelError } from "../errors.js";
+import { kernelError } from "../infra/errors.js";
 import type {
     GetFileListParam,
     GroupFileItemInfo,
