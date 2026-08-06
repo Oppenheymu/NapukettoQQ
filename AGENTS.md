@@ -23,17 +23,22 @@ NapukettoQQ：基于 QQ NT 客户端原生模块（`wrapper.node`）的机器人
 
 3. **kernel 是唯一原生交互层**：只有 `packages/kernel` 允许 `process.dlopen`、访问 `wrapper.node`、注册原生 listener。其他包只能调 kernel 的语义化 API、订阅事件通道、读缓存。
 4. **network 协议无关**：`@napuketto/network` 不得 import 任何协议包（adapter 等），事件类型必须泛型化。
-5. **不做的事**：framework 模式（QQNT 插件）、webui、NapCat 的 Proxy 事件老方案、无理由的 `any`。
+5. **不做的事**：framework 模式（QQNT 插件）、webui、插件系统、NapCat 的 Proxy 事件老方案、无理由的 `any`。**功能范围 = NapCat 全部能力（协议 + API）− WebUI − 插件系统**（2026-08-06 用户拍板）。
 6. **media 严格解耦**：`@napuketto/media` 只被协议层（adapter）依赖，kernel 不背媒体依赖。
 7. **技术路线（2026-08-06 定稿，V2：Native C++ Bypass 载具 + NAPI 业务层混合模式）**：
    - **⚠️ 关键决策点**：先读 `docs/STATUS.md` 顶部——**自建宿主按「可救」规划**（标准 Node 纯 Node 模式，NapCat 实证 ~237MB），路线 B（注入 worker）为已验证兜底。
    - **完整架构书**：`docs/architecture.md`（分层/ADR/路线图/红线/工具链，新对话必读）。
    - **业务层（JS/NAPI）**：kernel/adapter/network/media/cli 继续纯 NAPI 调用 `wrapper.node` 业务 API（getMsgService 等），现有 78 个 OneBot 动作全保留。
    - **载具层（C++ Native，私有）**：`@napuketto/loader` 负责注入引导（**复用 V1 bootmain/hookdll 基础设施**）+ 无头阻断。路线 B（已验证）：注入 QQ 主进程 → fork utilityProcess Worker（继承 QQ env）→ worker 内 dlopen；自建宿主（主攻，待验证）：标准 Node + QQNT.dll + 窗口类。载具 DLL 职责：① NOP `wrapper.node` 环境自检与 self-register 校验 ② 激活 session `cpp_impl`（路线 B 用不上）③ 阻断 Chromium UI/GPU/Renderer 进程（无头 + 低内存）。
-   - **⚠️ 逆向界限与红线（Strict Boundary，第一原则）**：
-     - **目的单一性**：C++ Native 逆向与 Hook **有且仅有一个目的**——内存中阻断 UI/GPU 进程降内存 + 模拟触发 `cpp_impl` 激活信号。
-     - **业务逻辑零逆向**：QQNT 业务功能（收发消息/事件监听/数据解析）**必须 100% 走官方 NAPI 导出的 JS 接口**，严禁 C++ 层业务 Hook 或协议篡改。
-     - **绝对禁止**：koffi、手算 vtable 槽位、内存偏移/memcpy 结构体、绕过 NAPI 的 thiscall 裸调（业务层）。
+   - **⚠️ 逆向边界（2026-08-06 用户拍板：允许必要逆向，非 0 逆向）**：
+     - **允许逆向的用途**（与 NapCat 能力对齐所需）：
+       a. **环境模拟/反风控**：进程名伪装、模块隐藏（K32EnumProcessModules/GetModuleHandleW）、内存 RWX→RX、窗口类（自建宿主必需，napi2native 自研等价物）
+       b. **数据包层**：C++ 层 hook 数据包 send/recv（Frida Gum 等价物，数据包监控/协议分析）
+       c. **无头阻断**：内存中阻断 UI/GPU/Renderer 进程降内存
+       d. **模拟触发 `cpp_impl` 激活信号**（旧载具职责保留）
+     - **业务层优先 NAPI（优先级而非禁令）**：收发消息/事件监听/数据解析**优先**走官方 NAPI 导出接口（稳定、简单、可维护）；仅当 NAPI 无法覆盖的能力（数据包层、环境模拟）才用 C++ 逆向补足。
+     - **技术手段不设限**：允许 koffi / vtable 槽位 / 内存偏移 / thiscall 裸调等逆向手段——但**仅限 C++ 载具层（loader）**，业务层（kernel/adapter）仍不得直接使用（版本脆弱性，不是合规问题）。
+     - **绝对禁止（许可证底线，不变）**：复制/移植 NapCat 代码（GPL-2.0-only 与 MIT 不兼容），任何文件（含类型定义）不得来自 NapCat。
    - **零磁盘篡改**：内存 Patch 仅在 QQ.exe 运行期 RAM 生效，**严禁修改/覆盖磁盘上 QQ 安装目录任何二进制**（QQNT.dll / wrapper.node / package.json / asar）；升级/卸载零残留。
    - **逆向产物管理**：Ghidra 分析（RVA 表/Offset）不提交公共仓库，仅存私有；`scripts/probe/` 旧 koffi 脚本仅作历史参考。
 8. **全局配置 = 单一 TOML 文件**（2026-08-05 用户拍板）：所有配置统一放 `<数据根>/napuketto.toml`（主配置段 + `[onebot11]` 等协议段），**不再使用独立 JSON 配置文件**（JSON 门槛太高）。kernel `ConfigBase` 支持 TOML（smol-toml 解析/序列化，按 `.toml` 扩展名推断）+ `seed`（内存初值：boot.cjs 从全局 TOML 取协议段 zod 校验后作 seed，adapter 不再读独立协议文件）。cli `config init/list/apply` 读写该文件。

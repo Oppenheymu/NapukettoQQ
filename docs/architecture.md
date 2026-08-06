@@ -48,7 +48,7 @@ apps/cli             kernel + adapter + loader
 | **network** | 协议无关的传输原语（HTTP/WS + 泛型广播） | 禁止 import 任何协议包；事件类型泛型化 |
 | **adapter**（协议容器） | 协议语义：事件模型、action 注册表、数据翻译、ID 映射 | 只认识 kernel 的 API/事件/缓存，不认识原生 |
 | **media** | 媒体编解码与识别 | 只被协议层依赖；kernel 不背媒体依赖 |
-| **loader** | 注入引导 + Native Bypass 载具（C++） | 业务层零逆向；载具闭源（native-private） |
+| **loader** | 注入引导 + Native Bypass 载具（C++） | 逆向手段仅限此层；载具闭源（native-private） |
 | **cli** | 启动编排、登录渲染、配置命令 | 不写业务逻辑，只装配 |
 
 ## 4. 技术路线（V2 定稿：Native Bypass 混合模式 + 自建宿主修正）
@@ -185,15 +185,16 @@ wrapper.node 原生回调
 
 ## 8. 红线与合规（AGENTS.md 第 7 条，两路线都适用）
 
-1. **目的单一性**：C++ Native 逆向与 Hook **有且仅有一个目的**——内存中阻断 UI/GPU 进程降内存 +
-   模拟触发 `cpp_impl` 激活信号。
-2. **业务逻辑零逆向**：QQNT 业务功能（收发消息/事件监听/数据解析）必须 100% 走官方 NAPI 导出的
-   JS 接口，严禁 C++ 层业务 Hook 或协议篡改。
-3. **绝对禁止**：koffi、手算 vtable 槽位、内存偏移/memcpy 结构体、绕过 NAPI 的 thiscall 裸调（业务层）。
-4. **零磁盘篡改**：内存 Patch 仅在运行期 RAM 生效，严禁修改/覆盖 QQ 安装目录任何二进制。
-5. **逆向产物管理**：Ghidra 分析（RVA 表/Offset）不提交公共仓库，仅存私有；`native-private/` 只分发
+1. **允许必要逆向（2026-08-06 用户拍板：非 0 逆向）**：环境模拟/反风控（进程名伪装、模块隐藏
+   K32EnumProcessModules/GetModuleHandleW、内存 RWX→RX、窗口类）、数据包层 hook（Frida Gum 等价物）、
+   无头阻断均可逆向。技术手段不设限（koffi / vtable 槽位 / 内存偏移 / thiscall 裸调）但**仅限
+   loader 载具层**。
+2. **业务层优先 NAPI（优先级而非禁令）**：收发消息/事件监听/数据解析优先走官方 NAPI 导出接口
+   （稳定、简单、可维护）；仅当 NAPI 无法覆盖的能力（数据包层、环境模拟）才用 C++ 逆向补足。
+3. **零磁盘篡改**：内存 Patch 仅在运行期 RAM 生效，严禁修改/覆盖 QQ 安装目录任何二进制。
+4. **逆向产物管理**：Ghidra 分析（RVA 表/Offset）不提交公共仓库，仅存私有；`native-private/` 只分发
    编译+混淆二进制。
-6. **零引入 NapCat 代码**（GPL-2.0 / Limited Redistribution License 与 MIT 不兼容；napi2native 闭源）。
+5. **零引入 NapCat 代码**（GPL-2.0 / Limited Redistribution License 与 MIT 不兼容；napi2native 闭源）。
 
 ## 9. 工具链
 

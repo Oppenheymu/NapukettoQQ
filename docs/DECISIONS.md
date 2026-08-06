@@ -16,6 +16,7 @@
 | V3 | 2026-08-06 晚 | 自建宿主（标准 Node 独立进程） | ✅ session 可创建；业务层 koffi 路线被否 | HANDOVER-V3 → 本文件 §3 |
 | V4 | 2026-08-06 深夜 | 双层路线（A 自建宿主优先 / B NapCat 同款兜底） | ❌ 路线 A P0-B 判死（9.9.31）→ 转 B | HANDOVER-V4 → 本文件 §4 |
 | V5 | 2026-08-06 | 路线 B 定稿 + 全链路验证 | ✅ P2-0 试金石通过；**深夜发现判死存疑** | HANDOVER-V5 → 本文件 §5 |
+| V6 | 2026-08-06 | 功能范围 + 逆向边界拍板 | ✅ 范围 = NapCat − WebUI − 插件系统；**允许必要逆向**（非 0 逆向） | 本文件 §6 |
 
 ---
 
@@ -139,7 +140,28 @@ Base_PowerMessageWindow 窗口类、数据包层 hook）——**不是 env 兼�
 
 ---
 
-## 6. 已清理事项（勿重建）
+## 6. V6：功能范围 + 逆向边界拍板（2026-08-06）
+
+**决策（用户拍板，两句话）**：
+1. **不要 WebUI 和插件系统**——功能范围 = NapCat 全部能力（协议 + API）− WebUI − 插件系统
+2. **允许必要逆向，非 0 逆向**——撤销「业务逻辑零逆向」红线
+
+**逆向边界修订（AGENTS.md 第 7 条）**：
+- **允许逆向的用途**：a. 环境模拟/反风控（进程名伪装、模块隐藏 K32EnumProcessModules/GetModuleHandleW、
+  内存 RWX→RX、窗口类 Base_PowerMessageWindow——自建宿主必需，napi2native 自研等价物）；
+  b. 数据包层 hook（Frida Gum 等价物，数据包监控/协议分析）；c. 无头阻断；d. 模拟触发 cpp_impl 激活信号
+- **业务层优先 NAPI**（优先级而非禁令）：收发消息/事件监听/数据解析优先走官方 NAPI；NAPI 覆盖不了的
+  能力（数据包层、环境模拟）才用 C++ 逆向补足
+- **技术手段不设限**：koffi / vtable 槽位 / 内存偏移 / thiscall 裸调允许，但仅限 loader 载具层
+  （版本脆弱性，不是合规问题）
+- **许可证底线不变**：零引入 NapCat 代码（GPL-2.0-only 与 MIT 不兼容）；逆向产物（RVA/Offset）不进
+  公共仓库
+
+**影响**：自建宿主路线解锁（窗口类 + 反风控自研可行）；数据包层能力列入远期（对齐 NapCat packet 后端）。
+
+---
+
+## 7. 已清理事项（勿重建）
 
 - **`scripts-tmp/` 整目录已删**：含 QQ 登录票据（敏感）+ 全部探针/逆向脚本。核心逻辑均已产品化
   （appid 解析 → wrapper-config.ts；session 创建 → wrapper-loader.ts；worker 引导 → route-b-worker.cjs）
@@ -149,7 +171,7 @@ Base_PowerMessageWindow 窗口类、数据包层 hook）——**不是 env 兼�
 
 ---
 
-## 7. 决策史知识点索引
+## 8. 决策史知识点索引
 
 | 想查什么 | 去哪看 |
 |---|---|
