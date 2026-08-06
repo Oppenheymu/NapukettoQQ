@@ -40,6 +40,8 @@ export interface LaunchOptions {
     hookDll?: string;
     /** V2 载具 DLL 路径（默认 dist/native/NapukettoVehicle.dll，存在则注入）。 */
     vehicleDll?: string;
+    /** 无头模式（阻断 UI/GPU，boot.cjs 侧实现，默认 false）。 */
+    headless?: boolean;
     /** BootMain.exe 路径（默认 dist/native/NapukettoBootMain.exe）。 */
     bootMain?: string;
 }
@@ -90,6 +92,9 @@ export function launchQqWithLoader(options: LaunchOptions): LaunchResult {
     if (hasVehicle) {
         env[ENV.VEHICLE_DLL] = vehicleDllPath;
     }
+    if (options.headless === true) {
+        env[ENV.HEADLESS] = "1";
+    }
     if (options.adapterEntry !== undefined) {
         env[ENV.ADAPTER_ENTRY] = resolve(options.adapterEntry);
     }
@@ -118,6 +123,8 @@ export const ENV = {
     WRAPPER_PATH: "NAPUTO_WRAPPER_PATH",
     /** V2 载具 DLL 路径（bootmain 注入 NapukettoVehicle.dll）。 */
     VEHICLE_DLL: "NAPUTO_VEHICLE_DLL",
+    /** 无头模式开关（boot.cjs 阻断 UI/GPU）。 */
+    HEADLESS: "NAPUTO_HEADLESS",
     /** adapter 包入口（boot.cjs 协议装配用）。 */
     ADAPTER_ENTRY: "NAPUTO_ADAPTER_ENTRY",
     /** network 包入口（boot.cjs 协议装配用）。 */

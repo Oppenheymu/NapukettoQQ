@@ -8,7 +8,8 @@ NapukettoQQ：基于 QQ NT 客户端原生模块（`wrapper.node`）的机器人
 
 ## 硬性约束（违反 = 错误）
 
-1. **许可证 GPL-3.0，零引入 NapCat 代码**。NapCat 是 GPL-2.0-only，与 GPL-3.0 不兼容，任何文件（含类型定义）都不得复制或移植。接口签名是外部系统（腾讯 wrapper.node）的事实，可以自研描述，但架构与实现必须原创。
+1. **许可证 MIT（2026-08-06 由 GPL-3.0 迁移），零引入 NapCat 代码**。NapCat 是 GPL-2.0-only，与 MIT 不兼容，任何文件（含类型定义）都不得复制或移植。接口签名是外部系统（腾讯 wrapper.node）的事实，可以自研描述，但架构与实现必须原创。
+   **闭源例外**：`@napuketto/loader` 的 V2 载具（Native Bypass DLL，`native-private/`）为私有组件——逆向腾讯 QQ 的产物（RVA/Offset 表）绝不进公共仓库，仅分发编译+混淆后的二进制；公共仓库只含注入框架。
 2. **依赖方向**（只允许向下依赖）：
 
    ```
