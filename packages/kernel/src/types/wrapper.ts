@@ -127,7 +127,7 @@ export interface WrapperSessionInitConfig {
 
 /** NodeIQQNTWrapperSession 构造器（含静态 get / getNTWrapperSession / create）。 */
 export type NodeIQQNTWrapperSessionCtor = {
-    new (): NodeIQQNTWrapperSession;
+    new(): NodeIQQNTWrapperSession;
     get(): NodeIQQNTWrapperSession;
     getNTWrapperSession(name: string): NodeIQQNTWrapperSession;
     create(): NodeIQQNTWrapperSession;
