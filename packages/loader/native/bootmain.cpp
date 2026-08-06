@@ -143,7 +143,16 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
     // 启动 QQ
     STARTUPINFOA si = {sizeof(si)};
     PROCESS_INFORMATION pi = {};
+    // 附加命令行参数（NAPUTO_QQ_ARGS，launcher 注入）。
+    // 关键（2026-08-06）：boot.cjs 的 app.commandLine.appendSwitch("disable-gpu") 时序太晚——
+    // GPU 进程在 Electron app ready 前就 fork，实测 disable-gpu 后 gpu-process 仍在（147MB）。
+    // 必须在 CreateProcess 命令行就传 --disable-gpu，GPU 进程才真正不启动。
     std::string cmdline = "\"" + qqPath + "\"";
+    std::string extraArgs = getEnv("NAPUTO_QQ_ARGS");
+    if (!extraArgs.empty()) {
+        cmdline += " " + extraArgs;
+        printf("[boot] QQ args: %s\n", extraArgs.c_str());
+    }
     // 实测发现（2026-08-05）：CREATE_SUSPENDED 挂起注入会让 QQ 卡死（1 进程无窗口，
     // CPU≈0，疑似触发反注入/完整性检测）。改回正常启动 + 找到主进程后立即注入。
     BOOL ok = CreateProcessA(

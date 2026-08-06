@@ -94,6 +94,12 @@ export function launchQqWithLoader(options: LaunchOptions): LaunchResult {
     }
     if (options.headless === true) {
         env[ENV.HEADLESS] = "1";
+        // 无头低内存命令行参数（bootmain CreateProcess 附加，2026-08-06）：
+        // appendSwitch 时序太晚（GPU 进程在 app ready 前已 fork），必须命令行传。
+        env[ENV.QQ_ARGS] = HEADLESS_QQ_ARGS;
+        // 深度无头：压制非关键渲染进程（screenshot/blank），释放其内存。
+        // 保留 main/login + hiddenWindow（登录/init IPC 载体）。boot-headless.js 处理。
+        env[ENV.DEEP_HEADLESS] = "1";
     }
     if (options.adapterEntry !== undefined) {
         env[ENV.ADAPTER_ENTRY] = resolve(options.adapterEntry);
@@ -125,8 +131,27 @@ export const ENV = {
     VEHICLE_DLL: "NAPUTO_VEHICLE_DLL",
     /** 无头模式开关（boot.cjs 阻断 UI/GPU）。 */
     HEADLESS: "NAPUTO_HEADLESS",
+    /** 无头低内存命令行参数（bootmain CreateProcess 附加，如 --disable-gpu）。 */
+    QQ_ARGS: "NAPUTO_QQ_ARGS",
+    /** 深度无头：压制非关键渲染进程（boot-headless.js，screenshot/blank）。 */
+    DEEP_HEADLESS: "NAPUTO_DEEP_HEADLESS",
     /** adapter 包入口（boot.cjs 协议装配用）。 */
     ADAPTER_ENTRY: "NAPUTO_ADAPTER_ENTRY",
     /** network 包入口（boot.cjs 协议装配用）。 */
     NETWORK_ENTRY: "NAPUTO_NETWORK_ENTRY",
 } as const;
+
+/**
+ * 无头低内存命令行参数组（headless 时注入 NAPUTO_QQ_ARGS）。
+ * - disable-gpu / disable-gpu-compositing：GPU 进程不启动（实测 appendSwitch 太晚无效）
+ * - disable-software-rasterizer：关软件光栅化（渲染进程省 CPU/内存）
+ * - disable-dev-shm-usage：不占 /dev/shm（Windows 下降低共享内存开销）
+ * - js-flags=--max-old-space-size=384：限制渲染进程 JS 堆（QQ 渲染 UI 用不到大堆）
+ */
+export const HEADLESS_QQ_ARGS = [
+    "--disable-gpu",
+    "--disable-gpu-compositing",
+    "--disable-software-rasterizer",
+    "--disable-dev-shm-usage",
+    "--js-flags=--max-old-space-size=384",
+].join(" ");
