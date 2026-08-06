@@ -38,6 +38,8 @@ export interface LaunchOptions {
     bootJs?: string;
     /** hook DLL 路径（默认 dist/native/NapukettoWinBootHook.dll）。 */
     hookDll?: string;
+    /** V2 载具 DLL 路径（默认 dist/native/NapukettoVehicle.dll，存在则注入）。 */
+    vehicleDll?: string;
     /** BootMain.exe 路径（默认 dist/native/NapukettoBootMain.exe）。 */
     bootMain?: string;
 }
@@ -57,6 +59,9 @@ export function launchQqWithLoader(options: LaunchOptions): LaunchResult {
     const bootMainPath = options.bootMain ?? join(nativeDirPath, "NapukettoBootMain.exe");
     const hookDllPath = options.hookDll ?? join(nativeDirPath, "NapukettoWinBootHook.dll");
     const bootJsPath = options.bootJs ?? join(nativeDirPath, "boot.cjs");
+    // V2 载具 DLL：存在则注入（激活 session cpp_impl + 无头）
+    const vehicleDllPath = options.vehicleDll ?? join(nativeDirPath, "NapukettoVehicle.dll");
+    const hasVehicle = existsSync(vehicleDllPath);
 
     for (const [name, p] of [
         ["BootMain.exe", bootMainPath],
@@ -82,6 +87,9 @@ export function launchQqWithLoader(options: LaunchOptions): LaunchResult {
         [ENV.QQ_VERSION]: options.qq.version,
         [ENV.WRAPPER_PATH]: options.qq.wrapperPath,
     };
+    if (hasVehicle) {
+        env[ENV.VEHICLE_DLL] = vehicleDllPath;
+    }
     if (options.adapterEntry !== undefined) {
         env[ENV.ADAPTER_ENTRY] = resolve(options.adapterEntry);
     }
@@ -108,6 +116,8 @@ export const ENV = {
     CFG_DIR: "NAPUTO_CFG_DIR",
     QQ_VERSION: "NAPUTO_QQ_VERSION",
     WRAPPER_PATH: "NAPUTO_WRAPPER_PATH",
+    /** V2 载具 DLL 路径（bootmain 注入 NapukettoVehicle.dll）。 */
+    VEHICLE_DLL: "NAPUTO_VEHICLE_DLL",
     /** adapter 包入口（boot.cjs 协议装配用）。 */
     ADAPTER_ENTRY: "NAPUTO_ADAPTER_ENTRY",
     /** network 包入口（boot.cjs 协议装配用）。 */

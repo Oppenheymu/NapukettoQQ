@@ -149,6 +149,18 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
     }
     if (pid == 0) pid = pi.dwProcessId;
 
+    // V2 载具 DLL（NapukettoVehicle.dll）：激活 session cpp_impl + 无头。
+    // 注入顺序：先 hookdll（引导 boot JS），再 vehicle（激活 session）。
+    // 载具 DLL 路径经环境变量 NAPUTO_VEHICLE_DLL 传入（launcher.ts 设置），
+    // 若未设置（未启用 V2）则跳过，保持 V1 行为兼容。
+    std::string vehicleDll = getEnv("NAPUTO_VEHICLE_DLL");
+    if (!vehicleDll.empty()) {
+        printf("[boot] injecting vehicle: %s\n", vehicleDll.c_str());
+        injectDll(pid, vehicleDll);
+    } else {
+        printf("[boot] NAPUTO_VEHICLE_DLL 未设置，跳过载具注入（V1 模式）\n");
+    }
+
     // 等 UI 起来（注入已完成，此等待仅确保 QQ 正常启动）
     waitForProcess(pi.hProcess, pid, 3000);
 

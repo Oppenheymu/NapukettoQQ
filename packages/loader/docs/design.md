@@ -129,3 +129,54 @@ apps/cli             kernel + adapter + loader
 - **绝对禁止**：修改 QQ 安装目录（package.json / asar / 任何原生文件）。
 - **允许**：DLL 注入、环境变量、临时目录 stage（都是运行时行为，不污染宿主安装）。
 - 所有逆向（Ghidra / probe）仅用于理解机制，产物不进入正式代码。
+
+---
+
+## 8. V2 载具模式（2026-08-06，闭源组件）
+
+> **背景**：QQ 9.9.31 把 session 真实初始化下沉到 C++ 层，主进程 JS 侧 `new`/`create()`
+> 拿到的 `NodeIQQNTWrapperSession` 全是**无 cpp_impl 的空壳**（构造函数 `napi_wrap` NULL）。
+> Ghidra 逆向已定位「创建有效 session」的导出链，载具 DLL 借此**主动创建并激活** session。
+
+### ⚠️ 闭源红线（2026-08-06 用户拍板）
+
+- **逆向腾讯 QQ 的产物（RVA/Offset 表）绝不进公共仓库**（含本文档、源码、注释）。
+- 载具源码 `native-private/vehicle.cpp` 由 `.gitignore` 排除，**本地保留/私有仓库**。
+- 载具 DLL **编译 + 混淆**后分发（.node/.dll 二进制），源码不开源。
+- 公共仓库只保留**注入框架**（bootmain/launcher/build-native 的载具调用点，不含逆向细节）。
+- 本文档只写**机制描述**，具体地址见私有逆向文档（不在 git）。
+
+### 8.1 载具机制（私有 RVA 表见私有文档）
+
+**激活链（机制）**：
+1. 创建：导出工厂 make_shared 创建 `NTWrapperSession`（6 vftable 多继承）
+2. 注册：把 session 注册进全局单例表（TLS 懒初始化容器，元素 0x48 字节）
+3. 取 cpp_impl：容器查找后从「元素 + 0x38」偏移取（shared_ptr 槽位）
+4. init：`NTWrapperSession::init` 接收 SessionConfig 初始化内部组件
+
+**激活流程（目标）**：
+```
+创建 NTWrapperSession → 注册进单例表 → 取有效 cpp_impl 指针
+  → napi_wrap 绑定到 NodeIQQNTWrapperSession JS 对象
+  → init 完成初始化
+  → 业务层 boot.cjs 捕获该有效 session（Proxy 机制不变）
+```
+
+### 8.2 self-register 结论（P0-1 修正）
+
+- ❌ wrapper.node **无** "Module did not self-register"（该错误来自 node/宿主侧）
+- ❌ `qq_magic_napi_register` 导入从未被调用（dead import）
+- ✅ **V2 注入 QQ 主进程**：wrapper.node 由 QQ preload 天然注册，**self-register 校验已通过**
+- ✅ 只有「自建宿主」（独立进程 dlopen wrapper.node）才需要 NOP self-register
+- **结论：P0-1 对注入路线非阻塞，可后置**（骨架留 `bypassSelfRegister()` 占位即可）
+
+### 8.3 载具 DLL 职责（`native-private/vehicle.cpp`，闭源）
+
+```
+1. 注入后（复用 hookdll IAT hook 机制进入 QQ 主进程）
+2. 解析阶段一地址（RVA 换算：运行时基址 + RVA，私有表）
+3. bypassSelfRegister()：占位（注入路线不需要，自建宿主时启用）
+4. activateSessionCppImpl()：创建 session → 注册单例 → 激活 cpp_impl
+5. 无头：阻断 BrowserWindow / GPU（宿主 JS 侧 Electron API）
+6. 引导 boot.cjs（复用 hookdll 现有 IAT hook 链）
+```

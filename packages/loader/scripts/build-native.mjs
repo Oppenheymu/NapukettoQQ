@@ -86,6 +86,20 @@ function build() {
         console.warn(`[build-native] 缺少 boot.cjs: ${bootSrc}`);
     }
 
+    // Vehicle.dll（V2 载具，闭源）：激活 session cpp_impl + 无头
+    // 源码在 native-private/（.gitignore 排除，本地/私有仓库）。
+    // 公共仓库无此源码 → 跳过编译，loader 以 V1 模式运行。
+    const vehicleSrc = join(PACKAGE_ROOT, "native-private", "vehicle.cpp");
+    const vehicleOut = join(DIST_DIR, "NapukettoVehicle.dll");
+    if (existsSync(vehicleSrc)) {
+        execFileSync(gpp, [vehicleSrc, "-o", vehicleOut, "-O2", "-s", "-static", "-std=c++17", "-shared"], {
+            stdio: "inherit",
+        });
+        console.log(`[build-native] OK: ${vehicleOut}`);
+    } else {
+        console.log("[build-native] 跳过载具（native-private/vehicle.cpp 缺失，闭源组件未随仓库分发）");
+    }
+
     console.log("[build-native] 完成");
 }
 

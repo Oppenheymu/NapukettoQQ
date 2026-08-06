@@ -39,3 +39,8 @@ packages/kernel/scripts/probe/
 
 # smoke-test 本地产物
 packages/loader/.smoke-cfg/
+
+# V2 载具（闭源）：逆向腾讯 QQ 的产物（RVA/Offset 表）绝不进公共仓库
+# 载具 DLL 由私有构建流程编译（源码本地保留或私有仓库），公共仓库只留框架。
+packages/loader/native/vehicle.cpp
+packages/loader/native-private/
