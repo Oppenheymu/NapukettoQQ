@@ -103,7 +103,6 @@ export class WsClient implements TransportAdapter {
             return; // 旧连接残留的 close 事件，忽略
         }
         this.ws = undefined;
-        // biome-ignore lint/suspicious/noUnnecessaryConditions: close() 会置 true，跨方法分析误报
         if (this.closed) {
             return;
         }
@@ -117,7 +116,6 @@ export class WsClient implements TransportAdapter {
         }
         this.reconnectTimer = setTimeout(() => {
             this.reconnectTimer = undefined;
-            // biome-ignore lint/suspicious/noUnnecessaryConditions: close() 会置 true，跨方法分析误报
             if (this.closed) {
                 return;
             }

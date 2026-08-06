@@ -44,7 +44,6 @@ export abstract class BaseProtocolAdapter<TConfig> {
 
     /** 启动：加载配置 → 校验 → 协议层初始化。 */
     async start(): Promise<void> {
-        // biome-ignore lint/suspicious/noUnnecessaryConditions: started 状态由 stop() 修改，跨方法分析误报
         if (this.started) {
             return;
         }
@@ -55,7 +54,6 @@ export abstract class BaseProtocolAdapter<TConfig> {
 
     /** 停止：协议层清理资源。 */
     async stop(): Promise<void> {
-        // biome-ignore lint/suspicious/noUnnecessaryConditions: started 状态由 start() 修改，跨方法分析误报
         if (!this.started) {
             return;
         }

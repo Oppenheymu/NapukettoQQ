@@ -47,7 +47,6 @@ export class HttpServer implements TransportAdapter {
         const { authorize } = this.opts;
         if (authorize) {
             const ctx = toRequestContext(c);
-            // biome-ignore lint/suspicious/noUnnecessaryConditions: authorize 为可选回调，调用结果不可静态判定
             if (!authorize(ctx)) {
                 return c.json({ error: "unauthorized" }, HTTP_STATUS.unauthorized);
             }

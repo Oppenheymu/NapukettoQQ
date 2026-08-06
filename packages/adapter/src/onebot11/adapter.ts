@@ -82,7 +82,6 @@ export class NapukettoOneBot11Adapter extends BaseProtocolAdapter<OB11Config> {
                     this.handleRequest(req, respond).catch((err: unknown) => {
                         let message = String(err);
                         if (err instanceof Error) {
-                            // biome-ignore lint/style/useDestructuring: err 为 unknown 运行时窄化，解构不适用
                             message = err.message;
                         }
                         respond({ status: "failed", retcode: 999, data: null, message });

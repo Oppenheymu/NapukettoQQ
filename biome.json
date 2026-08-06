@@ -18,37 +18,14 @@
     "linter": {
         "enabled": true,
         "rules": {
-            "preset": "all",
+            "preset": "recommended",
             "correctness": {
-                "noNodejsModules": "off",
-                "useImportExtensions": "off",
-                "useQwikValidLexicalScope": "off",
-                "noUnresolvedImports": "off",
-                "noUnusedVariables": "error",
-                "noUnusedFunctionParameters": "error",
-                "noUnusedImports": "error",
-                "noUnusedPrivateClassMembers": "error"
-            },
-            "performance": {
-                "noBarrelFile": "off"
+                "noUnresolvedImports": "off"
             },
             "complexity": {
                 "useLiteralKeys": "off"
             },
-            "suspicious": {
-                "noExplicitAny": "error",
-                "noImplicitAnyLet": "error",
-                "noFallthroughSwitchClause": "error"
-            },
             "style": {
-                "useImportType": "error",
-                "useExportType": "error",
-                "noProcessEnv": "off",
-                "useErrorCause": "off",
-                "noExcessiveClassesPerFile": "off",
-                "useConsistentMethodSignatures": "off",
-                "useExportsLast": "off",
-                "useConsistentTypeDefinitions": "off",
                 "useNamingConvention": {
                     "level": "error",
                     "options": {
@@ -76,64 +53,12 @@
                     }
                 }
             },
-            "security": {
-                "noSecrets": "off"
-            },
             "nursery": {
-                "preset": "all",
                 "noFloatingPromises": "error"
             }
         }
     },
     "overrides": [
-        {
-            "includes": ["packages/kernel/src/wrapper/probe.ts"],
-            "linter": {
-                "rules": {
-                    "complexity": {
-                        "noExcessiveCognitiveComplexity": "off",
-                        "noExcessiveLinesPerFunction": "off"
-                    },
-                    "style": {
-                        "noTernary": "off",
-                        "noMagicNumbers": "off",
-                        "useDestructuring": "off",
-                        "useBlockStatements": "off",
-                        "noContinue": "off",
-                        "noExcessiveLinesPerFile": "off"
-                    }
-                }
-            }
-        },
-        {
-            "includes": ["packages/adapter/src/onebot11/helper/notice.ts"],
-            "linter": {
-                "rules": {
-                    "complexity": {
-                        "noExcessiveCognitiveComplexity": "off",
-                        "noExcessiveLinesPerFunction": "off"
-                    },
-                    "style": {
-                        "noTernary": "off",
-                        "noMagicNumbers": "off",
-                        "useDestructuring": "off",
-                        "useBlockStatements": "off",
-                        "noContinue": "off",
-                        "noExcessiveLinesPerFile": "off"
-                    }
-                }
-            }
-        },
-        {
-            "includes": ["packages/adapter/src/onebot11/action/index.ts"],
-            "linter": {
-                "rules": {
-                    "style": {
-                        "noExcessiveLinesPerFile": "off"
-                    }
-                }
-            }
-        },
         {
             "includes": [
                 "packages/kernel/src/apis/webapi.ts",
@@ -141,19 +66,7 @@
             ],
             "linter": {
                 "rules": {
-                    "complexity": {
-                        "noExcessiveCognitiveComplexity": "off"
-                    },
-                    "suspicious": {
-                        "noBitwiseOperators": "off",
-                        "noUnnecessaryConditions": "off"
-                    },
-                    "performance": {
-                        "noAwaitInLoops": "off",
-                        "useTopLevelRegex": "off"
-                    },
                     "style": {
-                        "noTernary": "off",
                         "useNamingConvention": "off"
                     }
                 }
