@@ -157,8 +157,10 @@ export type {
 export {
     createSession,
     createWrapper,
+    electronProcessType,
     initEngine,
     initSession,
+    resolveQqUserDataRoot,
     startNapuketto,
     startSession,
 } from "./wrapper-loader.js";

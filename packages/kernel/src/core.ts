@@ -23,7 +23,13 @@ import { QrLoginSession } from "./login.js";
 import { type PathOptions, PathWrapper } from "./paths.js";
 import type { NodeIQQNTWrapperSession, WrapperNodeApi } from "./types/wrapper.js";
 import { buildLoginConfig } from "./wrapper-config.js";
-import { type BootEnv, startNapuketto, type WrapperContext } from "./wrapper-loader.js";
+import {
+    type BootEnv,
+    electronProcessType,
+    resolveQqUserDataRoot,
+    startNapuketto,
+    type WrapperContext,
+} from "./wrapper-loader.js";
 
 export interface NapukettoCoreOptions {
     /** 数据根 / 账号（透传给 PathWrapper，见 ADR-016）。 */
@@ -119,13 +125,19 @@ export class NapukettoCore {
             initConfig?: (config: unknown) => void;
         } | null;
         if (loginService !== null && typeof loginService.initConfig === "function") {
+            // worker（utilityProcess）模式下 loginService 是 new 的，commonPath 必须
+            // 指向 QQ 真实数据路径（getNTUserDataInfoConfig）才能读到历史账号——
+            // cli 的 `.napuketto\default` 读不到（getLoginList 空，P2-1 实测 2026-08-06）。
+            const qqDataPath =
+                electronProcessType() === "utility" ? resolveQqUserDataRoot(wrapper.exports) : null;
+            const commonPath = qqDataPath ?? this.ctx.paths.accountDir;
             const loginCfg = buildLoginConfig(
                 opts.appid,
                 wrapper.versionInfo.fullVersion,
-                this.ctx.paths.accountDir,
+                commonPath,
             );
             loginService.initConfig(loginCfg);
-            this.ctx.logger.info("loginService.initConfig OK");
+            this.ctx.logger.info({ commonPath }, "loginService.initConfig OK");
         } else {
             this.ctx.logger.warn("loginService 不可用，跳过 initConfig");
         }

@@ -9,6 +9,8 @@
  * 业务层拿到的都是真实 JS 对象：engine.initWithDeskTopConfig(config, adapter) 等。
  */
 
+import { homedir } from "node:os";
+import { join } from "node:path";
 import process from "node:process";
 import { kernelError } from "./errors.js";
 import type {
@@ -33,7 +35,7 @@ import {
 // ---------------------------------------------------------------
 
 /** 默认 engine 配置（KWINDOWS + 版本号，字段待首个真实联调确认）。 */
-function defaultEngineConfig(env: BootEnv): EnginInitDesktopConfig {
+function defaultEngineConfig(env: BootEnv, qqDataPath?: string): EnginInitDesktopConfig {
     let osVersion = process.platform;
     if (process.platform === "win32") {
         osVersion = "win32";
@@ -47,10 +49,89 @@ function defaultEngineConfig(env: BootEnv): EnginInitDesktopConfig {
         use_xlog: false,
         qua: "",
         global_path_config: {
-            desktopGlobalPath: env.dataDir ?? "",
+            desktopGlobalPath: qqDataPath ?? env.dataDir ?? "",
         },
         thumb_config: { maxSide: 324, minSide: 48, longLimit: 6, density: 2 },
     };
+}
+
+/**
+ * Electron 进程类型（Node 的 process 类型无此字段）。
+ * - "browser"：QQ 主进程（V1 模式）
+ * - "utility"：utilityProcess Worker（路线 B，2026-08-06）
+ */
+export function electronProcessType(): string | undefined {
+    return (process as unknown as { type?: string }).type;
+}
+
+/**
+ * 解析 QQ 用户数据根（登录数据目录，如 `C:\Users\<user>\Documents\Tencent Files`）。
+ * 优先 NodeQQNTWrapperUtil.getNTUserDataInfoConfig()（QQ 官方 API），回退默认位置。
+ *
+ * 背景（2026-08-06 P2-1 实测）：worker（utilityProcess）模式下 loginService 是
+ * `new NodeIKernelLoginService()` 新建的，其 initConfig 的 commonPath 必须指向
+ * QQ 真实数据路径才能读到历史账号——cli 的 `.napuketto\default` 数据目录读不到
+ * （getLoginList 返回空 → 只能 QR 登录）。V1 主进程模式 QQ 自己 initConfig 过
+ * 正确路径，无需此解析。
+ */
+export function resolveQqUserDataRoot(exports: WrapperNodeApi): string | null {
+    try {
+        const util = exports.NodeQQNTWrapperUtil as unknown as {
+            get?: () => { getNTUserDataInfoConfig?: () => unknown };
+        } | null;
+        const inst = util?.get?.();
+        const raw = inst?.getNTUserDataInfoConfig?.();
+        if (typeof raw === "string" && raw.trim() !== "") {
+            const extracted = extractDataRoot(raw.trim());
+            if (extracted !== null) {
+                return extracted;
+            }
+        }
+    } catch {
+        // 回退默认位置
+    }
+    // 回退：QQNT 默认数据根
+    return join(homedir(), "Documents", "Tencent Files");
+}
+
+/** 从 getNTUserDataInfoConfig 返回值提取数据根（JSON 字符串解析或纯路径）。 */
+function extractDataRoot(raw: string): string | null {
+    if (raw.startsWith("{") || raw.startsWith("[")) {
+        try {
+            return findPathInValue(JSON.parse(raw));
+        } catch {
+            return null;
+        }
+    }
+    return raw;
+}
+
+/** 递归在对象/数组里找含 QQ 数据路径特征的字符串值。 */
+function findPathInValue(value: unknown): string | null {
+    if (typeof value === "string") {
+        if (value.includes("Tencent Files") || value.includes("nt_qq")) {
+            return value;
+        }
+        return null;
+    }
+    if (Array.isArray(value)) {
+        for (const item of value) {
+            const found = findPathInValue(item);
+            if (found !== null) {
+                return found;
+            }
+        }
+        return null;
+    }
+    if (typeof value === "object" && value !== null) {
+        for (const v of Object.values(value)) {
+            const found = findPathInValue(v);
+            if (found !== null) {
+                return found;
+            }
+        }
+    }
+    return null;
 }
 
 // ---------------------------------------------------------------
@@ -216,7 +297,12 @@ export function startNapuketto(options: StartNapukettoOptions): WrapperContext {
         buildVersion: env?.qqVersion ?? "",
     };
     const ctx = createWrapper(wrapperExports, versionInfo);
-    initEngine(ctx, engineConfig ?? defaultEngineConfig(env ?? {}));
+    // worker（utilityProcess）模式下 desktopGlobalPath 必须指向 QQ 真实数据路径
+    //（getNTUserDataInfoConfig），否则登录数据读写错位（P2-1 实测，2026-08-06）。
+    // 主进程（V1）模式 QQ 自己已配置 engine，保持 env.dataDir 原行为。
+    const qqDataPath =
+        electronProcessType() === "utility" ? resolveQqUserDataRoot(wrapperExports) : null;
+    initEngine(ctx, engineConfig ?? defaultEngineConfig(env ?? {}, qqDataPath ?? undefined));
 
     // loginService：优先 QQ 捕获实例，否则 new（实测确认）
     if (qqLoginService !== undefined && qqLoginService !== null) {

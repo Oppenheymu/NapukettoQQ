@@ -289,27 +289,42 @@ async function bootstrap(state) {
                         log("bootstrap: 无有效候选 session（保留 kernel 自建 session）");
                     }
 
-                    // ⭐ 若替换的 session 未 READY（service 未挂载），对其执行 kernel 标准
-                    // init（JS 侧 session.init，NAPI 自动转换——无需逆向 C++ SessionConfig）。
-                    // 注：QQ 主 session（getMainSession）已由渲染进程 init，此处通常跳过。
+                    // ⭐ 若替换的 session 未 READY（service 未挂载），先走 NapCat 方式：
+                    // startupSession.start()（P2-0 实测：start() 后 getMsgService READY 1s）。
+                    // ⚠️ worker 里 JS 侧 session.init 的完成信号（onOpentelemetryInit/
+                    // onSessionInitComplete）依赖渲染进程协作，直接 initAndStartSession
+                    // 会超时（2026-08-06 多次实测）——先 start，等就绪；不行再回退 init。
                     if (chosen && !isSessionUsable(chosen.s)) {
-                        log("bootstrap: 对激活 session 执行 init（挂载 service）...");
+                        log("bootstrap: 激活 session（startupSession.start）...");
                         try {
-                            const sessionConfig = kernel.buildSessionConfig({
-                                appid: APPID,
-                                fullVersion: bootEnv.qqVersion || "",
-                                selfUin: loginResult.uin,
-                                selfUid: loginResult.uid,
-                                accountPath: bootEnv.dataDir || ".",
-                                downloadPath: path.join(bootEnv.dataDir || ".", "temp"),
-                            });
-                            const listener = kernel.createLifecycleSessionListener();
-                            await kernel.initAndStartSession(ctx, sessionConfig, listener, {
-                                timeoutMs: 20000,
-                            });
-                            log("bootstrap: 激活 session init + startNT 完成");
-                        } catch (initErr) {
-                            log(`bootstrap: 激活 session init 失败: ${initErr?.message ?? initErr}`);
+                            if (typeof kernel.startSession === "function") {
+                                kernel.startSession(ctx);
+                            }
+                            await kernel.waitSessionReady(ctx, { timeoutMs: 20000 });
+                            log("bootstrap: 激活 session 完成（startupSession.start 后 READY）");
+                        } catch (startErr) {
+                            log(
+                                `bootstrap: startupSession.start 路径失败: ${startErr?.message ?? startErr}，回退 initAndStartSession`,
+                            );
+                            try {
+                                const sessionConfig = kernel.buildSessionConfig({
+                                    appid: APPID,
+                                    fullVersion: bootEnv.qqVersion || "",
+                                    selfUin: loginResult.uin,
+                                    selfUid: loginResult.uid,
+                                    accountPath: bootEnv.dataDir || ".",
+                                    downloadPath: path.join(bootEnv.dataDir || ".", "temp"),
+                                });
+                                const listener = kernel.createLifecycleSessionListener();
+                                await kernel.initAndStartSession(ctx, sessionConfig, listener, {
+                                    timeoutMs: 20000,
+                                });
+                                log("bootstrap: 激活 session init + startNT 完成");
+                            } catch (initErr) {
+                                log(
+                                    `bootstrap: 激活 session init 失败: ${initErr?.message ?? initErr}`,
+                                );
+                            }
                         }
                     }
 
