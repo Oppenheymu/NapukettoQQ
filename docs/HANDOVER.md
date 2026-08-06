@@ -25,11 +25,6 @@ NapukettoQQ：基于 QQ NT 客户端原生模块（`wrapper.node`）的机器人
 ## 2. 当前进度（commit 链，时间正序）
 
 ```
-ac5ebba feat(adapter): 删除 OneBot 12 协议适配器占位文件（规范模糊，用户拍板）
-100b8bd feat(cli): P6 config 子命令 + supervisor 多账号编排（基础设施第三项）
-c7cc211 feat(kernel,adapter): P2-17 GroupCache 群成员缓存（ADR-008，基础设施第二项）
-c984d11 feat(adapter): P2-16 api/ 聚合层（OneBotApi 单类聚合，基础设施第一项）
-82c5b53 docs: 交接文本重写——API 六批全落地（78 动作），转向基础设施
 507959d feat(adapter,kernel): P2-15 第六批 NapCat API（陌生人信息+csrf+群请求+精华+荣誉 7 个）
 74ed607 feat(adapter,kernel): P2-14 第五批 NapCat API（群文件+资料+点赞+翻译 16 个）
 7dcf94b chore(adapter): 重组 onebot11/action 目录（message/group/friend/system 四分组）
@@ -60,19 +55,18 @@ b2574ec refactor(kernel): 解耦 wrapper-config/wrapper-adapters
 96748f4 feat(kernel): NAPI 路线重构 + loader 包
 ```
 
-**进度坐标**：kernel design.md §9 完成 8/9（login 完成，剩 cache/ 已实现、apis 的 user/file/system）；**完整启动链路打通**（cli → 定位 QQ → BootMain 注入 → boot.cjs 内 kernel 装配 + 快速登录/QR 回退 → adapter/network 协议装配 → HTTP/WS 监听 + 心跳）；**消息收发 + 6 查询动作 + notice 事件 + meta 事件 + QR 登录全部真实可用**；**一~六批 NapCat API 已实现（总动作数 78）**。**基础设施三项全落地（P2-16 api 聚合 / P2-17 GroupCache / P6 cli config+supervisor）**。NapCat 对齐度 ≈ 70%。
+**进度坐标**：kernel design.md §9 完成 8/9（login 完成，剩 cache/、apis 的 user/file/system）；**完整启动链路打通**（cli → 定位 QQ → BootMain 注入 → boot.cjs 内 kernel 装配 + 快速登录/QR 回退 → adapter/network 协议装配 → HTTP/WS 监听 + 心跳）；**消息收发 + 6 查询动作 + notice 事件 + meta 事件 + QR 登录全部真实可用**；**一~六批 NapCat API 已实现（总动作数 78）**。NapCat 对齐度 ≈ 70%。
 
 ---
 
 ## 3. 已完成功能清单
 
 ### 3.1 kernel（@napuketto/kernel）
-- 基础设施：errors（KernelError + 8 错误码）/ paths（PathWrapper）/ logger（pino console+file+redact）/ config（ConfigBase 零 zod，**支持 TOML（smol-toml）+ seed 内存初值，2026-08-05 全局配置改造**）/ event-channel（NTEventChannel 类型化 on/waitFor/emit）
+- 基础设施：errors（KernelError + 8 错误码）/ paths（PathWrapper）/ logger（pino console+file+redact）/ config（ConfigBase 零 zod）/ event-channel（NTEventChannel 类型化 on/waitFor/emit）
 - wrapper 层：wrapper-version（版本探测）/ wrapper-loader（createWrapper/initEngine/createSession/initSession/startSession/startNapuketto）/ wrapper-config（buildEngineConfig/buildLoginConfig/buildSessionConfig）/ wrapper-adapters（GlobalAdapter/DependsAdapter/DispatcherAdapter/createSessionListener/createLoginListener）
 - 装配层：context（CoreContext）/ core（NapukettoCore.create/attachWrapper/login/stop）
 - 登录：lifecycle（quickLogin/initAndStartSession）/ login（QrLoginSession 状态机 + selfInfo）/ core.login QR 回退（快速登录失败 → 二维码写缓存目录）
-- 事件链路：msg-bridge（MsgBridge：原生 listener → NTEventChannel）/ types/listeners/msg + **group-bridge（GroupBridge：群事件 → GroupEventChannel，P2-17）**
-- 缓存：**cache/group-cache（GroupCache：群/成员缓存，事件主动维护 + 惰性回填，ADR-008，P2-17）**
+- 事件链路：msg-bridge（MsgBridge：原生 listener → NTEventChannel）/ types/listeners/msg
 - apis（12 个）：
   - MsgApi：sendMessage/recallMessage/fetchMessages/markRead/fetchMsgsByMsgId/setMsgEmojiLike/fetchPttText/setInputStatus/sendForwardMessage/fetchForwardMessage/forwardSingleMessage/setOnlineStatus
   - GroupApi：列表/详情/成员/uin↔uid + kick/ban/role/card/name/quit/essence/at_all_remain
@@ -99,7 +93,7 @@ b2574ec refactor(kernel): 解耦 wrapper-config/wrapper-adapters
 - network：完整（HttpServer/HttpClient/WsServer/WsClient/EventBroadcaster）
 - media：完整（image/audio(silk)/video(ffmpeg)）
 - loader：注入引导全链路（launcher/locate-qq/boot.cjs/native）
-- cli：commander 参数解析（-q 多值/-d/--qq-path）→ runSingleAccount（定位 QQ → launch → 常驻）；**config 子命令（init/list/apply）+ supervisor 多账号已做（P6）**
+- cli：commander 参数解析（-q/-d/--qq-path）→ runSingleAccount（定位 QQ → launch → 常驻）；config 子命令/supervisor 多账号未做
 
 ### 3.4 API 来源分层（回答「onebot11 规范吗」）
 
