@@ -41,8 +41,14 @@ packages/loader/
 │   ├── stage.ts            # stage wrapper.node 依赖到临时目录（DLL 搜索限制规避）
 │   ├── launcher.ts         # 设置环境变量 + spawn QQ.exe + 注入 hook DLL
 │   └── types.ts            # 引导参数（boot JS 路径、kernel 入口等）
-├── runtime/                # 注入后运行的 JS（构建产物复制到这里）
-│   ├── boot.cjs            # hook process.dlopen → 截获 exports → 启动 kernel
+├── runtime/                # 注入后运行的 JS（构建产物复制到 dist/native/runtime/）
+│   ├── boot.cjs            # 入口：hook process.dlopen → 截获 exports → 调度 bootstrap
+│   ├── boot-util.js        # 日志 + 共享状态
+│   ├── boot-ipc-monitor.js # IPC 监控（V1 排查保留）
+│   ├── boot-headless.js    # 无头模式（阻断 UI/GPU）
+│   ├── boot-protocols.js   # 协议装配（OB11 adapter + network）
+│   ├── boot-bootstrap.js   # kernel 引导 + 登录 + session 替换（V2 getMainSession/getNT）+ init
+│   └── package.json        # {"type":"commonjs"}——项目根为 ESM，CJS 模块必须声明（2026-08-06 修复 status=9）
 │   └── (kernel dist 由环境变量 NAPUKETTO_KERNEL_ENTRY 指向)
 └── scripts/
     └── build-native.mjs    # 调 clang-cl/g++ 编译 C++ 产物到 dist/

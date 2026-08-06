@@ -34,7 +34,7 @@ export interface LaunchOptions {
     adapterEntry?: string;
     /** network 入口（.mjs，boot.js 协议装配用）。 */
     networkEntry?: string;
-    /** boot JS 路径（默认 dist/native/boot.cjs）。 */
+    /** boot JS 路径（默认 dist/native/runtime/boot.cjs，2026-08-06 拆分后）。 */
     bootJs?: string;
     /** hook DLL 路径（默认 dist/native/NapukettoWinBootHook.dll）。 */
     hookDll?: string;
@@ -60,7 +60,7 @@ export function launchQqWithLoader(options: LaunchOptions): LaunchResult {
     const nativeDirPath = nativeDir();
     const bootMainPath = options.bootMain ?? join(nativeDirPath, "NapukettoBootMain.exe");
     const hookDllPath = options.hookDll ?? join(nativeDirPath, "NapukettoWinBootHook.dll");
-    const bootJsPath = options.bootJs ?? join(nativeDirPath, "boot.cjs");
+    const bootJsPath = options.bootJs ?? join(nativeDirPath, "runtime", "boot.cjs");
     // V2 载具 DLL：存在则注入（激活 session cpp_impl + 无头）
     const vehicleDllPath = options.vehicleDll ?? join(nativeDirPath, "NapukettoVehicle.dll");
     const hasVehicle = existsSync(vehicleDllPath);

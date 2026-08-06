@@ -67,7 +67,7 @@ if (qq) {
     const nativeDir = join(PKG_ROOT, "dist", "native");
     const bootMain = join(nativeDir, "NapukettoBootMain.exe");
     const hookDll = join(nativeDir, "NapukettoWinBootHook.dll");
-    const bootJs = join(nativeDir, "boot.cjs");
+    const bootJs = join(nativeDir, "runtime", "boot.cjs");
     const kernelEntry = join(PKG_ROOT, "..", "kernel", "dist", "index.mjs");
 
     check("BootMain.exe 产物", existsSync(bootMain), bootMain);
