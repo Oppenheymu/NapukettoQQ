@@ -15,16 +15,19 @@ static std::string g_kernelEntry;
 static std::string g_cfgDir;
 
 // 读取环境变量（launcher.ts 设置）
-static std::string getEnv(const char* name) {
+static std::string getEnv(const char *name)
+{
     char buf[1024] = {0};
     DWORD n = GetEnvironmentVariableA(name, buf, sizeof(buf));
     return (n > 0 && n < sizeof(buf)) ? std::string(buf) : std::string();
 }
 
 // 检查目标进程是否存活（GetExitCodeProcess == STILL_ACTIVE）
-static bool isProcessAlive(DWORD pid) {
+static bool isProcessAlive(DWORD pid)
+{
     HANDLE h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
-    if (!h) return false;
+    if (!h)
+        return false;
     DWORD code = 0;
     BOOL ok = GetExitCodeProcess(h, &code);
     CloseHandle(h);
@@ -35,17 +38,20 @@ static bool isProcessAlive(DWORD pid) {
 // 关键（2026-08-06 修复）：CreateRemoteThread 成功 ≠ DLL 已加载。进程早期
 // （loader lock 被初始线程持有）LoadLibraryA 可能阻塞/失败——之前不查返回值，
 // bootmain 误报注入成功 → hookdll 未进 → boot.cjs 未执行（交接 §11 遗留 1）。
-static bool injectDll(DWORD pid, const std::string& dllPath) {
+static bool injectDll(DWORD pid, const std::string &dllPath)
+{
     HANDLE hProc = OpenProcess(PROCESS_ALL_ACCESS, FALSE, pid);
-    if (!hProc) {
+    if (!hProc)
+    {
         printf("[boot] OpenProcess failed: %lu\n", GetLastError());
         return false;
     }
 
     // 远程分配路径字符串
     size_t len = dllPath.size() + 1;
-    void* remoteMem = VirtualAllocEx(hProc, nullptr, len, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
-    if (!remoteMem) {
+    void *remoteMem = VirtualAllocEx(hProc, nullptr, len, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+    if (!remoteMem)
+    {
         printf("[boot] VirtualAllocEx failed: %lu\n", GetLastError());
         CloseHandle(hProc);
         return false;
@@ -56,7 +62,8 @@ static bool injectDll(DWORD pid, const std::string& dllPath) {
     HMODULE k32 = GetModuleHandleA("kernel32.dll");
     FARPROC loadLib = GetProcAddress(k32, "LoadLibraryA");
     HANDLE hThread = CreateRemoteThread(hProc, nullptr, 0, (LPTHREAD_START_ROUTINE)loadLib, remoteMem, 0, nullptr);
-    if (!hThread) {
+    if (!hThread)
+    {
         printf("[boot] CreateRemoteThread failed: %lu\n", GetLastError());
         VirtualFreeEx(hProc, remoteMem, 0, MEM_RELEASE);
         CloseHandle(hProc);
@@ -67,43 +74,56 @@ static bool injectDll(DWORD pid, const std::string& dllPath) {
     bool loaded = false;
     DWORD waitRet = WaitForSingleObject(hThread, 10000);
     DWORD exitCode = 0;
-    if (waitRet == WAIT_OBJECT_0 && GetExitCodeThread(hThread, &exitCode)) {
+    if (waitRet == WAIT_OBJECT_0 && GetExitCodeThread(hThread, &exitCode))
+    {
         loaded = (exitCode != 0);
-        if (!loaded) {
+        if (!loaded)
+        {
             printf("[boot] LoadLibraryA in remote returned NULL（进程未就绪或加载失败），重试注入\n");
         }
-    } else {
+    }
+    else
+    {
         printf("[boot] remote thread wait failed: waitRet=%lu err=%lu\n", waitRet, GetLastError());
     }
     CloseHandle(hThread);
     VirtualFreeEx(hProc, remoteMem, 0, MEM_RELEASE);
     CloseHandle(hProc);
-    if (!loaded) return false;
+    if (!loaded)
+        return false;
     printf("[boot] injected: %s\n", dllPath.c_str());
     return true;
 }
 
 // 通过快照找 QQ 主进程（CreateProcess 后 app 可能 fork）
-static DWORD findQqProcess(const std::string& qqPath) {
+static DWORD findQqProcess(const std::string &qqPath)
+{
     std::string exeName = qqPath;
     size_t slash = exeName.find_last_of("\\/");
-    if (slash != std::string::npos) exeName = exeName.substr(slash + 1);
-    if (exeName.empty()) exeName = "QQ.exe";
+    if (slash != std::string::npos)
+        exeName = exeName.substr(slash + 1);
+    if (exeName.empty())
+        exeName = "QQ.exe";
 
     HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
-    if (snap == INVALID_HANDLE_VALUE) return 0;
+    if (snap == INVALID_HANDLE_VALUE)
+        return 0;
 
     PROCESSENTRY32W pe;
     pe.dwSize = sizeof(pe);
     DWORD best = 0;
-    if (Process32FirstW(snap, &pe)) {
-        do {
+    if (Process32FirstW(snap, &pe))
+    {
+        do
+        {
             // 比较时转宽字符（-municode 下 szExeFile 是 WCHAR）
             std::wstring wexe(pe.szExeFile);
             std::string exe(wexe.begin(), wexe.end());
-            if (exe.size() > 0 && _stricmp(exe.c_str(), exeName.c_str()) == 0) {
+            if (exe.size() > 0 && _stricmp(exe.c_str(), exeName.c_str()) == 0)
+            {
                 // 取 PID 最大的（主进程）
-                if (pe.th32ProcessID > best) best = pe.th32ProcessID;
+                if (pe.th32ProcessID > best)
+                    best = pe.th32ProcessID;
             }
         } while (Process32NextW(snap, &pe));
     }
@@ -111,7 +131,8 @@ static DWORD findQqProcess(const std::string& qqPath) {
     return best;
 }
 
-int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
+int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
+{
     // 控制台输出 UTF-8：源码字符串字面量为 UTF-8，VS Code 集成终端/Windows Terminal
     // 默认 UTF-8。不设置时 printf 的 UTF-8 字节被按 ACP(GBK) 解释 → 中文乱码
     // （如「hookdll 姆∠瑷缁撤潵滩」）。SetConsoleOutputCP 对继承的管道/终端同样生效。
@@ -127,11 +148,13 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
     g_cfgDir = getEnv("NAPUTO_CFG_DIR");
     std::string qqPath = getEnv("NAPUTO_QQ_PATH");
 
-    if (qqPath.empty()) {
+    if (qqPath.empty())
+    {
         printf("[boot] NAPUTO_QQ_PATH not set\n");
         return 1;
     }
-    if (g_hookDllPath.empty()) {
+    if (g_hookDllPath.empty())
+    {
         printf("[boot] NAPUTO_HOOK_DLL not set\n");
         return 1;
     }
@@ -143,22 +166,14 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
     // 启动 QQ
     STARTUPINFOA si = {sizeof(si)};
     PROCESS_INFORMATION pi = {};
-    // 附加命令行参数（NAPUTO_QQ_ARGS，launcher 注入）。
-    // 关键（2026-08-06）：boot.cjs 的 app.commandLine.appendSwitch("disable-gpu") 时序太晚——
-    // GPU 进程在 Electron app ready 前就 fork，实测 disable-gpu 后 gpu-process 仍在（147MB）。
-    // 必须在 CreateProcess 命令行就传 --disable-gpu，GPU 进程才真正不启动。
     std::string cmdline = "\"" + qqPath + "\"";
-    std::string extraArgs = getEnv("NAPUTO_QQ_ARGS");
-    if (!extraArgs.empty()) {
-        cmdline += " " + extraArgs;
-        printf("[boot] QQ args: %s\n", extraArgs.c_str());
-    }
     // 实测发现（2026-08-05）：CREATE_SUSPENDED 挂起注入会让 QQ 卡死（1 进程无窗口，
     // CPU≈0，疑似触发反注入/完整性检测）。改回正常启动 + 找到主进程后立即注入。
     BOOL ok = CreateProcessA(
         qqPath.c_str(), cmdline.data(), nullptr, nullptr, FALSE,
         CREATE_UNICODE_ENVIRONMENT, nullptr, nullptr, &si, &pi);
-    if (!ok) {
+    if (!ok)
+    {
         printf("[boot] CreateProcess failed: %lu\n", GetLastError());
         return 1;
     }
@@ -179,45 +194,59 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
     // ① hookdll（引导 boot JS）：重试式注入，最长 ~15s
     bool hooked = false;
-    for (int i = 0; i < 50 && !hooked; i++) {
-        if (!isProcessAlive(pid)) break; // 进程已退出（单实例转发场景）
+    for (int i = 0; i < 50 && !hooked; i++)
+    {
+        if (!isProcessAlive(pid))
+            break; // 进程已退出（单实例转发场景）
         hooked = injectDll(pid, g_hookDllPath);
-        if (!hooked) Sleep(300);
+        if (!hooked)
+            Sleep(300);
     }
     printf("[boot] hookdll 注入结果: %s (pid=%lu)\n", hooked ? "成功" : "失败", pid);
 
     // ② 兜底：hookdll 未注入 → 快照重试（进程可能 fork/已退出，重新定位存活实例）
-    if (!hooked) {
+    if (!hooked)
+    {
         pid = 0;
-        for (int i = 0; i < 30; i++) {
+        for (int i = 0; i < 30; i++)
+        {
             pid = findQqProcess(qqPath);
-            if (pid && injectDll(pid, g_hookDllPath)) {
+            if (pid && injectDll(pid, g_hookDllPath))
+            {
                 hooked = true;
                 break;
             }
             Sleep(500);
         }
-        if (hooked) {
+        if (hooked)
+        {
             printf("[boot] 快照兜底注入成功 (pid=%lu)\n", pid);
         }
     }
-    if (pid == 0) pid = pi.dwProcessId;
+    if (pid == 0)
+        pid = pi.dwProcessId;
 
     // ③ V2 载具 DLL（NapukettoVehicle.dll）：激活 session cpp_impl + 无头。
     // 注入顺序：先 hookdll（引导 boot JS），再 vehicle（激活 session）。
     // 载具 DLL 路径经环境变量 NAPUTO_VEHICLE_DLL 传入（launcher.ts 设置），
     // 若未设置（未启用 V2）则跳过，保持 V1 行为兼容。
     std::string vehicleDll = getEnv("NAPUTO_VEHICLE_DLL");
-    if (!vehicleDll.empty()) {
+    if (!vehicleDll.empty())
+    {
         printf("[boot] injecting vehicle: %s\n", vehicleDll.c_str());
         bool injected = false;
-        for (int i = 0; i < 20 && !injected; i++) {
-            if (!isProcessAlive(pid)) break;
+        for (int i = 0; i < 20 && !injected; i++)
+        {
+            if (!isProcessAlive(pid))
+                break;
             injected = injectDll(pid, vehicleDll);
-            if (!injected) Sleep(300);
+            if (!injected)
+                Sleep(300);
         }
         printf("[boot] vehicle 注入结果: %s\n", injected ? "成功" : "失败");
-    } else {
+    }
+    else
+    {
         printf("[boot] NAPUTO_VEHICLE_DLL 未设置，跳过载具注入（V1 模式）\n");
     }
 
@@ -227,7 +256,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
     printf("[boot] waiting for QQ exit (pid=%lu)...\n", pi.dwProcessId);
     WaitForSingleObject(pi.hProcess, INFINITE);
     DWORD exitCode = 0;
-    if (!GetExitCodeProcess(pi.hProcess, &exitCode)) {
+    if (!GetExitCodeProcess(pi.hProcess, &exitCode))
+    {
         exitCode = 1;
     }
     printf("[boot] QQ exited, code=%lu\n", exitCode);

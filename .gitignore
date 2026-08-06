@@ -46,3 +46,6 @@ packages/loader/native/vehicle.cpp
 packages/loader/native-private/
 packages/loader/native/*.dll
 packages/loader/native/*.node
+
+# 临时实验脚本（逆向验证 / PE 分析 / host 测试，不留仓库）
+scripts-tmp/
