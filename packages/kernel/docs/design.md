@@ -25,21 +25,36 @@ packages/kernel/src/
 │   ├── listeners/            # 12+ NodeIKernel*Listener 回调签名
 │   ├── entities/             # RawMessage / Peer / ChatType / GroupInfo / GroupMember / SelfInfo ...
 │   └── message-element.ts    # canonical 消息元素模型（协议无关，ADR-008 延伸）
-├── wrapper-loader.ts         # dlopen + 加载（wrapper.node 路径来自 wrapper-version）
-├── wrapper-version.ts        # QQ 版本探测：版本号/appid/qua/wrapper 路径（ADR-018）
+├── infra/                    # 基础设施（无内部依赖）
+│   ├── errors.ts             # KernelError + KernelErrorCode（ADR-017）
+│   ├── logger.ts             # pino 封装（console + file + level + redact）
+│   ├── config.ts             # ConfigBase（zod 校验 + TOML/JSON 读写；协议 schema 放各协议包）
+│   └── paths.ts              # PathWrapper（binary/logs/config/cache 目录）
+├── wrapper/                  # 原生适配层（wrapper.node 交互）
+│   ├── wrapper-loader.ts     # dlopen + 加载（wrapper.node 路径来自 wrapper-version）
+│   ├── wrapper-version.ts    # QQ 版本探测：版本号/appid/qua/wrapper 路径（ADR-018）
+│   ├── wrapper-config.ts     # 配置装配（buildEngine/Login/SessionConfig）
+│   ├── wrapper-adapters.ts   # NAPI 回调适配器（Global/Depends/Dispatcher/listener 工厂）
+│   ├── session-resolver.ts   # getMainSession / getExistingSession（session 复用）
+│   ├── qq-data-path.ts       # getNTUserDataInfoConfig → QQ 数据根路径解析（P2-1）
+│   └── probe.ts              # 运行时反射探测（ADR-006，产物作 types/ 权威来源）
+├── bridge/                   # 事件桥（原生回调 → 类型化事件通道，ADR-003）
+│   ├── msg-bridge.ts         # MsgBridge（消息事件）
+│   └── group-bridge.ts       # GroupBridge（群事件）
+├── login/                    # 登录域
+│   ├── login.ts              # QR 登录流程编排 + 状态机 + selfInfo（不含 UI 渲染）
+│   └── lifecycle.ts          # 快速登录（含网络重试）+ session 初始化/启动编排
 ├── event-channel.ts          # 类型化事件通道（ADR-003）
-├── errors.ts                 # KernelError + KernelErrorCode（ADR-017）
 ├── apis/                     # msg / group / friend / user / file / system（统一错误语义）
 ├── cache/                    # group / member / friend / profile（主动同步 + 惰性回填 + 只读消费）
 ├── core.ts                   # NapukettoCore：装配 + 启动
 ├── context.ts                # CoreContext（只读装配根）
-├── login.ts                  # QR 登录流程编排 + 状态机 + selfInfo（不含 UI 渲染）
-├── logger.ts                 # pino 封装（console + file + level + redact）
-├── config.ts                 # ConfigBase（zod 校验 + JSON 读写；协议 schema 放各协议包）
-└── paths.ts                  # PathWrapper（binary/logs/config/cache 目录）
+└── index.ts                  # 公共出口（包外唯一入口 @napuketto/kernel）
 ```
 
-依赖：`pino`（替换占位的 consola）、`koffi`（FFI，P1 调 wrapper.node C++ ABI）。（`@napuketto/media` 不进 kernel，保持纯净，见 ADR-011）
+依赖：`pino` / `smol-toml`（`@napuketto/media` 不进 kernel，保持纯净，见 ADR-011）。
+分组原则（2026-08-06）：infra 无内部依赖；wrapper/bridge/login 只依赖 infra + types；
+apis/cache 只依赖 infra + types + bridge；core/context 装配一切（依赖方向向下）。
 
 > **kernel 禁止模块级全局单例**（ADR-015 推论）：logger / cache / event-channel 都必须是实例化对象，由 CoreContext 持有——多账号多进程场景下每进程一份，避免跨账号状态污染。
 
@@ -616,7 +631,7 @@ function resolveWrapperPath(installDir: string, version: string): string;
 1. ✅ `paths.ts` + `logger.ts` + `config.ts` + `errors.ts`（无原生依赖，先行，2026-08-04 完成）
 2. ✅ `scripts/probe/` 探测脚本 → 产出 `types/`（含 wrapper-version 探测）——占位类型已建（types/listeners + types/entities），探测产出后替换
 3. ✅ `event-channel.ts`（2026-08-04，用占位 Listener 类型验证机制；真实签名待探测后对齐）
-4. ✅ `wrapper-loader.ts` + `wrapper-version.ts`（2026-08-05，koffi + DLL 复制方案，真实环境验证 session 创建）
+4. ✅ `wrapper-loader.ts` + `wrapper-version.ts`（**2026-08-05 NAPI 范式重构**：早期 koffi + DLL 复制方案已废弃，改为 boot.cjs 截获 exports → 纯 NAPI 对象调用；版本探测 + appid 动态解析见 §8.4/§8.19）
 5. ✅ 类型层：runtime 探测 + NapCat shell 模式参考确认（wrapper 类型 + service 契约，见 §8.5/§8.7；getService vtable 逆向**不再需要**——NAPI 范式下全部走普通 JS 对象调用）
 6. ✅ `core.ts` + `context.ts` 装配（2026-08-05，见 §8.8）
 7. ✅ `login.ts`（QR 状态机 + selfInfo + core.login QR 回退，2026-08-05，见 §8.11）
