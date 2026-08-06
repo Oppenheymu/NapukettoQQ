@@ -112,6 +112,14 @@ static DWORD findQqProcess(const std::string& qqPath) {
 }
 
 int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
+    // 控制台输出 UTF-8：源码字符串字面量为 UTF-8，VS Code 集成终端/Windows Terminal
+    // 默认 UTF-8。不设置时 printf 的 UTF-8 字节被按 ACP(GBK) 解释 → 中文乱码
+    // （如「hookdll 姆∠瑷缁撤潵滩」）。SetConsoleOutputCP 对继承的管道/终端同样生效。
+    SetConsoleOutputCP(CP_UTF8);
+    // 关闭 stdout 缓冲：printf 立即输出，不依赖进程退出时 flush
+    // （之前 CreateProcess 后日志滞留缓冲区，重定向到文件时看不到实时输出）。
+    setvbuf(stdout, nullptr, _IONBF, 0);
+
     // 读环境变量（由 launcher.ts 设置）
     g_hookDllPath = getEnv("NAPUTO_HOOK_DLL");
     g_bootJsPath = getEnv("NAPUTO_BOOT_JS");

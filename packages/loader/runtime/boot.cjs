@@ -34,9 +34,11 @@ installIpcMonitor();
 
 /**
  * 无头模式（V2 载具职责③的 JS 侧部分，纯 Electron 官方 API）：
- * 由环境变量 NAPUTO_HEADLESS=1 控制（launcher 可选注入；V2 载具注入后 boot 侧激活）。
- * 注意：登录流程依赖 login.html 窗口的渲染进程做 session 初始化（V1 观察），
- * 无头在「登录成功 + session 就绪」后才激活——过早阻断会导致登录失败。
+ * 由环境变量 NAPUTO_HEADLESS=1 控制（cli 默认开启；launcher 透传）。
+ *
+ * V2（2026-08-06）：vehicle 载具激活 cpp_impl 后主进程已有有效 session，渲染进程
+ * 不再是必需——无头可全程生效（QQ 界面不弹出，登录走主进程 NAPI 快速登录/QR 文件）。
+ * 具体策略见 boot-headless.js（disable-gpu + 窗口创建即销毁 + 定时扫描）。
  */
 if (process.env.NAPUTO_HEADLESS === "1") {
     installHeadlessMode();

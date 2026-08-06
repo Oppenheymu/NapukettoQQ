@@ -50,6 +50,9 @@ export async function runSingleAccount(opts: BootOptions = {}): Promise<void> {
         adapterEntry,
         networkEntry,
         cfgDir,
+        // 默认无头（V2）：载具激活 cpp_impl 后主进程不再依赖渲染进程 UI，
+        // 登录走主进程 NAPI 快速登录 / QR（二维码写文件）。QQ 界面不再弹出。
+        headless: true,
     });
 
     // 常驻：等待 QQ 进程退出
