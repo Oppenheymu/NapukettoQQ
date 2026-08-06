@@ -38,7 +38,7 @@ export interface LaunchOptions {
     bootJs?: string;
     /** hook DLL 路径（默认 dist/native/NapukettoWinBootHook.dll）。 */
     hookDll?: string;
-    /** V2 载具 DLL 路径（默认 dist/native/NapukettoVehicle.dll，存在则注入）。 */
+    /** V2 载具 DLL 路径（默认 dist/native/NapukettoVehicle.dll；仅 routeB=false 时注入）。 */
     vehicleDll?: string;
     /** 无头模式（阻断 UI/GPU，boot.cjs 侧实现，默认 false）。 */
     headless?: boolean;
@@ -91,7 +91,14 @@ export function launchQqWithLoader(options: LaunchOptions): LaunchResult {
         [ENV.QQ_VERSION]: options.qq.version,
         [ENV.WRAPPER_PATH]: options.qq.wrapperPath,
     };
-    if (hasVehicle) {
+    // ⚠️ vehicle（V2 载具，闭源）只在 V1 主进程引导模式注入（routeB: false）：
+    //  - 路线 B（worker）继承 QQ env → getNTWrapperSession("nt_1") 天然带 cpp_impl，
+    //    不需要 vehicle 激活 session（P2-0 实测确认）。
+    //  - vehicle 的 RVA 表针对 9.9.31 逆向（native-private），注入 9.9.33 会内存
+    //    patch 到错误地址 → QQ 0xC0000005 崩溃（2026-08-06 实测：boot JS 未执行即崩）。
+    //  - 无头由 bootmain 命令行参数（NAPUTO_QQ_ARGS）+ boot-headless.js（JS 侧）实现，
+    //    vehicle 的 C++ 阻断职责在路线 B 下不再需要。
+    if (hasVehicle && options.routeB === false) {
         env[ENV.VEHICLE_DLL] = vehicleDllPath;
     }
     // 路线 B（默认开启，2026-08-06 定稿）：boot.cjs fork utilityProcess Worker →

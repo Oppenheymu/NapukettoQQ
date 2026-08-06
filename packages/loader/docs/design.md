@@ -156,6 +156,13 @@ apps/cli             kernel + adapter + loader
 **P2-1（2026-08-06）launcher 默认开启路线 B**：`LaunchOptions.routeB`（默认 true）→ env
 `NAPUTO_ROUTE_B=1`。cli 默认走 worker 模式（V1 主进程直接引导仅作历史回退，`routeB: false` 关闭）。
 
+**⚠️ vehicle 注入修复（2026-08-06）**：路线 B（worker）**不注入 vehicle**——worker 继承 QQ env，
+`getNTWrapperSession("nt_1")` 天然带 cpp_impl（P2-0 实测），无需 vehicle 激活 session。vehicle 仅
+`routeB: false`（V1 主进程引导）时注入。**实测教训**：vehicle 的 RVA 表针对 9.9.31 逆向（闭源），
+注入 9.9.33 会内存 patch 到错误地址 → QQ 0xC0000005 崩溃（boot JS 未执行即崩，日志无新条目）。
+无头职责由 bootmain 命令行参数（NAPUTO_QQ_ARGS）+ boot-headless.js（JS 侧 Electron API）承担，
+vehicle 的 C++ 阻断在路线 B 下不再需要。
+
 **P2-1 冒烟自检（runtime/boot-smoke.js）**：`NAPUTO_SMOKE=1` 时，登录 + session 就绪后执行
 业务层最后试金石——MsgBridge 注册 → 订阅 onRecvMsg → MsgApi.sendMessage（NAPUTO_SMOKE_PEER
 指定目标，缺省发给自己）→ fetchMessages 落库核对 → 日志输出结论。build-native 已整目录拷贝
