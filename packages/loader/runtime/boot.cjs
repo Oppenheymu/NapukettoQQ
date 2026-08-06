@@ -48,6 +48,48 @@ log(`boot loaded: node=${process.version} electron=${process.versions.electron ?
 log(`cwd: ${process.cwd()}`);
 log(`env NAPUTO_BOOT_JS=${process.env.NAPUTO_BOOT_JS}`);
 
+// ---- 路线 B（2026-08-06）：utilityProcess Worker 模式 ----
+// NAPUTO_ROUTE_B=1 时，boot 脚本不再直接 dlopen/引导，而是 fork utilityProcess
+// Worker（继承 QQ env）→ worker 内 dlopen wrapper.node → bootstrap。
+// QQ env 提供事件分发对象 → P0-B 纯 Node 崩溃点消失（冒烟已验证登录链路全通）。
+// Worker 独立进程：主进程只做 fork + 保持存活（QQ 退出时 worker 自动终止）。
+if (process.env.NAPUTO_ROUTE_B === "1") {
+    const { log: logB, createState: createStateB } = require("./boot-util.js");
+    logB("boot: 路线 B 模式——fork utilityProcess Worker");
+
+    // 解析 electron.utilityProcess（QQ 主进程内可用）
+    let electron = null;
+    try {
+        electron = require("electron");
+    } catch (e) {
+        logB(`boot: require("electron") 失败: ${e?.message ?? e}`);
+    }
+    if (!electron || typeof electron.utilityProcess?.fork !== "function") {
+        logB("boot: ❌ electron.utilityProcess.fork 不可用，回退 V1 直接引导");
+    } else {
+        const workerPath = require("node:path").join(__dirname, "route-b-worker.cjs");
+        logB(`boot: fork worker ${workerPath}`);
+        try {
+            const worker = electron.utilityProcess.fork(workerPath, [], { stdio: "pipe" });
+            worker.on("exit", (code) => {
+                logB(`boot: worker exit code=${code}`);
+            });
+            worker.on("error", (e) => {
+                logB(`boot: worker error: ${e?.message ?? e}`);
+            });
+            // 主进程保持存活（QQ 事件循环运行中；QQ 退出时 worker 自动终止）
+            // 注意：不 process.exit——QQ 主进程生命周期由 QQ 自身管理
+            logB("boot: worker forked，主进程保持存活");
+            // 主进程不再走 V1 引导，直接挂起（后续 worker 完成一切）。
+            // CJS 顶层 return 合法（模块被包在 Module wrapper 函数里），
+            // 阻止下方 V1 的 dlopen 拦截/boot-bootstrap 逻辑执行。
+            return;
+        } catch (e) {
+            logB(`boot: fork 失败: ${e?.message ?? e}，回退 V1 直接引导`);
+        }
+    }
+}
+
 // ---- 拦截 exports 构造器：捕获 QQ 自己创建的 session/loginService 实例 ----
 // （QQ 9.9.31 实测：`new NodeIQQNTWrapperSession()` 自建 session 缺 startNT 且
 //   init 断言失败（implementation not valid）——QQ 自己 new 的实例才是完整可用。
