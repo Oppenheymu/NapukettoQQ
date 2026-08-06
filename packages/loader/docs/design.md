@@ -168,21 +168,32 @@ apps/cli             kernel + adapter + loader
   → 业务层 boot.cjs 捕获该有效 session（Proxy 机制不变）
 ```
 
-### 8.2 self-register 结论（P0-1 修正）
+### 8.2 self-register 结论（P0-1 修正 + 2026-08-06 突破）
 
 - ❌ wrapper.node **无** "Module did not self-register"（该错误来自 node/宿主侧）
-- ❌ `qq_magic_napi_register` 导入从未被调用（dead import）
-- ✅ **V2 注入 QQ 主进程**：wrapper.node 由 QQ preload 天然注册，**self-register 校验已通过**
-- ✅ 只有「自建宿主」（独立进程 dlopen wrapper.node）才需要 NOP self-register
-- **结论：P0-1 对注入路线非阻塞，可后置**（骨架留 `bypassSelfRegister()` 占位即可）
+- ✅ **决定性发现**：`qq_magic_napi_register` 是 wrapper.node 对 **QQNT.dll 的常规导入**
+  （Import Table，非 delay-load）——wrapper.node 加载时硬依赖 QQNT.dll 的该导出
+- ✅ **QQNT.dll 是可独立加载的宿主桥接层**：导出全套 v8/node/napi 符号
+  （`Isolate@v8`、`AsyncResource@node`、`napi_*`、`qq_magic_napi_register`）
+- ✅ **自建宿主路线已实测验证**（标准 Node v24.16.0）：
+  `LoadLibrary(QQNT.dll)` + `LoadLibrary(wrapper.node)` + koffi 调用
+  `CreateNTSessionShell("Session")` **成功返回真实对象**（`0x1faef126030`）
+- ✅ **无需 NOP self-register**：标准 Node 的 `process.dlopen` 硬查 `nm_register_func`
+  （wrapper.node 没有）→ 用 **`LoadLibraryA` 绕过**（模块进内存 + 常规导入自动绑定）
+- **结论：P0-1 彻底关闭**。自建宿主无需 bypassSelfRegister()，唯一前提是
+  QQNT.dll + `resources\app` 依赖 DLL 可被搜索（SetDllDirectory + PATH）
 
 ### 8.3 载具 DLL 职责（`native-private/vehicle.cpp`，闭源）
 
 ```
 1. 注入后（复用 hookdll IAT hook 机制进入 QQ 主进程）
 2. 解析阶段一地址（RVA 换算：运行时基址 + RVA，私有表）
-3. bypassSelfRegister()：占位（注入路线不需要，自建宿主时启用）
+3. bypassSelfRegister()：占位（注入路线不需要；自建宿主用 LoadLibraryA 绕过，也不需 NOP）
 4. activateSessionCppImpl()：创建 session → 注册单例 → 激活 cpp_impl
 5. 无头：阻断 BrowserWindow / GPU（宿主 JS 侧 Electron API）
 6. 引导 boot.cjs（复用 hookdll 现有 IAT hook 链）
 ```
+
+> **2026-08-06 注**：自建宿主（§3.2.1 架构书）验证后，注入 QQ 主进程降级为备选路线。
+> vehicle.cpp 的激活链知识（FUN_180025d63/FUN_180025d9d/FUN_180028756）在自建宿主里
+> 由 koffi 调用等价函数替代，载具 C++ 注入不再必需。
