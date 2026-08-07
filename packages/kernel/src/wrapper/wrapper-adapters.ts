@@ -15,7 +15,6 @@
  * 这些类的实例本身就是「普通 JS 对象」，可被 NAPI 反射——直接 new 传入即可。
  */
 
-import process from "node:process";
 import type {
     IKernelLoginListener,
     NodeIDependsAdapter,
@@ -53,18 +52,31 @@ export class DispatcherAdapter implements NodeIDispatcherAdapter {
     dispatchCallWithJson = noop;
 }
 
-/** 创建会话监听器（日志版，boot 阶段默认；login 模块接入后可覆盖）。 */
-export function createSessionListener(prefix = "[napuketto:session]"): NodeIKernelSessionListener {
-    const log = (msg: string, ...rest: unknown[]): void => {
-        process.stdout.write(`${prefix} ${msg} ${rest.map(String).join(" ")}\n`);
+/** 会话监听器选项。 */
+export interface SessionListenerOptions {
+    /** 事件日志回调（默认静默——boot 阶段事件对用户是噪音；调试时可传回调观察）。 */
+    onEvent?: (name: string, ...args: unknown[]) => void;
+}
+
+/**
+ * 创建会话监听器（默认静默，boot 阶段默认；login 模块接入后可覆盖）。
+ * 回调方法必须存在（NAPI 按方法名反射），但输出与否由调用方决定——
+ * onNTSessionCreate / onOpentelemetryInit 等对用户无信息量，默认不打 stdout。
+ */
+export function createSessionListener(
+    opts: SessionListenerOptions = {},
+): NodeIKernelSessionListener {
+    const { onEvent } = opts;
+    const emit = (name: string, ...args: unknown[]): void => {
+        onEvent?.(name, ...args);
     };
     return {
-        onNTSessionCreate: (sessionId) => log("onNTSessionCreate", sessionId),
-        onGProSessionCreate: (sessionId) => log("onGProSessionCreate", sessionId),
-        onSessionInitComplete: (sessionId) => log("onSessionInitComplete", sessionId),
-        onOpentelemetryInit: (info) => log("onOpentelemetryInit", info),
-        onUserOnlineResult: (result) => log("onUserOnlineResult", result),
-        onGetSelfTinyId: (result) => log("onGetSelfTinyId", result),
+        onNTSessionCreate: (sessionId) => emit("onNTSessionCreate", sessionId),
+        onGProSessionCreate: (sessionId) => emit("onGProSessionCreate", sessionId),
+        onSessionInitComplete: (sessionId) => emit("onSessionInitComplete", sessionId),
+        onOpentelemetryInit: (info) => emit("onOpentelemetryInit", info),
+        onUserOnlineResult: (result) => emit("onUserOnlineResult", result),
+        onGetSelfTinyId: (result) => emit("onGetSelfTinyId", result),
     };
 }
 

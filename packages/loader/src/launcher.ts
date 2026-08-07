@@ -9,7 +9,7 @@
  *    hook DLL 通过 napi_module_register 注册自研模块，node 调用其 init 拿到 napi_env，
  *    然后执行 boot JS（hook process.dlopen 截获 wrapper.node exports）。
  */
-import { spawn } from "node:child_process";
+import { type StdioOptions, spawn } from "node:child_process";
 import { existsSync, mkdirSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import process from "node:process";
@@ -50,6 +50,12 @@ export interface LaunchOptions {
     stubDir?: string;
     /** 自建宿主入口（默认 dist/native/runtime/self-host.cjs）。 */
     selfHostEntry?: string;
+    /**
+     * 子进程 stdio（默认 "inherit"）。cli 传 ["inherit","pipe","pipe"] 并接管
+     * 子进程 stdout/stderr：逐行过滤 wrapper 原生噪音（MMKV 刷屏、Node 符号
+     * 查找失败警告），其余转发——原生 printf 直写 fd 的字节无法从 JS 层拦截。
+     */
+    stdio?: StdioOptions;
     /** BootMain.exe 路径（默认 dist/native/NapukettoBootMain.exe，路线 B 历史遗留）。 */
     bootMain?: string;
 }
@@ -135,7 +141,7 @@ export function launchSelfHost(options: LaunchOptions): LaunchResult {
     // 标准 node 直接跑入口（不拉起 QQ，不注入）
     const child = spawn(process.execPath, [selfHostPath], {
         env,
-        stdio: "inherit",
+        stdio: options.stdio ?? "inherit",
         windowsHide: false,
     });
 

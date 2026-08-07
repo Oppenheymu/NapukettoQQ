@@ -54,7 +54,17 @@ export function createLogger(opts: LoggerOptions = {}): pino.Logger {
 
     const streams: Array<{ stream: pino.DestinationStream }> = [];
     if (consoleEnabled) {
-        streams.push({ stream: pinoPretty({ colorize: true, translateTime: "SYS:standard" }) });
+        streams.push({
+            stream: pinoPretty({
+                colorize: true,
+                translateTime: "SYS:standard",
+                // ⚠️ 必须显式传 destination=process.stdout：pino-pretty 默认用
+                // sonic-boom 直写 fd 1（UTF-8 字节流），在 pnpm start（cmd.exe +
+                // 管道 936 转码）链路下中文被按 GBK 解码成乱码、ANSI 残留；
+                // 走 process.stdout 的 TTY 路径（WriteConsoleW UTF-16）编码正确。
+                destination: process.stdout,
+            }),
+        });
     }
     if (file) {
         mkdirSync(dirname(file), { recursive: true });

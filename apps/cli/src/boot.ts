@@ -9,6 +9,7 @@
  */
 import path from "node:path";
 import process from "node:process";
+import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
 import { resolveDataRoot } from "@napuketto/kernel";
 import {
@@ -36,6 +37,32 @@ async function packageEntry(pkg: string): Promise<string> {
     return fileURLToPath(url);
 }
 
+/**
+ * 原生噪音行（wrapper.node 加载后直写 fd 的 C++ 日志，JS 层无法拦截，只能过滤）：
+ *  - `<MMKV` / `<MemoryFile_Win32` / `<MMKV_IO`：MMKV 存储库刷屏（每次初始化打 ~6 行）
+ *  - `loadSymbolFromShell` / `getNodeGetJsListApi` / `get symbol failed`：
+ *    标准 node 无腾讯私有符号（NodeContextifyContextMetrics 等），GetProcAddress
+ *    失败的加载警告（无害，纯噪音）
+ */
+const NATIVE_NOISE =
+    /<MMKV|<MemoryFile_Win32|<MMKV_IO|loadSymbolFromShell|getNodeGetJsListApi|get symbol failed/;
+
+/**
+ * 逐行转发子进程输出到父进程，过滤原生噪音。
+ * readline 按 UTF-8 解码 pipe 字节流，再经 process.stdout（TTY 路径，
+ * WriteConsoleW UTF-16）输出——顺带修复 pino 中文在 cmd.exe/管道 936 转码
+ * 链路下的乱码（原生 printf 字节流无法从 JS 侧改编码，转 pipe 后统一解码）。
+ */
+function forwardFiltered(input: NodeJS.ReadableStream, out: NodeJS.WritableStream): void {
+    const lines = createInterface({ input });
+    lines.on("line", (line) => {
+        if (NATIVE_NOISE.test(line)) {
+            return;
+        }
+        out.write(`${line}\n`);
+    });
+}
+
 /** 启动单个账号（自建宿主 + 常驻）。 */
 export async function runSingleAccount(opts: BootOptions = {}): Promise<void> {
     const dataRoot = resolveDataRoot(opts.dataDir);
@@ -55,6 +82,7 @@ export async function runSingleAccount(opts: BootOptions = {}): Promise<void> {
     );
 
     // 唯一启动路径：自建宿主（2026-08-07 用户拍板，路线 B 淘汰）
+    // stdio 接管 stdout/stderr：过滤 MMKV / 符号查找失败等原生噪音，其余转发
     const { child } = launchSelfHost({
         qq,
         kernelEntry,
@@ -62,8 +90,16 @@ export async function runSingleAccount(opts: BootOptions = {}): Promise<void> {
         networkEntry,
         cfgDir,
         selfHost: true,
+        stdio: ["inherit", "pipe", "pipe"],
         ...(stubDir !== undefined ? { stubDir } : {}),
     });
+
+    if (child.stdout !== null) {
+        forwardFiltered(child.stdout, process.stdout);
+    }
+    if (child.stderr !== null) {
+        forwardFiltered(child.stderr, process.stderr);
+    }
 
     // 常驻：等待自建宿主进程退出
     await new Promise<void>((resolve) => {
