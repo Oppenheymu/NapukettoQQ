@@ -9,7 +9,7 @@
  * 私聊：user_id 经 uin→uid → Peer{ chatType: C2C, peerUid: uid }。
  */
 
-import { type CanonicalElement, ChatType, type Peer } from "@napuketto/kernel";
+import { type CanonicalElement, ChatType, kernelError, type Peer } from "@napuketto/kernel";
 import { z } from "zod";
 import { BaseAction } from "../../../core/index.js";
 import type { OneBotApi } from "../../api/one-bot-api.js";
@@ -39,11 +39,13 @@ async function resolvePeer(payload: SendMsgPayload, deps: SendMsgDeps): Promise<
         const uidMap = await deps.uinToUid([String(payload.user_id)]);
         const uid = uidMap.get(String(payload.user_id));
         if (uid === undefined) {
-            throw new Error(`用户 ${payload.user_id} 的 uid 解析失败`);
+            // 2026-08-07：抛类型化 KernelError（INVALID_PARAM=105），
+            // 此前普通 Error → retcode 999（UNKNOWN）
+            throw kernelError(`用户 ${payload.user_id} 的 uid 解析失败`, "INVALID_PARAM");
         }
         return { chatType: ChatType.C2C, peerUid: uid };
     }
-    throw new Error("send_msg 需要 group_id 或 user_id");
+    throw kernelError("send_msg 需要 group_id 或 user_id", "INVALID_PARAM");
 }
 
 /** 共享发送核心：解析 Peer → canonical 翻译（含 auto_escape）→ sendMessage → 映射 message_id。 */

@@ -19,6 +19,8 @@ import { logger } from "./logger.js";
 const DEFAULT_RESTART_DELAY_MS = 2000;
 /** 退出轮询间隔（毫秒）。 */
 const EXIT_POLL_MS = 100;
+/** 子进程强制退出时限（毫秒，超时未退则父进程强制退出）。 */
+const FORCE_EXIT_MS = 5000;
 
 /** supervisor 选项。 */
 export interface SupervisorOptions {
@@ -88,15 +90,22 @@ function startAccount(ctx: SupervisorCtx, acct: CliAccountConfig): void {
     });
 }
 
-/** 停止全部子进程，全部退出后父进程退出。 */
+/** 停止全部子进程，全部退出后父进程退出（2026-08-07：超时强杀兜底）。 */
 function stopAll(ctx: SupervisorCtx): void {
     logger.info("收到退出信号，停止全部账号");
     for (const child of ctx.children.values()) {
         child.kill();
     }
+    // 超时强杀（2026-08-07 修复）：子进程不响应 SIGTERM（自建宿主卡死等）时
+    // 父进程死等 setInterval 永不退出——限时后强制退出。
+    const forceTimer = setTimeout(() => {
+        logger.warn("子进程未在限时内退出，强制退出");
+        process.exit(1);
+    }, FORCE_EXIT_MS);
     const wait = setInterval(() => {
         if (ctx.children.size === 0) {
             clearInterval(wait);
+            clearTimeout(forceTimer);
             process.exit(0);
         }
     }, EXIT_POLL_MS);

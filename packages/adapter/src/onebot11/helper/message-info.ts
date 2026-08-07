@@ -43,7 +43,9 @@ export function toOb11MessageInfo(msg: RawMessage, unique: MessageUnique): OB11M
             sender.card = msg.sendMemberName;
         }
     } else {
-        info.user_id = Number(msg.peerUin);
+        // 2026-08-07 修复：user_id 应为发送者（senderUin），与消息事件一致。
+        // 此前用 peerUin（会话对端）——机器人自己发的消息 user_id 会错成对端。
+        info.user_id = Number(msg.senderUin);
     }
     return info;
 }

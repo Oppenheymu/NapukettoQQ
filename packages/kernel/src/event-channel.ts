@@ -122,14 +122,22 @@ export class NTEventChannel<L extends ListenerShape, Name extends string> {
         });
     }
 
-    /** 类型化派发：wrapper-loader 的原生回调经此推入通道。 */
+    /**
+     * 类型化派发：wrapper-loader 的原生回调经此推入通道。
+     * 2026-08-07 修复：原生 EventEmitter.emit 中一个 listener 抛异常会中断后续
+     * listener 派发（Node 语义）——改为快照数组逐个 try/catch，保证「单个订阅者
+     * 异常不打断派发」（协议翻译层异常不饿死缓存维护等其他订阅者）。
+     */
     emit<E extends EventName<L, Name>>(event: E, ...args: EventArgs<L, Name, E>): void {
-        try {
-            this.emitter.emit(event as string, ...args);
-        } catch (err) {
-            // error 兜底：单个订阅者异常不打断派发，统一通知 onError
-            for (const handler of this.errorHandlers) {
-                handler(err);
+        const listeners = this.emitter.listeners(event as string);
+        for (const listener of listeners) {
+            try {
+                (listener as (...a: unknown[]) => void)(...args);
+            } catch (err) {
+                // error 兜底：单个订阅者异常不打断派发，统一通知 onError
+                for (const handler of this.errorHandlers) {
+                    handler(err);
+                }
             }
         }
     }

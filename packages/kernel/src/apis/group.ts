@@ -60,18 +60,34 @@ export class GroupApi {
     }
 
     /** 群详情（groupCode 为群号字符串）。
-     * getGroupDetailInfo 返回的 result 字段可能是错误码（数字）或详情对象——
-     * 两种形状都兼容，探测校准后再收紧。 */
+     * getGroupDetailInfo 返回形状：失败 result=错误码；成功详情可能直接在 result
+     * 对象里，也可能在 groupInfo/detailInfo 字段——三种形状都兼容（探测校准）。
+     * 2026-08-07 修复：成功（result=0）时不再把 {result:0,errMsg} 原样当详情返回，
+     * 而是提取详情字段；形状异常抛 UNKNOWN 而非静默返回垃圾数据。 */
     async getGroupInfo(groupCode: string): Promise<GroupDetailInfo> {
         const raw = await this.service.getGroupDetailInfo(groupCode, 0);
         const { result, errMsg } = raw as { result?: unknown; errMsg: string };
         if (typeof result === "number" && result !== 0) {
             unwrap("getGroupDetailInfo", result, errMsg);
         }
+        // 详情直接放在 result 对象里（最常见形状）
         if (result !== null && typeof result === "object") {
             return result as unknown as GroupDetailInfo;
         }
-        return raw as unknown as GroupDetailInfo;
+        // result 为 0（成功）或空：从 raw 提取详情字段
+        const detail = raw as unknown as {
+            groupInfo?: unknown;
+            detailInfo?: unknown;
+            info?: unknown;
+        };
+        const candidate = detail.groupInfo ?? detail.detailInfo ?? detail.info;
+        if (candidate !== undefined && candidate !== null && typeof candidate === "object") {
+            return candidate as unknown as GroupDetailInfo;
+        }
+        throw kernelError(
+            `getGroupDetailInfo 返回形状异常（groupCode=${groupCode}）: ${errMsg}`,
+            "UNKNOWN",
+        );
     }
 
     /** 群成员列表（forceFetch=true 强制拉取，默认缓存优先）。 */
