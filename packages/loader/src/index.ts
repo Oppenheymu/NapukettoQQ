@@ -1,17 +1,16 @@
 /**
  * @napuketto/loader 入口
  *
- * 职责：把 Napuketto 业务代码引导进 QQ 定制版 Electron 主进程。
- *  - locate-qq：定位 QQ.exe + 版本
- *  - launcher：设置环境变量 + 拉起 QQ + 注入 hook DLL
- *  - boot.cjs（runtime/）：QQ 主进程内截获 wrapper.node exports 并启动 kernel
+ * 职责：自建宿主引导（2026-08-07 唯一路线）——标准 node + stub QQNT.dll 直接
+ * dlopen wrapper.node 并启动 kernel（launchSelfHost → runtime/self-host.cjs）。
+ *  - locate-qq：定位 QQ 安装 + 版本
+ *  - launcher：装配环境变量 + PATH 前置 stub + spawn 标准 node
  *
- * 红线：本包是唯一 C++ 组件，但只做注入与引导，绝不裸调 C++ ABI。
+ * 注：V1 注入框架（bootmain/hookdll）与 V2 载具（vehicle）已归档 archive/，
+ * 本包不再编译 C++ 组件，业务层 100% 走 NAPI。
  */
 
 export type { LaunchOptions, LaunchResult } from "./launcher.js";
-export { defaultStubDir, ENV, launchQqWithLoader, launchSelfHost } from "./launcher.js";
+export { defaultStubDir, ENV, launchSelfHost } from "./launcher.js";
 export type { QqInstallInfo } from "./locate-qq.js";
 export { locateQqPath, resolveQqInstall } from "./locate-qq.js";
-export type { StageResult } from "./stage.js";
-export { cleanupStage, stageWrapper } from "./stage.js";

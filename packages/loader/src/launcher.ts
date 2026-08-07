@@ -1,13 +1,11 @@
 /**
- * launcher：拉起 QQ.exe + 注入 hook DLL + 引导 boot JS
+ * launcher：自建宿主引导（2026-08-07 唯一路线）——spawn 标准 node 跑 self-host.cjs。
  *
- * 流程（2026-08-05 事实链）：
+ * 历史（V1/路线 B 事实链，已归档 archive/）：
  *  1. wrapper.node 只能在 QQ 定制版 Electron 里注册（实测纯 Node/普通 Electron 均 self-register 失败）
  *  2. QQ 是打包应用，禁 NODE_OPTIONS（实测 stderr）
- *  3. QQ.exe 导出 napi_module_register / uv_dlopen（实测 GetProcAddress 可拿）
- *  → 方案：NapukettoBootMain.exe 启动 QQ + 注入 NapukettoWinBootHook.dll，
- *    hook DLL 通过 napi_module_register 注册自研模块，node 调用其 init 拿到 napi_env，
- *    然后执行 boot JS（hook process.dlopen 截获 wrapper.node exports）。
+ *  → 旧方案：NapukettoBootMain.exe 启动 QQ + 注入 NapukettoWinBootHook.dll（已废弃）
+ *  → 现方案：stub QQNT.dll 转发宿主符号 → 标准 node 直接 dlopen wrapper.node（自建宿主）
  */
 import { type StdioOptions, spawn } from "node:child_process";
 import { existsSync, mkdirSync } from "node:fs";
@@ -18,35 +16,20 @@ import type { QqInstallInfo } from "./locate-qq.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-/** 解析 native 产物路径（dist/native/）。 */
-function nativeDir(): string {
-    return join(__dirname, "..", "dist", "native");
-}
-
 export interface LaunchOptions {
     /** QQ 安装信息（qqPath/version/wrapperPath）。 */
     qq: QqInstallInfo;
-    /** kernel 入口（.mjs，boot.js 里 import）。 */
+    /** kernel 入口（.mjs，self-host.cjs 里 import）。 */
     kernelEntry: string;
     /** 配置目录。 */
     cfgDir: string;
-    /** adapter 入口（.mjs，boot.js 协议装配用）。 */
+    /** adapter 入口（.mjs，协议装配用）。 */
     adapterEntry?: string;
-    /** network 入口（.mjs，boot.js 协议装配用）。 */
+    /** network 入口（.mjs，协议装配用）。 */
     networkEntry?: string;
-    /** boot JS 路径（默认 dist/native/runtime/boot.cjs，2026-08-06 拆分后）。 */
-    bootJs?: string;
-    /** hook DLL 路径（默认 dist/native/NapukettoWinBootHook.dll）。 */
-    hookDll?: string;
-    /** V2 载具 DLL 路径（默认 dist/native/NapukettoVehicle.dll；仅 routeB=false 时注入）。 */
-    vehicleDll?: string;
-    /** 无头模式（阻断 UI/GPU，boot.cjs 侧实现，默认 false）。 */
-    headless?: boolean;
-    /** 路线 B（utilityProcess Worker 模式，2026-08-06；⚠️ 2026-08-07 用户拍板淘汰，显式开启才用）。 */
-    routeB?: boolean;
-    /** 自建宿主（路线 A，NAPUTO_SELF_HOST，2026-08-07 定稿唯一路线）：标准 node + stub QQNT.dll 直接引导，不拉起 QQ。 */
+    /** 自建宿主：标准 node + stub QQNT.dll 直接引导，不拉起 QQ（2026-08-07 唯一路线）。 */
     selfHost?: boolean;
-    /** stub QQNT.dll 目录（自建宿主 PATH 前置，转发 napi_*、uv_* 符号到 node.exe）。 */
+    /** stub QQNT.dll 目录（PATH 前置，转发 napi_*、uv_* 符号到 node.exe）。 */
     stubDir?: string;
     /** 自建宿主入口（默认 dist/native/runtime/self-host.cjs）。 */
     selfHostEntry?: string;
@@ -56,8 +39,6 @@ export interface LaunchOptions {
      * 查找失败警告），其余转发——原生 printf 直写 fd 的字节无法从 JS 层拦截。
      */
     stdio?: StdioOptions;
-    /** BootMain.exe 路径（默认 dist/native/NapukettoBootMain.exe，路线 B 历史遗留）。 */
-    bootMain?: string;
 }
 
 export interface LaunchResult {
@@ -67,38 +48,6 @@ export interface LaunchResult {
     bootJsPath: string;
     /** hook DLL 路径。 */
     hookDllPath: string;
-}
-
-/** 启动 QQ 并注入。
- * ⚠️ 2026-08-07 用户拍板：路线 B（拉起 QQ + 注入）淘汰，只保留自建宿主
- *（launchSelfHost）。本函数保留仅作历史回退，cli 默认不再调用。
- */
-export function launchQqWithLoader(options: LaunchOptions): LaunchResult {
-    const nativeDirPath = nativeDir();
-    const bootMainPath = options.bootMain ?? join(nativeDirPath, "NapukettoBootMain.exe");
-    const hookDllPath = options.hookDll ?? join(nativeDirPath, "NapukettoWinBootHook.dll");
-    const bootJsPath = options.bootJs ?? join(nativeDirPath, "runtime", "boot.cjs");
-
-    for (const [name, p] of [
-        ["BootMain.exe", bootMainPath],
-        ["HookDll", hookDllPath],
-        ["boot.cjs", bootJsPath],
-    ] as const) {
-        if (!existsSync(p)) {
-            throw new Error(`${name} 缺失: ${p}（先运行 pnpm --filter @napuketto/loader build）`);
-        }
-    }
-
-    const env = buildLaunchEnv(options, bootJsPath, hookDllPath);
-
-    // BootMain 负责 CreateProcess(QQ) + 注入
-    const child = spawn(bootMainPath, [], {
-        env,
-        stdio: "inherit",
-        windowsHide: false,
-    });
-
-    return { child, bootJsPath, hookDllPath };
 }
 
 /**
@@ -111,8 +60,9 @@ export function launchQqWithLoader(options: LaunchOptions): LaunchResult {
  * （wrapper.node 同目录依赖 DLL）才能 dlopen 成功。
  */
 export function launchSelfHost(options: LaunchOptions): LaunchResult {
-    const nativeDirPath = nativeDir();
-    const selfHostPath = options.selfHostEntry ?? join(nativeDirPath, "runtime", "self-host.cjs");
+    const selfHostPath =
+        options.selfHostEntry ??
+        join(__dirname, "..", "dist", "native", "runtime", "self-host.cjs");
     if (!existsSync(selfHostPath)) {
         throw new Error(
             `self-host.cjs 缺失: ${selfHostPath}（先运行 pnpm --filter @napuketto/loader build）`,
@@ -130,7 +80,7 @@ export function launchSelfHost(options: LaunchOptions): LaunchResult {
         );
     }
 
-    const env = buildLaunchEnv(options, selfHostPath, "");
+    const env = buildLaunchEnv(options, selfHostPath);
     // PATH 前置 stub 目录（stub QQNT.dll 转发）+ QQ resources\app（wrapper.node 依赖 DLL）
     const pathEntries = [stub, dirname(options.qq.wrapperPath), process.env["PATH"] ?? ""]
         .filter((p) => p !== undefined && p !== "")
@@ -156,16 +106,8 @@ export function defaultStubDir(): string {
     return join(__dirname, "..", "native-private", "stub-test-env");
 }
 
-/** 装配注入环境变量（含路线 B / 无头 / vehicle 注入策略）。 */
-function buildLaunchEnv(
-    options: LaunchOptions,
-    bootJsPath: string,
-    hookDllPath: string,
-): Record<string, string> {
-    const nativeDirPath = nativeDir();
-    const vehicleDllPath = options.vehicleDll ?? join(nativeDirPath, "NapukettoVehicle.dll");
-    const hasVehicle = existsSync(vehicleDllPath);
-
+/** 装配自建宿主环境变量。 */
+function buildLaunchEnv(options: LaunchOptions, bootJsPath: string): Record<string, string> {
     // 配置目录兜底
     const cfg = resolve(options.cfgDir);
     mkdirSync(cfg, { recursive: true });
@@ -174,39 +116,13 @@ function buildLaunchEnv(
         ...process.env,
         [ENV.QQ_PATH]: options.qq.qqPath,
         [ENV.BOOT_JS]: bootJsPath,
-        [ENV.HOOK_DLL]: hookDllPath,
         [ENV.KERNEL_ENTRY]: resolve(options.kernelEntry),
         [ENV.CFG_DIR]: cfg,
         [ENV.QQ_VERSION]: options.qq.version,
         [ENV.WRAPPER_PATH]: options.qq.wrapperPath,
     };
-    // ⚠️ vehicle（V2 载具，闭源）只在 V1 主进程引导模式注入（routeB: false）：
-    //  - 路线 B（worker）继承 QQ env → getNTWrapperSession("nt_1") 天然带 cpp_impl，
-    //    不需要 vehicle 激活 session（P2-0 实测确认）。
-    //  - vehicle 的 RVA 表针对 9.9.31 逆向（native-private），注入 9.9.33 会内存
-    //    patch 到错误地址 → QQ 0xC0000005 崩溃（2026-08-06 实测：boot JS 未执行即崩）。
-    //  - 无头由 bootmain 命令行参数（NAPUTO_QQ_ARGS）+ boot-headless.js（JS 侧）实现，
-    //    vehicle 的 C++ 阻断职责在路线 B 下不再需要。
-    if (hasVehicle && options.routeB === false) {
-        env[ENV.VEHICLE_DLL] = vehicleDllPath;
-    }
-    // 路线 B（默认开启，2026-08-06 定稿）：boot.cjs fork utilityProcess Worker →
-    // worker 内 dlopen wrapper.node + kernel 引导（QQ env 原生，P0-B 纯 Node 崩溃点消失）。
-    // ⚠️ 2026-08-07 用户拍板：路线 B 淘汰，只保留自建宿主——routeB 改为显式开启
-    //（launchQqWithLoader 调用方传 routeB: true 才设置），自建宿主不误设 ROUTE_B。
     if (options.selfHost === true) {
         env[ENV.SELF_HOST] = "1";
-    } else if (options.routeB === true) {
-        env[ENV.ROUTE_B] = "1";
-    }
-    if (options.headless === true) {
-        env[ENV.HEADLESS] = "1";
-        // 无头低内存命令行参数（bootmain CreateProcess 附加，2026-08-06）：
-        // appendSwitch 时序太晚（GPU 进程在 app ready 前已 fork），必须命令行传。
-        env[ENV.QQ_ARGS] = HEADLESS_QQ_ARGS;
-        // 深度无头：压制非关键渲染进程（screenshot/blank），释放其内存。
-        // 保留 main/login + hiddenWindow（登录/init IPC 载体）。boot-headless.js 处理。
-        env[ENV.DEEP_HEADLESS] = "1";
     }
     if (options.adapterEntry !== undefined) {
         env[ENV.ADAPTER_ENTRY] = resolve(options.adapterEntry);
@@ -217,46 +133,20 @@ function buildLaunchEnv(
     return env;
 }
 
-/** 环境变量名（hook DLL 与 boot JS 读取）。 */
+/** 环境变量名（self-host.cjs 与 kernel 引导读取）。 */
 export const ENV = {
     QQ_PATH: "NAPUTO_QQ_PATH",
     BOOT_JS: "NAPUTO_BOOT_JS",
-    HOOK_DLL: "NAPUTO_HOOK_DLL",
     KERNEL_ENTRY: "NAPUTO_KERNEL_ENTRY",
     CFG_DIR: "NAPUTO_CFG_DIR",
     QQ_VERSION: "NAPUTO_QQ_VERSION",
     WRAPPER_PATH: "NAPUTO_WRAPPER_PATH",
-    /** V2 载具 DLL 路径（bootmain 注入 NapukettoVehicle.dll）。 */
-    VEHICLE_DLL: "NAPUTO_VEHICLE_DLL",
-    /** 无头模式开关（boot.cjs 阻断 UI/GPU）。 */
-    HEADLESS: "NAPUTO_HEADLESS",
-    /** 无头低内存命令行参数（bootmain CreateProcess 附加，如 --disable-gpu）。 */
-    QQ_ARGS: "NAPUTO_QQ_ARGS",
-    /** 深度无头：压制非关键渲染进程（boot-headless.js，screenshot/blank）。 */
-    DEEP_HEADLESS: "NAPUTO_DEEP_HEADLESS",
-    /** 路线 B：utilityProcess Worker 模式（boot.cjs 分支）。 */
-    ROUTE_B: "NAPUTO_ROUTE_B",
-    /** 自建宿主（路线 A）：标准 node + stub QQNT.dll 引导（self-host.cjs 分支）。 */
+    /** 自建宿主：标准 node + stub QQNT.dll 引导（self-host.cjs 分支）。 */
     SELF_HOST: "NAPUTO_SELF_HOST",
     /** stub QQNT.dll 目录（launchSelfHost 注入，self-host.cjs 诊断用）。 */
     STUB_DIR: "NAPUTO_STUB_DIR",
-    /** adapter 包入口（boot.cjs 协议装配用）。 */
+    /** adapter 包入口（协议装配用）。 */
     ADAPTER_ENTRY: "NAPUTO_ADAPTER_ENTRY",
-    /** network 包入口（boot.cjs 协议装配用）。 */
+    /** network 包入口（协议装配用）。 */
     NETWORK_ENTRY: "NAPUTO_NETWORK_ENTRY",
 } as const;
-
-/**
- * 无头低内存命令行参数组（headless 时注入 NAPUTO_QQ_ARGS）。
- * - disable-gpu / disable-gpu-compositing：GPU 进程不启动（实测 appendSwitch 太晚无效）
- * - disable-software-rasterizer：关软件光栅化（渲染进程省 CPU/内存）
- * - disable-dev-shm-usage：不占 /dev/shm（Windows 下降低共享内存开销）
- * - js-flags=--max-old-space-size=384：限制渲染进程 JS 堆（QQ 渲染 UI 用不到大堆）
- */
-export const HEADLESS_QQ_ARGS = [
-    "--disable-gpu",
-    "--disable-gpu-compositing",
-    "--disable-software-rasterizer",
-    "--disable-dev-shm-usage",
-    "--js-flags=--max-old-space-size=384",
-].join(" ");

@@ -1,18 +1,14 @@
 "use strict";
 /**
  * boot-bootstrap.js：kernel 引导核心（import kernel → 装配 → 登录 → session 替换 → 协议装配）。
- * 由 boot.cjs 在截获 wrapper.node exports 后调用。
+ * 由 self-host.cjs（自建宿主，2026-08-07 唯一路线）在 dlopen wrapper.node 后调用。
  *
- * V2（2026-08-06）关键改动——session 来源：
- *  - V1：Proxy 拦截 `new` 捕获 QQ 自己的 session（9.9.31 主进程 JS 侧无有效 session，已废弃）。
- *  - V2：vehicle 载具 C++ 侧创建 NTWrapperSession 并注册进单例表（key="Session"）。
- *    boot 登录成功后按优先级取 session：
- *      ① kernel.getMainSession(ctx)（startup 链路 getNTWrapperSession(nt_x)——QQ 主 session，
- *        渲染进程已完成 init → getMsgService READY）
- *      ② getNTWrapperSession("Session")（vehicle 激活，对象有效但未 init → 由 kernel
- *        initAndStartSession 挂载 service）
- *      ③ get() / qqSession（V1 兼容）
- *    取到后 core.setSession 替换 → waitSessionReady 确认 getMsgService READY。
+ * session 来源（2026-08-07 实测结论；V1 Proxy 捕获与 vehicle 载具已归档 archive/）：
+ *  登录成功后按优先级取 session：
+ *    ① kernel.getMainSession(ctx)（startup 链路 getNTWrapperSession(nt_x)——QQ 主 session，
+ *      渲染进程已完成 init → getMsgService READY）
+ *    ② get() / qqSession（V1 兼容）
+ *  取到后 core.setSession 替换 → waitSessionReady 确认 getMsgService READY。
  */
 const path = require("node:path");
 const { log } = require("./boot-util.js");

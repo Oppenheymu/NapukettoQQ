@@ -54,3 +54,6 @@ packages/loader/native/magic-observer.cpp
 
 # 临时实验脚本（逆向验证 / PE 分析 / host 测试，不留仓库）
 scripts-tmp/
+
+# 归档区（废弃文件冷宫：V1 注入框架 / 路线 B 运行时 / 实验垃圾，用户打包后删除）
+archive/

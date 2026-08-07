@@ -1,7 +1,7 @@
 "use strict";
 /**
- * boot-util.js：boot 引导的公共工具（日志 + 共享状态）。
- * 由 boot.cjs 及各拆分模块 require（CJS，运行在 QQ 定制版 Electron 主进程内）。
+ * boot-util.js：引导公共工具（日志 + 共享状态）。
+ * 由 self-host.cjs 及各拆分模块 require（CJS，运行在自建宿主引导进程内）。
  */
 const fs = require("node:fs");
 const path = require("node:path");
