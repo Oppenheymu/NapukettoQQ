@@ -6,9 +6,19 @@
 
 ---
 
-## 🏆 关键决策点（2026-08-06 用户拍板：按「自建宿主可救」规划 + 允许必要逆向）
+## 🏆 关键决策点（2026-08-07 更新：自建宿主验证通过，路线 A 定案）
 
-> **这是产品路线的最优先事项，任何后续决策先看这里。**
+> **✅ 决定性试金石通过（2026-08-07，p0-login3.mjs）**：纯 Node（系统 node v24）+ 9.9.33 官方
+> wrapper.node + stub QQNT.dll 转发 + `O3MiscService` 激活事件分发 → **完整登录成功**
+> （getLoginList 7 账号 → onLoginConnected → quickLoginWithUin 成功）。**路线 A = 产品路线主攻**，
+> 路线 B（300MB 注入）降级为兜底。详见 `docs/HANDOVER-V6.md`。
+>
+> 三要素（勿重复探索）：① 加载 = **stub QQNT.dll 转发**（napi_* → node.exe，无需 IAT 改写；
+> host-helper IAT 方案事件分发不工作已弃用）② **`NodeIO3MiscService.get()` + `addO3MiscListener`**
+> 激活事件分发（否则 getLoginList 永不 resolve）③ commonPath/desktopGlobalPath = `数据根/nt_qq/global`。
+>
+> 下一步：自研 stub QQNT.dll 等价物（NapCat stub 闭源，需自研 PE Export Forwarding 空壳）→
+> session READY 验证 → 内存实测 → 自建宿主落地。
 
 **功能范围（用户拍板）**：**NapCat 全部能力（协议 + API）− WebUI − 插件系统**。
 **逆向边界（用户拍板：非 0 逆向）**：允许必要逆向——环境模拟/反风控（进程名伪装、
@@ -28,7 +38,8 @@ napi2native）能跑通**（无 QQ 进程无 UI，双进程仅 ~237MB，且能�
 **自建宿主失败的可能真相**：
 1. P0-B 用的是 9.9.31 的 QQNT.dll（**登录服务已被腾讯下线**，后来升级 9.9.33 扫码才成功）——崩溃可能是版本问题而非纯 Node 问题
 2. napi2native 创建的窗口类可能对登录有用（QQNT.dll 依赖窗口消息循环）
-3. **未验证**：9.9.33 QQNT.dll + 纯 Node + 窗口类 + 票据能否登录
+3. ~~**未验证**：9.9.33 QQNT.dll + 纯 Node + 窗口类 + 票据能否登录~~ **已验证通过（2026-08-07）**：
+   纯 Node + stub QQNT.dll 转发 + O3MiscService 激活事件分发 + 快速登录成功
 
 **验证实验（可决定性区分，P2-2 第一优先）**：
 ```
@@ -40,7 +51,7 @@ napi2native）能跑通**（无 QQ 进程无 UI，双进程仅 ~237MB，且能�
 **产品路线（按可救规划）**：
 | 路线 | 形态 | 内存 | 状态 |
 |---|---|---|---|
-| **A. 自建宿主复活** | 标准 Node + QQNT.dll + 窗口类（需绕过 napi2native 闭源，自研等价） | ~100MB | **主攻**（待验证实验） |
+| **A. 自建宿主复活** | 标准 Node + QQNT.dll + 窗口类（需绕过 napi2native 闭源，自研等价） | ~100MB | **主攻**（✅ 登录验证通过 2026-08-07） |
 | **B. 注入 utilityProcess Worker**（NapCat 同款） | 注入 QQ 主进程 → worker dlopen | 300MB+（无头后待实测） | ✅ 已全链路验证，**兜底** |
 | C. V1/V2 注入（主进程直接引导） | — | 1.01GB | ❌ 已排除 |
 
@@ -123,15 +134,19 @@ msgService 299 方法**（addKernelMsgListener/sendMsg/fetchMsgList 全在）。
 ## 🔥 下一步（按优先级）
 
 ### 0️⃣ 自建宿主验证实验（P2-2 第一优先，见顶部决策点）
-- [ ] 9.9.33 资源 + 纯 Node dlopen + Base_PowerMessageWindow + 已有票据登录
-- [ ] 成 → 自建宿主复活（百兆级），设计 napi2native 自研等价物（逆向已解禁）；败 → 路线 B 定案 + 无头内存优化
+- [x] **登录链路验证通过（2026-08-07，p0-login3.mjs）**：纯 Node + stub QQNT.dll 转发 +
+      O3MiscService 激活事件分发 + 快速登录成功（路线 A 定案）
+- [ ] **自研 stub QQNT.dll 等价物**（产品化前置）：PE Export Forwarding 空壳 DLL
+      （napi_* / qq_magic_napi_register → node.exe），替换 NapCat 闭源 stub
+- [ ] session READY 验证：登录成功后 getMsgService() 是否可用
+- [ ] 内存实测：标准 node + stub + wrapper + 登录态（对照路线 B 300MB+，目标百兆级）
 
 ### P2-1 实测（功能最后一块）
 - [ ] 实机跑 `pnpm start`（默认路线 B worker），设 `NAPUTO_SMOKE=1` 看冒烟日志（napuketto-boot.log 中 smoke: 行）验证收发
 - [ ] OneBot 装配（adapter OB11 HTTP/WS + network）端到端验证
 
 ### P2-2 无头/低内存（验收标准 3/4）
-- [ ] 候选 A：**自建宿主复活**（若验证成功，百兆级）
+- [ ] 候选 A：**自建宿主落地**（验证已通过：loader 新增自建宿主引导，替代路线 B 注入链路）
 - [ ] 候选 B：路线 B + main 替换（注入后改 QQ main 阻止 UI，NapCat 注入模式做法，内存应降）
 - [ ] 候选 C：维持路线 B + 事后抑制（当前 600-700MB ❌ 用户已测，不可接受）
 
