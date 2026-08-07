@@ -31,6 +31,18 @@ interface AdapterCoreModuleLike {
 }
 
 /**
+ * 终端 ANSI 颜色（消息日志颜色分层，2026-08-07 用户定稿）：
+ * `loader | 接收 <- 群聊` 灰色（背景噪音）/ `[会话]` 青色 / `[发送者]` 绿色 / 内容默认色。
+ * 仅 console 版嵌入；boot 文件日志用纯文本版（log），不污染文件。
+ */
+const ANSI = {
+    gray: "\u001b[90m",
+    cyan: "\u001b[36m",
+    green: "\u001b[32m",
+    reset: "\u001b[0m",
+} as const;
+
+/**
  * 登录成功后装配协议：kernel 各 Api + network 广播 + OB11 适配器。
  */
 export async function startProtocols(
@@ -75,7 +87,10 @@ export async function startProtocols(
         // 独立订阅，不干扰 adapter 的 OB11 翻译广播；解析纯函数无副作用（ADR-008）。
         // 高频业务日志：调用点直接传**纯字符串**（不传对象），pino-pretty 天然单行渲染，
         // 避免对象属性多行展开刷屏；boot 文件日志保留（引导期诊断）。
-        // 格式（2026-08-07 用户定稿）：`收到 ⬅ 群聊 [会话名(会话uin)] [发送者名(发送者uin)]： 内容`
+        // 格式（2026-08-07 用户定稿）：`loader | 接收 <- 群聊 [会话名(会话uin)] [发送者名(发送者uin)]： 内容`
+        //   - 前缀灰色（背景噪音）、会话青色、发送者绿色、内容默认色（视觉焦点）
+        //   - 内容内换行补 4 空格缩进，避免多行文本顶格破坏队形
+        //   - console 版带 ANSI（logger），boot 文件版纯文本（log），互不污染
         // onRecvMsg 回调参数为消息数组（2026-08-07 运行时实证）——遍历逐条打印。
         channel.on("Msg/onRecvMsg", (msgs) => {
             const list = Array.isArray(msgs) ? msgs : [msgs];
@@ -94,12 +109,17 @@ export async function startProtocols(
                     const peerUin = String(msg.peerUin ?? "");
                     const senderName = msg.sendNickName || msg.senderUin || "未知";
                     const senderUin = String(msg.senderUin ?? "");
-                    const content = texts === "" ? "[空消息/媒体]" : texts;
-                    const line = `收到 ⬅ ${kind} [${peerName}(${peerUin})] [${senderName}(${senderUin})]： ${content}`;
-                    log(line);
-                    logger?.info(line);
+                    // 内容内换行补缩进（4 空格），长文本/多行消息换行后不顶格
+                    const content = texts === "" ? "[空消息/媒体]" : texts.replace(/\n/g, "\n    ");
+                    const plain = `接收 <- ${kind} [${peerName}(${peerUin})] [${senderName}(${senderUin})]： ${content}`;
+                    const colored =
+                        `${ANSI.gray}loader | 接收 <- ${kind}${ANSI.reset} ` +
+                        `${ANSI.cyan}[${peerName}(${peerUin})]${ANSI.reset} ` +
+                        `${ANSI.green}[${senderName}(${senderUin})]${ANSI.reset}： ${content}`;
+                    log(plain);
+                    logger?.info(colored);
                 } catch (e) {
-                    const line2 = `收到消息（解析失败: ${errMsg(e)}）`;
+                    const line2 = `接收消息（解析失败: ${errMsg(e)}）`;
                     log(line2);
                     logger?.warn(line2);
                 }

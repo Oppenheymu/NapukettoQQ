@@ -211,10 +211,13 @@ satori:   canonical → 元素（type/attrs，img/audio 等重命名）
 
 - `logger.ts`：pino，支持 console + file + level，内置 redact（token/票据不打日志）。
   **console 渲染（2026-08-07 定稿：原生 pino-pretty，不手写格式化函数）**：
+  - `translateTime: "HH:MM:ss.l"`（2026-08-07 用户定稿）——完整日期+时区前缀近 60 字符，
+    每条日志重复占满横向视线，缩短为时分秒+毫秒；文件日志（JSON）保留完整时间戳。
   - `singleLine: false`（默认值，显式声明）——带属性的日志（如安装信息/数据目录）**多行展开**，
     key/value 由 pino-pretty 自带颜色高亮（key 紫 / 字符串青），不丢视觉；
-  - 高频业务日志（收到消息）**调用点直接传纯字符串**（`logger.info("收到 ⬅ 群聊 [晓基地(978515338)] [晓筱晨(3071303571)]： 不知道啊")`），
-    不传对象 → 天然单行渲染，防刷屏；
+  - 高频业务日志（接收消息）**调用点直接传纯字符串**，不传对象 → 天然单行渲染防刷屏；
+    消息内部颜色分层（前缀灰/会话青/发送者绿/内容默认）由 loader 用 ANSI Escape Codes
+    实现（见 loader design §3.1），boot 文件日志用纯文本版不嵌入。
   - `err`/`error` 键交给 prettifyError 展示完整堆栈；`base.name` 用 pino 保留字段
     （logger name）标识来源（cli / kernel / loader），pino-pretty 渲染为 `(name/pid)`
     元数据头，不占属性行，文件 JSON 保留 name 字段可过滤。

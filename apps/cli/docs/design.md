@@ -76,7 +76,9 @@ apps/cli/src/
 ## 3.1 日志规范（2026-08-07 统一改造）
 
 **全部 cli 输出走 pino 结构化日志**（ADR-007，复用 kernel `createLogger`，格式与 kernel
-子进程完全一致：`[时间戳 +0800] LEVEL (name/pid): 消息` + 元数据，可按行解析做自动化运维）：
+子进程完全一致：`[HH:MM:ss.l] LEVEL (name/pid): 消息` + 元数据，可按行解析做自动化运维）：
+- 前缀短格式（`translateTime: "HH:MM:ss.l"`，2026-08-07 用户定稿）：完整日期+时区近 60 字符，
+  每条日志重复占满横向视线；文件日志（JSON）保留完整时间戳。
 
 - `logger.ts` 提供模块级单例（每进程一份，ADR-015 推论）：console pretty、不写文件
   （文件日志由 kernel 装配负责：`<数据根>/logs/napuketto.log`）、`base: { name: "cli" }`
@@ -84,7 +86,8 @@ apps/cli/src/
   级别经 `NAPKETTO_LOG_LEVEL` 环境变量覆盖（缺省 info）。
 - **console 渲染（2026-08-07 定稿）**：pino-pretty 原生多行展开（`singleLine: false`），
   带属性日志（安装信息/数据目录）逐字段上色高亮；高频业务日志由 loader 在调用点直接传
-  纯字符串（`logger.info("[群聊] 晓筱晨 → 晓工坊: 测试")`）→ 天然单行防刷屏。
+  纯字符串 → 天然单行防刷屏，**消息内部颜色分层**（前缀灰/会话青/发送者绿/内容默认色，
+  ANSI Escape Codes）由 loader 实现（见 loader design §3.1）。
   ⚠️ 不手写 `messageFormat` 拼串（丢颜色 + 缩进碰撞，已回退）。
 - 启动信息带元数据：`logger.info({ qqVersion, qqPath }, ...)` / `{ dataDir }`；
   错误统一 `logger.error({ err }, ...)`（err 保留给 prettifyError 显示堆栈）。

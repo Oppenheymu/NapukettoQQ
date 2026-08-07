@@ -77,9 +77,12 @@ packages/loader/
   引导进程自己的 pino 实例（console pretty + `base: { name: "loader" }`，pino 保留字段
   name → pino-pretty 渲染 `(loader/pid)` 元数据头），与 kernel/cli 日志格式一致。
   `LoggerLike` 为 pino 方法的最小面（info/warn/error）。
-- `protocols.ts` 消息日志**调用点直接传纯字符串**（`logger.info("收到 ⬅ 群聊 [晓基地(978515338)] [晓筱晨(3071303571)]： 不知道啊")`，
-  不传对象）→ pino-pretty 天然单行渲染防刷屏；boot 文件日志
-  （`util.ts` `log()` → `<数据根>/napuketto-boot.log`）保留作引导期诊断。
+- `protocols.ts` 消息日志（2026-08-07 用户定稿）：
+  - 格式 `loader | 接收 <- 群聊 [会话名(会话uin)] [发送者名(发送者uin)]： 内容`；
+  - **ANSI 颜色分层**：前缀灰色（背景噪音）、会话青色、发送者绿色、内容默认色（焦点）——
+    仅 console 版嵌入（`logger.info`）；boot 文件日志用纯文本版（`log()`），互不污染；
+  - 内容内换行补 4 空格缩进，长文本/多行消息换行后不顶格破坏队形；
+  - 空文本显示 `[空消息/媒体]`，解析失败走 WARN 同格式。
 
 ## 4. 红线
 

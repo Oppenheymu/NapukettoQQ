@@ -58,7 +58,10 @@ export function createLogger(opts: LoggerOptions = {}): pino.Logger {
         streams.push({
             stream: pinoPretty({
                 colorize: true,
-                translateTime: "SYS:standard",
+                // 短格式时间（2026-08-07 用户定稿）：完整日期+时区前缀近 60 字符，
+                // 每条日志重复占满横向视线；缩短为时分秒+毫秒，文件日志（JSON）
+                // 仍保留完整时间戳可精确追溯。
+                translateTime: "HH:MM:ss.l",
                 // 原生多行展开（默认值，显式声明）：属性按 key/value 逐行渲染，
                 // 由 pino-pretty 自带颜色高亮（key 紫色 / 字符串青色），不手写格式化
                 // 函数对抗原生渲染——高频业务日志（如收到消息）在调用点直接传
