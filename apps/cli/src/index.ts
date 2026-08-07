@@ -212,7 +212,7 @@ function main(): void {
         .option("--qq-path <path>", "QQ 安装路径（联调覆盖）")
         .option(
             "--stub-dir <dir>",
-            "stub QQNT.dll 目录（自建宿主 PATH 前置，缺省 loader/native-private/stub-test-env，Git Submodule）",
+            "stub QQNT.dll 目录（自建宿主 PATH 前置，缺省 loader/native/stub-test-env，Git Submodule）",
         );
 
     registerConfigCommands(program);

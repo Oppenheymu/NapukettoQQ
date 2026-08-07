@@ -1,6 +1,6 @@
 # NapukettoQQ 项目现状（2026-08-07 深夜更新：🎉 session READY 突破，路线 A 可救）
 
-> **新对话开场指引**：先读本文件（现状 + 关键决策点）→ `AGENTS.md`（工程指南 + 红线）→ `docs/architecture.md`（架构书）→ **`docs/HANDOVER-V10.md`（最终交接）** → 对应包 `docs/design.md`。需要细节时再读 HANDOVER-V6~V9。需要了解路线演进背景时再读 `docs/DECISIONS.md`。
+> **新对话开场指引**：先读本文件（现状 + 关键决策点）→ `AGENTS.md`（工程指南 + 红线）→ `docs/architecture.md`（架构书）→ **`packages/loader/native/docs/HANDOVER-V11.md`（最终交接，闭源子仓库）** → 对应包 `docs/design.md`。需要细节时再读 HANDOVER-V6~V10（子仓库 docs/）。需要了解路线演进背景时再读 `docs/DECISIONS.md`。
 >
 > **git 状态**：HEAD = `e08ae8c`（feat(config)：全局配置文件移到项目根 napuketto.toml），工作区干净。`docs/` 已纳入 git 跟踪。
 
@@ -22,7 +22,7 @@
 >
 > **✅ stub QQNT.dll 等价物完成（2026-08-07 晚，HANDOVER-V7/V8）**：
 > llvm-mingw 编译 **69KB PE 转发 stub**（100 条：99 静态转发 + PerfTrace 空实现），替换 NapCat
-> 闭源 stub（481KB）后完整登录成功——**产品化前置解除**（正式版 stub-qqnt.cpp 已在 native-private）。
+> 闭源 stub（481KB）后完整登录成功——**产品化前置解除**（正式版 stub-qqnt.cpp 已在 native 子仓库）。
 >
 > 三要素（勿重复探索）：① 加载 = **stub QQNT.dll 转发**（napi_* → node.exe，无需 IAT 改写；
 > host-helper IAT 方案事件分发不工作已弃用）② **`NodeIO3MiscService.get()` + `addO3MiscListener`**
@@ -127,7 +127,7 @@ msgService 299 方法**（addKernelMsgListener/sendMsg/fetchMsgList 全在）。
 - **network**：完整（HttpServer/HttpClient/WsServer/WsClient/EventBroadcaster）
 - **media**：完整（image/audio(silk)/video(ffmpeg)）
 - **loader**：注入引导全链路（launcher/locate-qq/boot.cjs 6 模块/native bootmain+hookdll）+ V2 载具
-  （native-private/vehicle.cpp，闭源）+ 路线 B worker 引导
+  （native/vehicle.cpp，闭源）+ 路线 B worker 引导
 - **cli**：commander（-q/-d/--qq-path）+ 一键启动（读全局配置 accounts）+ config 子命令
   （init/list/apply，napuketto.toml 单一 TOML）+ supervisor 多账号编排
 - **配置路径修订（2026-08-07）**：全局配置文件移到项目根 `<项目根>/napuketto.toml`（用户拍板：
@@ -199,7 +199,7 @@ msgService 299 方法**（addKernelMsgListener/sendMsg/fetchMsgList 全在）。
    窗口类）、数据包层 hook、无头阻断均可逆向；业务层**优先** NAPI（优先级非禁令），
    NAPI 覆盖不了的能力用 C++ 逆向补足；技术手段不设限但**仅限 loader 载具层**
 3. **零磁盘篡改**：内存 Patch 只在运行期 RAM；严禁改 QQ 安装目录二进制
-4. **逆向产物不进公共仓库**：RVA 表 / Offset 仅存私有（`native-private/` 只分发编译+混淆二进制）
+4. **逆向产物不进公共仓库**：RVA 表 / Offset 仅存私有（`native/` 只分发编译+混淆二进制）
 
 ---
 

@@ -49,7 +49,7 @@ apps/cli             kernel + adapter + loader
 | **network** | 协议无关的传输原语（HTTP/WS + 泛型广播） | 禁止 import 任何协议包；事件类型泛型化 |
 | **adapter**（协议容器） | 协议语义：事件模型、action 注册表、数据翻译、ID 映射 | 只认识 kernel 的 API/事件/缓存，不认识原生 |
 | **media** | 媒体编解码与识别 | 只被协议层依赖；kernel 不背媒体依赖 |
-| **loader** | 注入引导 + Native Bypass 载具（C++） | 逆向手段仅限此层；载具闭源（native-private） |
+| **loader** | 注入引导 + Native Bypass 载具（C++） | 逆向手段仅限此层；载具闭源（native） |
 | **cli** | 启动编排、登录渲染、配置命令 | 不写业务逻辑，只装配 |
 
 ## 4. 技术路线（V2 定稿：Native Bypass 混合模式 + 自建宿主修正）
@@ -99,7 +99,7 @@ pnpm start（apps/cli）——2026-08-07 起 cli 默认走自建宿主（4.3）�
 
 ```
 pnpm start（apps/cli）→ launchSelfHost → 标准 Node 自建宿主进程（无 QQ 进程，~100MB 目标）
-  ├── stub QQNT.dll 转发（napi_* → node.exe；自研 llvm-mingw 69KB PE 转发 stub，native-private 闭源）
+  ├── stub QQNT.dll 转发（napi_* → node.exe；自研 llvm-mingw 69KB PE 转发 stub，native 闭源）
   ├── process.dlopen(wrapper.node) → exports 98 个（标准 node 可完整加载，无需 IAT 改写）
   ├── NodeIO3MiscService.get() + addO3MiscListener 激活事件分发（否则 getLoginList 永不 resolve）
   ├── commonPath/desktopGlobalPath = 数据根/nt_qq/global（三要素之三）
@@ -204,7 +204,7 @@ wrapper.node 原生回调
 2. **业务层优先 NAPI（优先级而非禁令）**：收发消息/事件监听/数据解析优先走官方 NAPI 导出接口
    （稳定、简单、可维护）；仅当 NAPI 无法覆盖的能力（数据包层、环境模拟）才用 C++ 逆向补足。
 3. **零磁盘篡改**：内存 Patch 仅在运行期 RAM 生效，严禁修改/覆盖 QQ 安装目录任何二进制。
-4. **逆向产物管理**：Ghidra 分析（RVA 表/Offset）不提交公共仓库，仅存私有；`native-private/` 只分发
+4. **逆向产物管理**：Ghidra 分析（RVA 表/Offset）不提交公共仓库，仅存私有；`native/` 只分发
    编译+混淆二进制。
 5. **零引入 NapCat 代码**（GPL-2.0 / Limited Redistribution License 与 MIT 不兼容；napi2native 闭源）。
 
@@ -214,7 +214,7 @@ wrapper.node 原生回调
 
 - Ghidra 12.1.2（`C:\Dev\Tools\ghidra_12.1.2_PUBLIC\`）+ GhidraMCP 1.4（`C:\Dev\Tools\GhidraMCP-1-4\`）
 - 项目：`C:\Dev\Tools\ghidra-project\NapukettoWrapper.gpr`（wrapper.node 已全量分析）
-- 用法见 `docs/ghidra-mcp-guide.md`（保留）
+- 用法见子仓库 `packages/loader/native/docs/ghidra-mcp-guide.md`（2026-08-07 移入闭源子仓库）
 - **⚠️ 2026-08-07 更新**：自建宿主（唯一路线）已全链路实测通过，**不需要**激活 session cpp_impl；
   窗口类（Base_PowerMessageWindow）已验证非必要。Ghidra 现仅用于远期数据包层（packet 后端）与
   「仅限 loader 载具层」的逆向手段研究。
@@ -222,11 +222,11 @@ wrapper.node 原生回调
 ### 9.2 C++ 载具构建
 
 - LLVM-MinGW g++（`scripts/build-runtime.mjs`，PATH 前置 g++ 目录防 PowerShell PATH 失效）
-- 载具源码：`packages/loader/native/`（公共注入框架）+ `packages/loader/native-private/`（闭源）
+- 载具源码：`packages/loader/native/`（公共注入框架）+ `packages/loader/native/`（闭源子仓库）
 
 ### 9.3 环境事实
 
 - QQ 9.9.33-51802：`C:\Dev\QQBot-Dev\QQNT\`（wrapper.node 114MB，exports 98 个；9.9.27/9.9.31 登录服务已下线勿用）
 - QQ 登录数据：`C:\Users\xiaoxiaochen\Documents\Tencent Files\`（含 7 账号；快速登录用 **3567141148**）
-- 自建宿主 stub：`packages/loader/native-private/stub-test-env/`（默认 stub 目录，llvm-mingw 编译）
+- 自建宿主 stub：`packages/loader/native/build/stub-test-env/`（默认 stub 目录，llvm-mingw 编译）
 - NapCat 参考部署包：`C:\Dev\NapCat.Shell.Windows.Node1`（仅参考，已不依赖）

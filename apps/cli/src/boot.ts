@@ -27,7 +27,7 @@ export interface BootOptions {
     dataDir?: string;
     /** 覆盖 QQ 安装路径（联调）。 */
     qqPath?: string;
-    /** stub QQNT.dll 目录（缺省 loader 包内闭源 submodule native-private/stub-test-env）。 */
+    /** stub QQNT.dll 目录（缺省 loader 包内闭源 submodule native/stub-test-env）。 */
     stubDir?: string;
 }
 

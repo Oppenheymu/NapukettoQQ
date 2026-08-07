@@ -178,7 +178,7 @@ qq_magic ×1 + v8/node mangled ×2；node.exe 缺失仅 2 个（`qq_magic_napi_r
 `node.exe.napi_module_register`、`?IsEnvironmentStopping@node@@` → stub 内部返回 false）。
 替换 NapCat stub 后登录链路验证通过。
 
-**决策**：不再依赖 NapCat 部署包；正式版 `stub-qqnt.cpp` 放 native-private（闭源）。
+**决策**：不再依赖 NapCat 部署包；正式版 `stub-qqnt.cpp` 放 native（闭源子仓库）。
 
 ### V8：正式版 stub + 自建宿主「硬墙」误判（2026-08-07 晚）
 
@@ -230,4 +230,4 @@ initializeSession 顺序）。此前失败原因：① 先 `ssw.start()` 再 ini
 | 架构分层 / 红线 / 技术路线 | `docs/architecture.md` |
 | 各包模块设计 / 实现记录 | 对应包 `docs/design.md` |
 | P0/P1/P2 实验细节（历史） | git 历史归档提交 `d9a790e` 前的 HANDOVER-V2~V5 |
-| GhidraMCP 工具用法 | `docs/ghidra-mcp-guide.md`（保留） |
+| GhidraMCP 工具用法 | `packages/loader/native/docs/ghidra-mcp-guide.md`（闭源子仓库，2026-08-07 移入） |

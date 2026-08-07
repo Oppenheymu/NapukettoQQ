@@ -47,9 +47,9 @@ packages/loader/.smoke-cfg/
 
 # V2 载具（闭源）：逆向腾讯 QQ 的产物（RVA/Offset 表）绝不进公共仓库
 # 载具 DLL 由私有构建流程编译（源码本地保留或私有仓库），公共仓库只留框架。
-# 2026-08-07 起改为 Git Submodule（Oppenheymu/NapukettoQQ-Native，private），
+# 2026-08-07 起改为 Git Submodule（Oppenheymu/NapukettoQQ-Native，private，路径 packages/loader/native），
 # 本目录由子仓库指针管理，clone 主仓库后需 git submodule update --init --recursive。
-# packages/loader/native-private/
+# packages/loader/native/
 
 # 临时实验脚本（逆向验证 / PE 分析 / host 测试，不留仓库）
 scripts-tmp/

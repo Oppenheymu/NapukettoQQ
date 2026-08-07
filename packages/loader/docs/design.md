@@ -14,7 +14,7 @@
    报 `Module did not self-register`；QQ 定制 Electron 的 preload 才能注册。
 2. **QQNT.dll 是可独立加载的宿主桥接层**：导出全套 v8/node/napi 符号 + `qq_magic_napi_register`
    （wrapper.node 的常规导入，加载时硬依赖）。
-3. **stub QQNT.dll 等价物**（自研，native-private）：99 静态转发（napi_* → node.exe）+ PerfTrace 空实现，
+3. **stub QQNT.dll 等价物**（自研，native 子仓库）：99 静态转发（napi_* → node.exe）+ PerfTrace 空实现，
    PATH 前置后标准 node 可 `process.dlopen(wrapper.node)`（98 exports）。
 4. 自建宿主三要素：① stub QQNT.dll 转发（PATH 前置）② `NodeIO3MiscService.get()` + `addO3MiscListener`
    激活事件分发（否则 getLoginList 永不 resolve）③ commonPath/desktopGlobalPath = 数据根/nt_qq/global。
@@ -48,11 +48,12 @@ packages/loader/
 │       ├── util.ts         # 日志 + 共享状态（SharedState）
 │       ├── env.ts          # 引导环境变量访问层（对象字面量快照）
 │       └── types.ts        # kernel 最小交互面（KernelLike 等，自研描述）
-├── native-private/         # 闭源（Git Submodule，private：Oppenheymu/NapukettoQQ-Native）：stub 源码 / 验证脚本 / 工具 / 产物，见其 README
+├── native/                 # 闭源（Git Submodule，private：Oppenheymu/NapukettoQQ-Native）：stub 源码 / 验证脚本 / 工具 / 产物 / 逆向文档，见其 README
 │   ├── stub/               # stub-qqnt.cpp/.def（唯一长期维护源码）
-│   ├── verify/             # p0-*.mjs（当前有效验证脚本）
-│   ├── tools/              # compare-symbols.mjs / cleanup-native-private.ps1
+│   ├── verify/             # kernel-flow.mjs（回归验证）
+│   ├── tools/              # compare-symbols.mjs（QQ 升级后重跑）
 │   ├── build/              # QQNT-stub-full.dll + stub-test-env/（launcher 默认引用）
+│   ├── docs/               # 逆向文档（ghidra-mcp-guide / HANDOVER-V11，2026-08-07 移入）
 │   └── _archive/           # 历史实验
 ```
 
@@ -73,7 +74,7 @@ packages/loader/
 - **绝对禁止**：koffi、vtable 槽位、手算内存偏移、memcpy 结构体、绕过 NAPI 的 thiscall（业务层）。
 - **绝对禁止**：修改 QQ 安装目录（package.json / asar / 任何原生文件）——零磁盘篡改，升级/卸载零残留。
 - **闭源红线**：逆向腾讯 QQ 的产物（RVA/Offset 表）绝不进公共仓库（源码/注释/文档都不行）；
-  载具源码 `native-private/` 由 `.gitignore` 排除，本地保留/私有仓库，公共仓库只留框架。
+  载具源码 `native/` 为 Git Submodule（private 仓库），公共仓库只留框架。
 - 所有逆向（Ghidra / probe）仅用于理解机制，产物不进入正式代码。
 
 ## 5. 历史演进（已归档 archive/，仅供追溯）
@@ -154,7 +155,7 @@ cli --self-host（或直接 node self-host.cjs）
 ### 9.4 运行（验证命令，闭源 stub 环境）
 
 ```powershell
-cd packages\loader\native-private
+cd packages\loader\native
 $env:PATH = "stub-test-env;QQ\resources\app;" + $env:PATH
 $env:NAPUTO_WRAPPER_PATH = "<QQ 版本目录>\resources\app\wrapper.node"
 $env:NAPUTO_QQ_VERSION = "9.9.33-51802"

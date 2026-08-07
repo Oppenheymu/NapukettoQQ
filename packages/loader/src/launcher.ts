@@ -69,7 +69,7 @@ export function launchSelfHost(options: LaunchOptions): LaunchResult {
     }
 
     // stub QQNT.dll 校验（自建宿主必需：PATH 前置 stub 转发 napi_* 到 node.exe，
-    // 否则 wrapper.node dlopen 失败）。默认 loader 包内闭源 submodule native-private/stub-test-env，
+    // 否则 wrapper.node dlopen 失败）。默认 loader 包内闭源 submodule native/stub-test-env，
     // 缺失时提示 --stub-dir / NAPUTO_STUB_DIR 指定。
     const stub = options.stubDir ?? defaultStubDir();
     if (!existsSync(join(stub, "QQNT.dll"))) {
@@ -98,11 +98,11 @@ export function launchSelfHost(options: LaunchOptions): LaunchResult {
 }
 
 /**
- * 默认 stub QQNT.dll 目录（loader 包内闭源 native-private/build/stub-test-env，开发机默认）。
- * src 与 native-private 同层，构建后 dist 与 native-private 同层——`../native-private` 恒正确。
+ * 默认 stub QQNT.dll 目录（loader 包内闭源 native/build/stub-test-env，开发机默认）。
+ * src 与 native 同层，构建后 dist 与 native 同层——`../native` 恒正确。
  */
 export function defaultStubDir(): string {
-    return join(__dirname, "..", "native-private", "build", "stub-test-env");
+    return join(__dirname, "..", "native", "build", "stub-test-env");
 }
 
 /** 装配自建宿主环境变量。 */
