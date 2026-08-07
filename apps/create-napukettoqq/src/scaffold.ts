@@ -165,11 +165,12 @@ export async function scaffoldProject(dirName: string, overwrite = false): Promi
         dataDir: JSON.stringify(path.join(homedir(), ".napuketto")),
     };
     // 用户项目是「运行壳」：不开发代码，只需 package.json（依赖 + start）+ napuketto.toml（配置）
+    // 模板文件为 templates/<name>.tmpl（.tmpl 后缀避免 TOML/JSON 语言服务把占位符当非法语法）
     const files = ["package.json", "napuketto.toml"];
 
     await mkdir(dir, { recursive: true });
     for (const file of files) {
-        const rendered = renderTemplate(await readTemplate(file), vars);
+        const rendered = renderTemplate(await readTemplate(`${file}.tmpl`), vars);
         await writeFile(path.join(dir, file), rendered, "utf8");
     }
 

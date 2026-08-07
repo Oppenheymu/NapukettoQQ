@@ -76,8 +76,7 @@ function defaultCliConfig(dataRoot: string): CliConfig {
 
 /**
  * 配置模板（TOML 注释版）。
- * `config init` 与首次启动（loadCliConfig）缺失时生成；与项目根 napuketto.toml.example
- * 内容一致（双维护，模板极少变更）。dataDir 按当前数据根插值。
+ * `config init` 与首次启动（loadCliConfig）缺失时生成。dataDir 按当前数据根插值。
  */
 function configTemplate(dataRoot: string): string {
     // JSON.stringify 转义反斜杠 → TOML 基本字符串合法写法（"C:\\Users\\..."）
@@ -85,8 +84,7 @@ function configTemplate(dataRoot: string): string {
     return `# ============================================================
 # NapukettoQQ 全局配置文件
 # ============================================================
-# 本文件由 \`napuketto config init\` 生成（或首次启动自动生成）；
-# 也可参考项目根 napuketto.toml.example（内容一致）手动创建。
+# 本文件由 \`napuketto config init\` 生成（或首次启动自动生成）。
 #
 # 数据（账号目录/日志/缓存/QQ 数据）不在此文件，按数据根组织：
 #   优先级：--data-dir <dir> > NAPKETTO_DATA 环境变量 > ~/.napuketto

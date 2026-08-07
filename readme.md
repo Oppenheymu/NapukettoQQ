@@ -94,7 +94,7 @@ pnpm start
 
 ### 3. 配置
 
-配置为项目根单一 TOML：`napuketto.toml`（首次启动自动生成，示例见 `napuketto.toml.example`）：
+配置为项目根单一 TOML：`napuketto.toml`（首次启动自动生成）：
 
 ```toml
 # 数据根目录：账号/日志/缓存/QQ 数据存放位置
