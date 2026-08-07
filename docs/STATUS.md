@@ -1,4 +1,4 @@
-# NapukettoQQ 项目现状（2026-08-06 文档整理版）
+# NapukettoQQ 项目现状（2026-08-07 深夜更新：session READY 硬墙验证）
 
 > **新对话开场指引**：先读本文件（现状 + 关键决策点）→ `AGENTS.md`（工程指南 + 红线）→ `docs/architecture.md`（架构书）→ 对应包 `docs/design.md`。需要了解路线演进背景时再读 `docs/DECISIONS.md`。
 >
@@ -6,22 +6,30 @@
 
 ---
 
-## 🏆 关键决策点（2026-08-07 更新：自建宿主验证通过 + 等价物完成，路线 A 定案）
+## 🏆 关键决策点（2026-08-07 深夜更新：**自建宿主 session READY = 硬墙**，路线 A 降级）
 
+> **⚠️ 决定性结论（2026-08-07 深夜，HANDOVER-V8）**：自建宿主（标准 node + stub QQNT.dll）
+> **能登录但 session 业务 service 无法激活**——登录后 `getMsgService()/getGroupService()/
+> getBuddyService()/getTicketService()` **全部 null**（基础 service `getNodeMiscService`/
+> `getMSFService` 有效）。尝试窗口类、进程名伪装、票据 updateTicket、C++ RVA 激活链
+> （复用 vehicle.cpp）**全部无效**；C++ 激活链 `FUN_180025d63`（创建 NTWrapperSession）在
+> 纯 Node **挂起**。**cpp_impl 激活依赖 QQ 主进程/渲染进程协作，自建宿主缺协作 = 硬墙。**
+> **路线 A 降级**，路线 B（注入 worker，已验证 session READY 1s + 冒烟收发）回到主攻位置。
+>
 > **✅ 自建宿主验证通过（2026-08-07，p0-login3.mjs）**：纯 Node（系统 node v24）+ 9.9.33 官方
 > wrapper.node + stub QQNT.dll 转发 + `O3MiscService` 激活事件分发 → **完整登录成功**
-> （getLoginList 7 账号 → onLoginConnected → quickLoginWithUin 成功）。**路线 A = 产品路线主攻**，
-> 路线 B（300MB 注入）降级为兜底。详见 `docs/HANDOVER-V6.md`。
+> （getLoginList 7 账号 → onLoginConnected → quickLoginWithUin 成功）。
 >
-> **✅ stub QQNT.dll 等价物完成（2026-08-07 晚，HANDOVER-V7）**：llvm-mingw 编译 **70KB PE 转发
-> stub**（99 符号：97 转发 node.exe + qq_magic → napi_module_register + IsEnvironmentStopping 内部
-> 实现），替换 NapCat 闭源 stub（481KB）后完整登录成功——**产品化前置解除**。
+> **✅ stub QQNT.dll 等价物完成（2026-08-07 晚，HANDOVER-V7）+ 正式版整理完成（深夜）**：
+> llvm-mingw 编译 **69KB PE 转发 stub**（100 条：99 静态转发 + PerfTrace 空实现），替换 NapCat
+> 闭源 stub（481KB）后完整登录成功——**产品化前置解除**（正式版 stub-qqnt.cpp 已在 native-private）。
 >
 > 三要素（勿重复探索）：① 加载 = **stub QQNT.dll 转发**（napi_* → node.exe，无需 IAT 改写；
 > host-helper IAT 方案事件分发不工作已弃用）② **`NodeIO3MiscService.get()` + `addO3MiscListener`**
 > 激活事件分发（否则 getLoginList 永不 resolve）③ commonPath/desktopGlobalPath = `数据根/nt_qq/global`。
 >
-> 下一步：session READY 验证 → 内存实测 → 自建宿主落地（loader 新增自建宿主引导）。
+> 下一步：路线 B 主攻评估（内存实测 HEADLESS 后百兆级？）→ 自建宿主 session READY 深层研究
+> （FUN_180025d63 挂起原因：依赖窗口消息/线程状态/全局单例初始化）。
 > 账号注意：快速登录 3054108135 会挂起（账号风控），测试用 **3567141148**（已验证成功）。
 
 **功能范围（用户拍板）**：**NapCat 全部能力（协议 + API）− WebUI − 插件系统**。
@@ -51,12 +59,15 @@ napi2native）能跑通**（无 QQ 进程无 UI，双进程仅 ~237MB，且能�
 成功 → 自建宿主可救（百兆级可达，产品路线 = 自建宿主优先）
 失败 → 才是 env 硬墙，路线 B（300MB 注入）为产品路线
 ```
+> **✅ 已验证（2026-08-07 深夜，HANDOVER-V8）**：登录 ✅（快速登录成功）但 **session 业务
+> service 全 null（getMsgService 等）**——窗口类已建、票据 getMachineGuid 可用、C++ RVA 激活链
+> 全部尝试无效（FUN_180025d63 挂起）。**结论 = env 硬墙确认**，见下。
 
-**产品路线（按可救规划）**：
+**产品路线（按可救规划，2026-08-07 深夜更新）**：
 | 路线 | 形态 | 内存 | 状态 |
 |---|---|---|---|
-| **A. 自建宿主复活** | 标准 Node + QQNT.dll + 窗口类（需绕过 napi2native 闭源，自研等价） | ~100MB | **主攻**（✅ 登录验证通过 2026-08-07） |
-| **B. 注入 utilityProcess Worker**（NapCat 同款） | 注入 QQ 主进程 → worker dlopen | 300MB+（无头后待实测） | ✅ 已全链路验证，**兜底** |
+| **A. 自建宿主复活** | 标准 Node + QQNT.dll + 窗口类（需绕过 napi2native 闭源，自研等价） | ~100MB | ⚠️ **session READY 硬墙**（登录 ✅ 业务 service ❌） |
+| **B. 注入 utilityProcess Worker**（NapCat 同款） | 注入 QQ 主进程 → worker dlopen | 300MB+（无头后待实测） | ✅ 已全链路验证，**回主攻** |
 | C. V1/V2 注入（主进程直接引导） | — | 1.01GB | ❌ 已排除 |
 
 ---
