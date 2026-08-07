@@ -13,6 +13,7 @@ import process from "node:process";
 import { resolveDataRoot } from "@napuketto/kernel";
 import type { CliAccountConfig, CliConfig } from "./config-cmds.js";
 import { loadCliConfig } from "./config-cmds.js";
+import { logger } from "./logger.js";
 
 /** 默认重启延迟（毫秒）。 */
 const DEFAULT_RESTART_DELAY_MS = 2000;
@@ -61,7 +62,7 @@ function startAccount(ctx: SupervisorCtx, acct: CliAccountConfig): void {
     if (ctx.isStopping()) {
         return;
     }
-    process.stdout.write(`[napuketto] 启动账号 ${acct.qq}...\n`);
+    logger.info({ qq: acct.qq }, "启动账号");
     const args = [ctx.entry, "-q", acct.qq, "--data-dir", ctx.dataRoot];
     if (ctx.stubDir !== undefined) {
         args.push("--stub-dir", ctx.stubDir);
@@ -72,9 +73,7 @@ function startAccount(ctx: SupervisorCtx, acct: CliAccountConfig): void {
     ctx.children.set(acct.qq, child);
     child.on("exit", (code, signal) => {
         ctx.children.delete(acct.qq);
-        process.stdout.write(
-            `[napuketto] 账号 ${acct.qq} 退出 code=${code} signal=${signal ?? "none"}\n`,
-        );
+        logger.info({ qq: acct.qq, code, signal: signal ?? "none" }, "账号退出");
         if (!ctx.isStopping() && ctx.autoRestart) {
             // 守护：延迟重启（关闭信号到达前无限重试，由 SIGINT/SIGTERM 终止）
             setTimeout(() => {
@@ -84,14 +83,14 @@ function startAccount(ctx: SupervisorCtx, acct: CliAccountConfig): void {
     });
     child.on("error", (err) => {
         const { message } = err;
-        process.stderr.write(`[napuketto] 账号 ${acct.qq} 启动失败: ${message}\n`);
+        logger.error({ qq: acct.qq, err }, `账号启动失败: ${message}`);
         ctx.children.delete(acct.qq);
     });
 }
 
 /** 停止全部子进程，全部退出后父进程退出。 */
 function stopAll(ctx: SupervisorCtx): void {
-    process.stdout.write("[napuketto] 收到退出信号，停止全部账号...\n");
+    logger.info("收到退出信号，停止全部账号");
     for (const child of ctx.children.values()) {
         child.kill();
     }
@@ -109,9 +108,7 @@ export async function runSupervisor(opts: SupervisorOptions = {}): Promise<void>
     const config = await loadCliConfig(dataRoot);
     const accounts = resolveAccounts(opts, config);
     if (accounts.length === 0) {
-        process.stdout.write(
-            "[napuketto] supervisor：没有启用的账号（主配置 accounts 为空或全部禁用）\n",
-        );
+        logger.warn("supervisor：没有启用的账号（主配置 accounts 为空或全部禁用）");
         return;
     }
     const restartDelayMs = resolveRestartDelay(opts, config);

@@ -38,6 +38,9 @@ export async function startProtocols(
     ctx: CoreContextLike,
     loginResult: LoginResultLike,
 ): Promise<void> {
+    // 引导进程日志（ADR-007 统一规范：console pretty，格式与 kernel 一致；
+    // service=loader 标注来源；文件日志由 kernel 装配负责）
+    const logger = kernel.createLogger?.({ console: true, base: { service: "loader" } });
     const adapterEntry = env.NAPUTO_ADAPTER_ENTRY;
     const networkEntry = env.NAPUTO_NETWORK_ENTRY;
     if (!adapterEntry || !networkEntry) {
@@ -69,6 +72,7 @@ export async function startProtocols(
         bridge.register();
         // 控制台消息日志（NapCat 同款：收到消息打印到控制台）。
         // 独立订阅，不干扰 adapter 的 OB11 翻译广播；解析纯函数无副作用（ADR-008）。
+        // 走结构化日志（时间戳 + 级别 + pid + 元数据），boot 文件日志保留。
         // onRecvMsg 回调参数为消息数组（2026-08-07 运行时实证）——遍历逐条打印。
         channel.on("Msg/onRecvMsg", (msgs) => {
             const list = Array.isArray(msgs) ? msgs : [msgs];
@@ -86,12 +90,15 @@ export async function startProtocols(
                     const sender = msg.sendNickName || msg.senderUin || "?";
                     const peer = msg.peerName || msg.peerUin || "?";
                     const line = `📩 收到${kind}消息 来自=${sender} 会话=${peer}（${msg.peerUin ?? ""}）: ${texts}`;
-                    console.log(`[napuketto] ${line}`);
                     log(line);
+                    logger?.info(
+                        { kind, sender, peer, peerUin: msg.peerUin ?? "", text: texts },
+                        "收到消息",
+                    );
                 } catch (e) {
                     const line2 = `收到消息（解析失败: ${errMsg(e)}）`;
-                    console.log(`[napuketto] 📩 ${line2}`);
                     log(line2);
+                    logger?.warn({ err: errMsg(e) }, "收到消息（解析失败）");
                 }
             }
         });

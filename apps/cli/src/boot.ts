@@ -18,6 +18,7 @@ import {
     type QqInstallInfo,
     resolveQqInstall,
 } from "@napuketto/loader";
+import { logger } from "./logger.js";
 
 /** 单账号启动选项。 */
 export interface BootOptions {
@@ -43,9 +44,11 @@ async function packageEntry(pkg: string): Promise<string> {
  *  - `loadSymbolFromShell` / `getNodeGetJsListApi` / `get symbol failed`：
  *    标准 node 无腾讯私有符号（NodeContextifyContextMetrics 等），GetProcAddress
  *    失败的加载警告（无害，纯噪音）
+ *  - `loaded [mmkv.*] with N key-values`：MMKV 初始化完成行（野生日志，风格三，
+ *    无统一前缀/时间戳，过滤）
  */
 const NATIVE_NOISE =
-    /<MMKV|<MemoryFile_Win32|<MMKV_IO|loadSymbolFromShell|getNodeGetJsListApi|get symbol failed/;
+    /<MMKV|<MemoryFile_Win32|<MMKV_IO|loadSymbolFromShell|getNodeGetJsListApi|get symbol failed|loaded \[mmkv/i;
 
 /**
  * 逐行转发子进程输出到父进程，过滤原生噪音。
@@ -75,11 +78,10 @@ export async function runSingleAccount(opts: BootOptions = {}): Promise<void> {
 
     const stubDir = opts.stubDir ?? process.env["NAPUTO_STUB_DIR"] ?? defaultStubDir();
 
-    process.stdout.write(
-        `[napuketto] QQ: ${qq.version} (${qq.qqPath})\n` +
-            `[napuketto] 数据目录: ${cfgDir}\n` +
-            `[napuketto] 自建宿主引导（标准 node + stub QQNT.dll）...\n`,
-    );
+    // 启动信息走结构化日志（时间戳 + 级别 + pid + 元数据，与 kernel 子进程格式一致）
+    logger.info({ qqVersion: qq.version, qqPath: qq.qqPath }, "QQ 安装信息");
+    logger.info({ dataDir: cfgDir }, "数据目录");
+    logger.info("自建宿主引导（标准 node + stub QQNT.dll）");
 
     // 唯一启动路径：自建宿主（2026-08-07 用户拍板，路线 B 淘汰）
     // stdio 接管 stdout/stderr：过滤 MMKV / 符号查找失败等原生噪音，其余转发
@@ -109,11 +111,11 @@ export async function runSingleAccount(opts: BootOptions = {}): Promise<void> {
     // 常驻：等待自建宿主进程退出
     await new Promise<void>((resolve) => {
         child.on("exit", (code) => {
-            process.stdout.write(`[napuketto] 自建宿主进程退出 code=${code}\n`);
+            logger.info({ code }, "自建宿主进程退出");
             resolve();
         });
         child.on("error", (err) => {
-            process.stderr.write(`[napuketto] 启动失败: ${err.message}\n`);
+            logger.error({ err }, "自建宿主进程启动失败");
             resolve();
         });
     });

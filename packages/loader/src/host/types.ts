@@ -17,6 +17,13 @@ export interface BridgeLike {
     unregister(): void;
 }
 
+/** pino logger 最小面（kernel `createLogger` 返回值，自研描述，运行时实证）。 */
+export interface LoggerLike {
+    info(obj: unknown, msg?: string): void;
+    warn(obj: unknown, msg?: string): void;
+    error(obj: unknown, msg?: string): void;
+}
+
 /** 群 API 最小面（uin↔uid 双向映射）。 */
 export interface GroupApiLike {
     uidToUin(uins: string[]): Promise<Map<string, string>>;
@@ -129,6 +136,12 @@ export interface KernelLike {
     ChatType: Record<"GROUP" | "C2C", number>;
     toCanonicalElements(msg: unknown): CanonicalElementLike[];
     parseToml(raw: string): Record<string, unknown>;
+    // 日志（ADR-007）：kernel createLogger，loader 引导进程自建实例（console only）
+    createLogger?: (opts: {
+        level?: string;
+        console?: boolean;
+        base?: Record<string, unknown>;
+    }) => LoggerLike;
     NTEventChannel: new (name: string) => EventChannelLike;
     MsgBridge: new (session: unknown, channel: EventChannelLike) => BridgeLike;
     MsgApi: new (session: unknown) => MsgApiLike;

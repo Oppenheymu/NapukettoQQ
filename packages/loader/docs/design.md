@@ -69,6 +69,18 @@ packages/loader/
 - `kernel` **不依赖 loader**：kernel 只暴露「给定 NAPI exports 即可初始化」的纯函数（`createWrapper(exports)`）。
 - `apps/cli` 依赖两者：编排「定位 QQ → launchSelfHost → 等待登录 → 常驻」。
 
+## 3.1 引导进程日志（2026-08-07 统一规范）
+
+- **编译期不依赖 kernel 包**（host 是 CJS bundle，kernel 是 ESM-only，静态 import 会失败）——
+  kernel 交互一律走 `KernelLike` 最小接口（`types.ts`，自研描述，运行时实证）。
+- **日志同理**：`KernelLike.createLogger`（kernel `createLogger` 导出）动态创建
+  引导进程自己的 pino 实例（console pretty + `base: { service: "loader" }`），
+  与 kernel/cli 日志格式完全一致（`formatLogMessage` messageFormat 统一风格）。
+  `LoggerLike` 为 pino 方法的最小面（info/warn/error）。
+- `protocols.ts` 消息日志走结构化输出（`logger.info({ kind, sender, peer, text }, "收到消息")`），
+  console 显示单行流 `(loader): [群聊] 晓筱晨: 测试`（防刷屏）；boot 文件日志
+  （`util.ts` `log()` → `<数据根>/napuketto-boot.log`）保留作引导期诊断。
+
 ## 4. 红线
 
 - **绝对禁止**：koffi、vtable 槽位、手算内存偏移、memcpy 结构体、绕过 NAPI 的 thiscall（业务层）。

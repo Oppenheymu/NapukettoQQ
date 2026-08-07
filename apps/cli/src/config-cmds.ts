@@ -36,6 +36,7 @@ import {
     resolveDataRoot,
     stringifyToml,
 } from "@napuketto/kernel";
+import { logger } from "./logger.js";
 
 /** 默认自动重启。 */
 const DEFAULT_AUTO_RESTART = true;
@@ -202,8 +203,9 @@ export async function cmdConfigInit(opts: { dataDir?: string }): Promise<void> {
     mkdirSync(dataRoot, { recursive: true });
     const store = new CliConfigStore(dataRoot);
     const config = await store.load();
-    process.stdout.write(`[napuketto] 数据根: ${dataRoot}\n`);
-    process.stdout.write(`[napuketto] 全局配置已就绪: ${store.path}\n`);
+    logger.info({ dataRoot }, "数据根");
+    logger.info({ path: store.path }, "全局配置已就绪");
+    // TOML 内容为功能输出（机器可读），保持原样 stdout，不做日志包装
     process.stdout.write(`${stringifyToml(toRecord(config))}\n`);
 }
 
@@ -212,8 +214,8 @@ export async function cmdConfigList(opts: { dataDir?: string }): Promise<void> {
     const dataRoot = resolveDataRoot(opts.dataDir);
     const store = new CliConfigStore(dataRoot);
     const config = await store.load();
-    process.stdout.write(`[napuketto] 数据根: ${dataRoot}\n`);
-    process.stdout.write(`[napuketto] 全局配置: ${store.path}\n`);
+    logger.info({ dataRoot }, "数据根");
+    logger.info({ path: store.path }, "全局配置");
     process.stdout.write(`${stringifyToml(toRecord(config))}\n`);
     // 账号目录（数据根下的子目录）
     let entries: Dirent[];
@@ -230,8 +232,8 @@ export async function cmdConfigList(opts: { dataDir?: string }): Promise<void> {
 }
 
 /** 打印账号 config 目录文件清单。 */
-function printAccountConfig(name: string, dataRoot: string): void {
-    const configDir = join(dataRoot, name, "config");
+function printAccountConfig(account: string, dataRoot: string): void {
+    const configDir = join(dataRoot, account, "config");
     let files: string[] = [];
     try {
         files = readdirSync(configDir).filter((f) => f.endsWith(".json") || f.endsWith(".toml"));
@@ -242,7 +244,9 @@ function printAccountConfig(name: string, dataRoot: string): void {
     if (files.length > 0) {
         fileList = files.join(", ");
     }
-    process.stdout.write(`[napuketto] 账号 ${name} → config: ${fileList}\n`);
+    // 注意：字段名用 account 而非 name——name 是 pino 保留键（logger name），
+    // 会被 pino-pretty 渲染成 `(name/pid)` 元数据头而非普通字段。
+    logger.info({ account, files: fileList }, "账号配置");
 }
 
 /** 解析外部配置文本（按扩展名推断 TOML/JSON）。 */
@@ -281,6 +285,7 @@ export async function cmdConfigApply(file: string, opts: { dataDir?: string }): 
     const merged: Record<string, unknown> = { ...existing, ...patch };
     const next = parseCliConfig(merged);
     await store.save(next);
-    process.stdout.write(`[napuketto] 全局配置已更新: ${store.path}\n`);
+    logger.info({ path: store.path }, "全局配置已更新");
+    // TOML 内容为功能输出（机器可读），保持原样 stdout，不做日志包装
     process.stdout.write(`${stringifyToml(toRecord(next))}\n`);
 }

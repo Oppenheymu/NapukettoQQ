@@ -210,6 +210,14 @@ satori:   canonical → 元素（type/attrs，img/audio 等重命名）
 ## 8. 日志与配置
 
 - `logger.ts`：pino，支持 console + file + level，内置 redact（token/票据不打日志）。
+  **console 统一风格（2026-08-07，`formatLogMessage` messageFormat，cli/kernel/loader 全链路一致）**：
+  - 业务消息日志（`收到消息` / 带 `text`）→ 单行流 `(service): [群聊] 发送者: 内容`（防刷屏）
+  - 特定系统配置日志（QQ 安装信息 / 数据目录 / loginService.initConfig OK）→ 多行展开（每字段一行）
+  - 其他带属性日志 → 压缩单行 `(service): 消息 -> k: v | k2: v2`
+  - 纯文本日志 → `(service): 消息`
+  - 消费过的自定义键从 log 删除（防 prettifyObject 二次打印）；`err`/`error` 保留给 prettifyError
+    展示完整堆栈；字符串值还原反斜杠转义（对齐 pino-pretty 原生显示，Windows 路径可读）。
+  - `service` 字段标识来源：cli / kernel / loader，经 `base` 注入。
 - `config.ts`：ConfigBase（读 JSON → zod parse → 内存对象 → 变更写回）；napcat 主配置（fileLog/consoleLog/级别）在 kernel，**协议配置 schema 在各自协议包**（ADR-012）。
 
 ### 8.4 P1-1 wrapper 加载实现记录（2026-08-05，真实环境验证）

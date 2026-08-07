@@ -16,6 +16,75 @@ import { KernelError } from "./errors.js";
 /** 默认 redact 路径：顶层 token/票据 + 任意深度的密码/密钥。 */
 const DEFAULT_REDACT_PATHS = ["token", "ticket", "cookie", "password", "secret"] as const;
 
+/** 保持多行展开的系统配置日志消息（其余带属性日志压缩单行，2026-08-07 统一风格）。 */
+const MULTILINE_MESSAGES = new Set(["QQ 安装信息", "数据目录", "loginService.initConfig OK"]);
+
+/** pino 元键 + 已内联键（不参与属性展示；err/error 留给 prettifyError 展示堆栈）。 */
+const META_KEYS = new Set(["time", "pid", "hostname", "level", "v", "service", "err", "error"]);
+
+/** 从日志对象删除已消费的自定义键（否则 prettifyObject 会二次打印）。 */
+function dropKeys(log: Record<string, unknown>, keys: Iterable<string>): void {
+    for (const key of keys) {
+        delete log[key];
+    }
+}
+
+/** 值显示（对齐 pino-pretty：字符串带引号、还原 JSON.stringify 的反斜杠转义）。 */
+function formatValue(value: unknown): string {
+    const raw = JSON.stringify(value);
+    return raw === undefined ? "undefined" : raw.replace(/\\\\/gi, "\\");
+}
+
+/**
+ * pino-pretty messageFormat（2026-08-07 统一日志风格，cli/kernel/loader 全链路一致）：
+ *   1. 业务消息日志（`收到消息` / 带 `text` 字段）→ 单行流 `(service): [群聊] 发送者: 内容`（防刷屏）
+ *   2. 特定系统配置日志（MULTILINE_MESSAGES）→ 多行展开（每字段一行，4 空格缩进）
+ *   3. 其他带属性日志 → 压缩单行 `(service): 消息 -> k: v | k2: v2`
+ *   4. 纯文本日志 → `(service): 消息`
+ *
+ * 消费过的自定义键会从 log 删除（pino-pretty 的 prettifyObject 会打印剩余自定义字段，
+ * 不删会双倍输出）；`err`/`error` 键保留，交给 prettifyError 展示完整堆栈。
+ */
+export function formatLogMessage(log: Record<string, unknown>, messageKey: string): string {
+    const msg = log[messageKey];
+    const message = typeof msg === "string" ? msg : "";
+    const service = typeof log["service"] === "string" ? `(${log["service"]})` : "";
+    // service 已内联进消息前缀，删除避免 prettifyObject 二次打印
+    delete log["service"];
+    const prefix = service === "" ? "" : `${service}: `;
+
+    // 1. 业务消息日志：强制单行流（防刷屏）
+    if (message === "收到消息" || log["text"] !== undefined) {
+        const kind = typeof log["kind"] === "string" ? log["kind"] : "消息";
+        const senderRaw = typeof log["sender"] === "string" ? log["sender"] : undefined;
+        const peerRaw = typeof log["peer"] === "string" ? log["peer"] : undefined;
+        const sender = senderRaw ?? peerRaw ?? "未知";
+        const content = log["text"] === "" ? "[空消息/媒体]" : String(log["text"] ?? "");
+        dropKeys(log, ["text", "kind", "sender", "peer", "peerUin"]);
+        return `${prefix}[${kind}] ${sender}: ${content}`;
+    }
+
+    // 提取除核心字段外的所有自定义属性
+    const extraKeys = Object.keys(log).filter((k) => !META_KEYS.has(k) && k !== messageKey);
+
+    // 2. 特定的系统配置日志：保持多行展开
+    if (extraKeys.length > 0 && MULTILINE_MESSAGES.has(message)) {
+        const lines = extraKeys.map((k) => `    ${k}: ${formatValue(log[k])}`);
+        dropKeys(log, extraKeys);
+        return `${prefix}${message}\n${lines.join("\n")}`;
+    }
+
+    // 3. 其他普通带属性的日志：压缩成单行
+    if (extraKeys.length > 0) {
+        const details = extraKeys.map((k) => `${k}: ${formatValue(log[k])}`).join(" | ");
+        dropKeys(log, extraKeys);
+        return `${prefix}${message} -> ${details}`;
+    }
+
+    // 4. 纯文本日志
+    return `${prefix}${message}`;
+}
+
 function toSingle(streams: Array<{ stream: pino.DestinationStream }>): pino.DestinationStream {
     const [only] = streams;
     if (only === undefined) {
@@ -58,6 +127,8 @@ export function createLogger(opts: LoggerOptions = {}): pino.Logger {
             stream: pinoPretty({
                 colorize: true,
                 translateTime: "SYS:standard",
+                // messageFormat：统一日志风格（单行流/多行展开/压缩单行/纯文本）
+                messageFormat: formatLogMessage,
                 // ⚠️ 必须显式传 destination=process.stdout：pino-pretty 默认用
                 // sonic-boom 直写 fd 1（UTF-8 字节流），在 pnpm start（cmd.exe +
                 // 管道 936 转码）链路下中文被按 GBK 解码成乱码、ANSI 残留；

@@ -68,10 +68,29 @@ port = 3000
 apps/cli/src/
 ├── index.ts           # commander 参数解析 + 生命周期编排入口
 ├── supervisor.ts      # 多账号子进程编排（启动/重启/信号转发，P6）
-├── boot.ts            # 单账号启动序列：wrapper-version → core → login → adapter → network
-├── login-render.ts    # 二维码渲染（qrcode 终端 / 打印 URL）
+├── boot.ts            # 单账号启动序列：定位 QQ → 自建宿主拉起 → 常驻
+├── logger.ts          # cli 进程级 pino logger（复用 kernel createLogger，service=cli）
 └── config-cmds.ts     # napuketto config init/list/apply
 ```
+
+## 3.1 日志规范（2026-08-07 统一改造）
+
+**全部 cli 输出走 pino 结构化日志**（ADR-007，复用 kernel `createLogger`，格式与 kernel
+子进程完全一致：`[时间戳 +0800] LEVEL (pid): (service): 消息` + 元数据，可按行解析做自动化运维）：
+
+- `logger.ts` 提供模块级单例（每进程一份，ADR-015 推论）：console pretty、不写文件
+  （文件日志由 kernel 装配负责：`<数据根>/logs/napuketto.log`）、`base: { service: "cli" }`
+  标注来源、级别经 `NAPKETTO_LOG_LEVEL` 环境变量覆盖（缺省 info）。
+- **console 统一风格由 kernel `formatLogMessage`（pino-pretty messageFormat）实现**，
+  三种格式自动分流：特定系统配置日志（QQ 安装信息/数据目录）多行展开、其他带属性日志
+  压缩单行 `消息 -> k: v | k2: v2`、纯文本日志直出；消息日志（loader 打）单行流防刷屏。
+- 启动信息带元数据：`logger.info({ qqVersion, qqPath }, ...)` / `{ dataDir }`；
+  错误统一 `logger.error({ err }, ...)`（err 保留给 prettifyError 显示堆栈）。
+- **例外（功能输出）**：`config init/list/apply` 的 TOML 正文是机器可读的功能输出，
+  **保持原样 `process.stdout.write`，不做日志包装**；仅状态提示（数据根/配置文件路径）走日志。
+- BANNER 字符画（品牌标识）保留 `process.stdout.write`，不经 logger。
+- 原生噪音过滤（`boot.ts` NATIVE_NOISE）：wrapper.node 直写 fd 的 C++ 日志
+  （`<MMKV` / `loaded [mmkv.*]` / `get symbol failed` 等）在转发子进程输出时过滤，不留终端。
 
 ## 4. 启动序列（单账号）
 

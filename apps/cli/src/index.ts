@@ -14,6 +14,7 @@ import { resolveDataRoot } from "@napuketto/kernel";
 import { Command } from "commander";
 import { runSingleAccount } from "./boot.js";
 import { cmdConfigApply, cmdConfigInit, cmdConfigList, loadCliConfig } from "./config-cmds.js";
+import { logger } from "./logger.js";
 import { runSupervisor } from "./supervisor.js";
 
 /** commander collect：累积 -q 多值。 */
@@ -32,14 +33,14 @@ const BANNER = [
     "           /_/                                                 ",
 ].join("\n");
 
-/** 统一错误输出。 */
+/** 统一错误输出（结构化日志，错误对象经 pino serializer 带堆栈）。 */
 function reportError(err: unknown): void {
     let message = String(err);
     if (err instanceof Error) {
         const { message: errMessage } = err;
         message = errMessage;
     }
-    process.stderr.write(`[napuketto] ${message}\n`);
+    logger.error({ err }, message);
 }
 
 /** 构造可选 dataDir 参数（exactOptionalPropertyTypes 不允许显式 undefined）。 */
@@ -157,7 +158,7 @@ async function autoStart(opts: { dataDir?: string; stubDir?: string }): Promise<
     if (opts.stubDir !== undefined) {
         bootOptions.stubDir = opts.stubDir;
     }
-    process.stdout.write("[napuketto] 未指定 -q，自动快速登录（无历史账号则二维码登录）\n");
+    logger.info("未指定 -q，自动快速登录（无历史账号则二维码登录）");
     await runSingleAccount(bootOptions);
 }
 

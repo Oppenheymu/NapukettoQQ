@@ -81,6 +81,8 @@ export class NapukettoCore {
             level: opts.logLevel ?? "info",
             console: opts.consoleLog ?? true,
             file: opts.logFile ?? paths.file("logs", "napuketto.log"),
+            // service 标识来源（cli/loader 同款），messageFormat 前缀显示
+            base: { service: "kernel" },
         });
         return new NapukettoCore(createCoreContext({ logger, paths }));
     }
