@@ -16,14 +16,18 @@
 | `@napuketto/media` | 媒体转码（silk / ffmpeg） |
 | `@napuketto/loader` | 自建宿主引导（spawn 标准 node + stub QQNT.dll 转发宿主符号） |
 | `@napuketto/cli` | 启动编排、多账号 supervisor、配置管理 |
+| `create-napukettoqq` | 一键部署包：生成机器人项目骨架（package.json / napuketto.toml / readme / .gitignore）并自动安装 |
 
 ## 快速开始
 
+# 一键部署框架
 ```bash
-# 一键创建机器人项目（pnpm create / npm create / yarn create 均可）
-pnpm create napukettoqq my-bot
-cd my-bot
-pnpm start        # 启动 → 自动登录（快速/扫码）→ OneBot 11 服务
+pnpm create napukettoqq
+```
+
+# 启动 → 登录
+```bash
+pnpm start
 ```
 
 生成的用户项目自带 `napuketto.toml`（`dataDir` 按当前用户主目录写好），配置在项目根单一 TOML 管理，数据按数据根组织：`--data-dir` > `NAPKETTO_DATA` > `~/.napuketto`。
