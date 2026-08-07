@@ -19,11 +19,13 @@ import type { MessageUnique } from "./message-unique.js";
 /** 毫秒 → 秒（Unix 时间戳）。 */
 const MS_TO_SEC = 1000;
 
-/** RawMessage → OB11 消息事件（message_id 经 MessageUnique 映射并记录 peer）。 */
+/** RawMessage → OB11 消息事件（message_id 经 MessageUnique 映射并记录 peer）。
+ * messageFormat 决定 message 字段格式：array = 消息段数组（标准），string = CQ 码字符串。 */
 export function toOb11MessageEvent(
     msg: RawMessage,
     selfUin: string,
     unique: MessageUnique,
+    messageFormat: "array" | "string" = "array",
 ): OB11MessageEvent {
     const elements = toCanonicalElements(msg);
     const segments = canonicalToSegments(elements);
@@ -40,7 +42,7 @@ export function toOb11MessageEvent(
         self_id: selfId,
         post_type: "message" as const,
         message_id: messageId,
-        message: segments,
+        message: messageFormat === "string" ? canonicalToCqMessage(elements) : segments,
         raw_message: canonicalToCqMessage(elements),
         font: 0,
     };

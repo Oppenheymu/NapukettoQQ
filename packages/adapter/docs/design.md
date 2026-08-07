@@ -428,6 +428,28 @@ adapter onStart：装配传输 → 打开 server/client → 广播 lifecycle ena
 
 **跳过**：get_rkey/ocr_image/闪传/戳一戳（OIDB 或 NodeMiscService）/ get_essence_msg_list（pskey+WebApi）/ upload_group_file / get_group_file_url / get_online_clients。
 
+### 8.14 P2-18 网络配置多实例化 + 配置模板（2026-08-07 设计 + 实现）
+
+**目标**：对齐 NapCat 网络配置结构——`httpServers / httpPostUrls / wsServers / wsReverseUrls`
+四个**数组实例**（每实例 enabled/host/port/url + 实例级 token 覆盖全局 token），新增
+`reportSelfMessage`（是否上报机器人自己发的消息，缺省 false = OB11 规范行为）与
+`messagePostFormat`（消息内容格式：array=消息段数组 / string=CQ 码字符串）。**已实现并 pnpm check 全绿。**
+
+- **配置 schema**（`helper/config.ts`）：全局项 `token`（实例可覆盖）/ `heartbeatInterval`
+  （meta 心跳）/ `reportSelfMessage` / `messagePostFormat` + 四个实例数组；旧单对象字段
+  （http/httpPost/ws/wsReverse）废弃（zod strip 静默忽略，不兼容迁移，配置模板已按新结构写）。
+- **装配**（`transport.ts`）：循环装配——每实例一个 network 传输对象，全部共享同一
+  `handleRequest` 与 `broadcaster`；WS server/client 实例级 `heartbeatInterval`（ping 间隔）、
+  wsReverse 实例 `reconnectDelayMs` / `maxReconnectAttempts` / `rejectUnauthorized`（透传
+  WsClientOptions，自签证书场景）。
+- **reportSelfMessage**（`adapter.ts`）：订阅处过滤——`senderUin === selfUin` 且未开启 →
+  不广播消息事件（grayTip notice 分流不受影响，系统事件无 self 概念）。
+- **messagePostFormat**（`message-event.ts`）：`toOb11MessageEvent` 加 `messageFormat` 参数，
+  `message` 字段 array（segment 数组）/ string（CQ 码）二选一；`OB11Message` 类型本就是
+  `string | OB11MessageSegment[]` 联合，零类型改动。动作层（get_msg 等）固定 array，暂不跟随。
+- **配置模板**：cli 内置 CONFIG_TEMPLATE（TOML 注释版）+ 项目根 `napuketto.toml.example`
+  （入库文档）；`config init` 与首次启动缺失时生成带注释模板（详见 cli design §8）。
+
 ### 8.13 P2-13 第四批动作（ticket + 群系统消息 + 已读别名，2026-08-05 设计 + 实现）
 
 **目标**：HANDOVER.md §5.3 第四批中不依赖未探测 service 的部分。kernel 方法面见 kernel design §8.15。**已实现并 pnpm check 全绿（133 文件）+ 全量构建通过。**

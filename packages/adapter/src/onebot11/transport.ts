@@ -80,14 +80,13 @@ export interface AssembleOb11TransportsOptions {
 /** 按配置装配 OB11 传输。 */
 export function assembleOb11Transports(opts: AssembleOb11TransportsOptions): Ob11TransportSet {
     const { config, broadcaster, handleRequest } = opts;
-    const authorize = makeAuthorize(config.token);
     const servers: TransportAdapter[] = [];
     const transports: TransportAdapter[] = [];
 
-    assembleHttpServer(config, authorize, handleRequest, servers);
-    assembleWsServer(config, authorize, handleRequest, servers);
-    assembleHttpPost(config, transports);
-    assembleWsReverse(config, handleRequest, transports);
+    assembleHttpServers(config, handleRequest, servers);
+    assembleWsServers(config, handleRequest, servers);
+    assembleHttpPosts(config, transports);
+    assembleWsReverses(config, handleRequest, transports);
 
     // 注册事件上报传输
     for (const t of transports) {
@@ -106,86 +105,103 @@ export function assembleOb11Transports(opts: AssembleOb11TransportsOptions): Ob1
     };
 }
 
-/** 装配 HTTP 反向 server。 */
-function assembleHttpServer(
+/** 装配 HTTP 反向 server 列表（每实例一个 HttpServer，共享 handleRequest）。 */
+function assembleHttpServers(
     config: OB11Config,
-    authorize: AuthorizeHook | undefined,
     handleRequest: (req: unknown, respond: (res: unknown) => void) => void,
     servers: TransportAdapter[],
 ): void {
-    if (!config.http.enabled) {
-        return;
+    for (const item of config.httpServers) {
+        if (item.enabled) {
+            const options: ConstructorParameters<typeof HttpServer>[0] = {
+                host: item.host,
+                port: item.port,
+            };
+            const authorize = makeAuthorize(item.token ?? config.token);
+            if (authorize !== undefined) {
+                options.authorize = authorize;
+            }
+            const server = new HttpServer(options);
+            server.onRequest = handleRequest;
+            servers.push(server);
+        }
     }
-    const options: ConstructorParameters<typeof HttpServer>[0] = {
-        host: config.http.host,
-        port: config.http.port,
-    };
-    if (authorize !== undefined) {
-        options.authorize = authorize;
-    }
-    const server = new HttpServer(options);
-    server.onRequest = handleRequest;
-    servers.push(server);
 }
 
-/** 装配 WS 反向 server。 */
-function assembleWsServer(
+/** 装配反向 WS server 列表（每实例一个 WsServer，心跳 ping + 鉴权）。 */
+function assembleWsServers(
     config: OB11Config,
-    authorize: AuthorizeHook | undefined,
     handleRequest: (req: unknown, respond: (res: unknown) => void) => void,
     servers: TransportAdapter[],
 ): void {
-    if (!config.ws.enabled) {
-        return;
+    for (const item of config.wsServers) {
+        if (item.enabled) {
+            const options: ConstructorParameters<typeof WsServer>[0] = {
+                host: item.host,
+                port: item.port,
+                heartbeat: { intervalMs: item.heartbeatInterval },
+            };
+            const authorize = makeAuthorize(item.token ?? config.token);
+            if (authorize !== undefined) {
+                options.authorize = authorize;
+            }
+            const server = new WsServer(options);
+            server.onRequest = handleRequest;
+            servers.push(server);
+        }
     }
-    const options: ConstructorParameters<typeof WsServer>[0] = {
-        host: config.ws.host,
-        port: config.ws.port,
-        heartbeat: { intervalMs: 30_000 },
-    };
-    if (authorize !== undefined) {
-        options.authorize = authorize;
-    }
-    const server = new WsServer(options);
-    server.onRequest = handleRequest;
-    servers.push(server);
 }
 
-/** 装配 HTTP 正向上报 client。 */
-function assembleHttpPost(config: OB11Config, transports: TransportAdapter[]): void {
-    if (!config.httpPost.enabled || config.httpPost.url === undefined) {
-        return;
+/** 装配 HTTP 正向上报 client 列表（fire-and-forget）。 */
+function assembleHttpPosts(config: OB11Config, transports: TransportAdapter[]): void {
+    for (const item of config.httpPostUrls) {
+        if (item.enabled && item.url !== undefined) {
+            const headers = authorizeHeader(item.token ?? config.token);
+            const options: ConstructorParameters<typeof HttpClient>[0] = {
+                url: item.url,
+            };
+            if (headers !== undefined) {
+                options.headers = headers;
+            }
+            if (item.timeoutMs !== undefined) {
+                options.timeoutMs = item.timeoutMs;
+            }
+            transports.push(new HttpClient(options));
+        }
     }
-    const headers = authorizeHeader(config.token);
-    const options: ConstructorParameters<typeof HttpClient>[0] = {
-        url: config.httpPost.url,
-    };
-    if (headers !== undefined) {
-        options.headers = headers;
-    }
-    transports.push(new HttpClient(options));
 }
 
-/** 装配 WS 正向 client（双向）。 */
-function assembleWsReverse(
+/** 装配正向 WS client 列表（双向，心跳 + 重连 + 证书选项）。 */
+function assembleWsReverses(
     config: OB11Config,
     handleRequest: (req: unknown, respond: (res: unknown) => void) => void,
     transports: TransportAdapter[],
 ): void {
-    if (!config.wsReverse.enabled || config.wsReverse.url === undefined) {
-        return;
+    for (const item of config.wsReverseUrls) {
+        if (item.enabled && item.url !== undefined) {
+            const headers = authorizeHeader(item.token ?? config.token);
+            // 独立构造重连策略：maxAttempts 条件附加（exactOptionalPropertyTypes）
+            const reconnect: { enabled: boolean; delayMs: number; maxAttempts?: number } = {
+                enabled: true,
+                delayMs: item.reconnectDelayMs,
+            };
+            if (item.maxReconnectAttempts !== undefined) {
+                reconnect.maxAttempts = item.maxReconnectAttempts;
+            }
+            const options: ConstructorParameters<typeof WsClient>[0] = {
+                url: item.url,
+                heartbeat: { intervalMs: item.heartbeatInterval },
+                reconnect,
+                rejectUnauthorized: item.rejectUnauthorized,
+            };
+            if (headers !== undefined) {
+                options.headers = headers;
+            }
+            const client = new WsClient(options);
+            client.onRequest = handleRequest;
+            transports.push(client);
+        }
     }
-    const headers = authorizeHeader(config.token);
-    const options: ConstructorParameters<typeof WsClient>[0] = {
-        url: config.wsReverse.url,
-        heartbeat: { intervalMs: 30_000 },
-    };
-    if (headers !== undefined) {
-        options.headers = headers;
-    }
-    const client = new WsClient(options);
-    client.onRequest = handleRequest;
-    transports.push(client);
 }
 
 /** token → Authorization 头（client 上报/连接用）。 */

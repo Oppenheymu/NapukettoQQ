@@ -37,7 +37,7 @@ export class WsClient implements TransportAdapter {
         this.closed = false;
         this.attempt = 0;
         return new Promise<void>((resolve, reject) => {
-            const ws = new WebSocket(this.opts.url, { headers: this.opts.headers });
+            const ws = new WebSocket(this.opts.url, this.buildSocketOptions());
             this.ws = ws;
             const onOpen = (): void => {
                 ws.off("error", onError);
@@ -78,6 +78,22 @@ export class WsClient implements TransportAdapter {
             ws.close();
         }
     }
+    /** 构造 WebSocket 选项（headers / 证书校验按配置透传，缺省由 ws 库决定）。 */
+    private buildSocketOptions(): {
+        headers?: Record<string, string>;
+        rejectUnauthorized?: boolean;
+    } {
+        const { headers, rejectUnauthorized } = this.opts;
+        const out: { headers?: Record<string, string>; rejectUnauthorized?: boolean } = {};
+        if (headers !== undefined) {
+            out.headers = headers;
+        }
+        if (rejectUnauthorized !== undefined) {
+            out.rejectUnauthorized = rejectUnauthorized;
+        }
+        return out;
+    }
+
     private bind(ws: WebSocket): void {
         ws.on("message", (raw) => {
             let req: unknown;
@@ -119,7 +135,7 @@ export class WsClient implements TransportAdapter {
             if (this.closed) {
                 return;
             }
-            const next = new WebSocket(this.opts.url, { headers: this.opts.headers });
+            const next = new WebSocket(this.opts.url, this.buildSocketOptions());
             this.ws = next;
             next.on("open", () => {
                 this.attempt = 0;

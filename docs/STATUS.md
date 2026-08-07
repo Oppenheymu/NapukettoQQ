@@ -134,6 +134,14 @@ msgService 299 方法**（addKernelMsgListener/sendMsg/fetchMsgList 全在）。
   不喜欢配置堆用户目录），数据（账号目录/日志/缓存/QQ 数据）仍按数据根组织；kernel 新增
   `resolveConfigPath`（NAPKETTO_CONFIG 显式 > 项目根探测 > cwd > 数据根兜底），
   cli config 子命令 / boot / loader 装配链同步更新
+- **网络配置多实例化 + 配置模板（2026-08-07，P2-18）**：ob11ConfigSchema 对齐 NapCat——
+  httpServers / httpPostUrls / wsServers / wsReverseUrls 四个**数组实例**（每实例 enabled/
+  host/port/url + 实例级 token 覆盖全局），新增 `reportSelfMessage`（自身消息上报开关，
+  缺省 false）与 `messagePostFormat`（array=消息段数组 / string=CQ 码）；WsClientOptions 增
+  `rejectUnauthorized`（wss 自签证书，对齐 NapCat enableSelfSigned）；cli 内置 CONFIG_TEMPLATE
+  （TOML 注释版）+ 项目根 `napuketto.toml.example`（入库文档），`config init` 与首次启动缺失时
+  生成带注释模板（已存在则跳过不覆盖）；**HTTP SSE 服务器明确不做**（OneBot 11 规范无此模式，
+  2026-08-07 用户拍板）。冒烟验证通过（模板解析 + 多实例装配 + HTTP 实发 200）。
 
 **API 来源分层**（回答「onebot11 规范吗」）：标准 OneBot 11 规范 30 个 + go-cqhttp 扩展 + NapCat
 扩展三层；`protocol_version: "v11"` 不变，扩展动作 schema 来自 NapCat/go-cqhttp 而非规范，以

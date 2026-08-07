@@ -78,4 +78,6 @@ export interface WsClientOptions {
         /** 最大重连次数；缺省无限。 */
         maxAttempts?: number;
     };
+    /** wss:// 是否校验证书链（缺省 undefined = Node 默认严格校验；自签证书场景设 false，对齐 NapCat enableSelfSigned）。 */
+    rejectUnauthorized?: boolean;
 }

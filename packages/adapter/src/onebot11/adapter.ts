@@ -51,6 +51,8 @@ export class NapukettoOneBot11Adapter extends BaseProtocolAdapter<OB11Config> {
     private unsubscribe: (() => void) | null = null;
     private transports: Ob11TransportSet | null = null;
     private heartbeatTimer: NodeJS.Timeout | null = null;
+    private reportSelfMessage = false;
+    private messageFormat: "array" | "string" = "array";
 
     constructor(opts: OneBot11AdapterOptions) {
         super({
@@ -73,6 +75,9 @@ export class NapukettoOneBot11Adapter extends BaseProtocolAdapter<OB11Config> {
 
     /** 启动传输：装配（HTTP/WS）+ 打开 server/client + 广播 lifecycle enable + 起心跳。 */
     private async startTransports(config: OB11Config): Promise<void> {
+        // 全局上报开关与消息格式（订阅处消费）
+        this.reportSelfMessage = config.reportSelfMessage;
+        this.messageFormat = config.messagePostFormat;
         const broadcaster = this.getBroadcaster();
         if (broadcaster !== undefined) {
             this.transports = assembleOb11Transports({
@@ -154,8 +159,17 @@ export class NapukettoOneBot11Adapter extends BaseProtocolAdapter<OB11Config> {
                     });
                     continue;
                 }
+                // 自身消息：默认不上报（OB11 规范行为；reportSelfMessage=true 时上报）
+                if (!this.reportSelfMessage && String(msg.senderUin) === this.selfUin) {
+                    continue;
+                }
                 this.broadcastEvent(
-                    toOb11MessageEvent(msg, this.selfUin, this.oneBotApi.messageUnique),
+                    toOb11MessageEvent(
+                        msg,
+                        this.selfUin,
+                        this.oneBotApi.messageUnique,
+                        this.messageFormat,
+                    ),
                 );
             }
         });

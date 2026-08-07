@@ -76,3 +76,9 @@ NapCat 的 `OB11NetworkAdapter` 把事件类型绑死 OB11（`onEvent<T extends 
 - **鉴权钩子**：`authorize(ctx)` 由协议层注入，HTTP 返回 401、WS 关闭 4401。
 - **WsClient.open() 不自动重试**：失败 reject 由协议层决定；断线后的自动重连由 `reconnect` 选项控制（attempt 计数 + maxAttempts）。
 - **biome 严格规则适配**：`TransportAdapter` 接口方法用属性式签名（useConsistentMethodSignatures）；WS 关闭码/HTTP 状态码用命名常量（noMagicNumbers）；`this.x` 访问改解构（useDestructuring）；Qwik 序列化规则误报（useQwikValidLexicalScope）已关；`@types/ws` 必须装（ws 无自带类型）。
+
+### 8.1 WsClient 证书选项 + 多实例装配说明（2026-08-07）
+
+- **`WsClientOptions` 增 `rejectUnauthorized?: boolean`**：透传 ws 库 WebSocket 构造选项（缺省 undefined = Node 默认严格证书链校验）。设 `false` 允许自签证书（对齐 NapCat `enableSelfSigned`），用于 wss:// 自签服务器。
+- **多实例友好**：network 层 4 个传输类本就是单实例对象；多实例（如多个 WS server / 多个上报地址）由协议层（adapter）循环装配，一个 `EventBroadcaster` 天然多路广播——network 零改动。
+- **明确不做 SSE**：HTTP SSE 服务器（NapCat WebUI/前端扩展，OneBot 11 规范无此模式）已确认不实现；`HttpServer.send` 保持 no-op（HTTP 反向被动接收，主动推送走正向上报 HttpClient/WsClient）。

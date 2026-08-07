@@ -137,7 +137,22 @@ napuketto -d <dir> supervisor     # 多账号编排（读全局配置 accounts�
 3. ✅ 常驻进程管理（信号处理、优雅退出、崩溃重启策略，P2 前补）
 4. ✅ `supervisor.ts` 多账号编排（**P6，2026-08-05 实现**：config init/list/apply + supervisor 子命令 + 多 -q）
 
-## 7. 待验证事项
+## 7. 配置模板机制（2026-08-07）
+
+**现代项目惯例（.env.example 同款）**：项目根放 `napuketto.toml.example`（带大量中文注释，
+入库作为文档与参考模板）；cli 内置 `configTemplate()` 模板字符串（与 .example 内容一致，
+发布场景无 .example 时兜底——双维护，模板极少变更）。
+
+- **首次启动自动生成**：`loadCliConfig` 检测配置文件缺失 → 写模板文件（带注释）→ 再正常
+  load。不再生成无注释的最小配置（旧行为：ConfigBase 缺失落 defaults，无可读性）。
+- **`config init`**：文件不存在 → 写模板；已存在 → 提示跳过（不覆盖用户配置）。
+- **`config apply`**：保持（外部 TOML/JSON 顶层合并写回；写回后注释丢失属预期——apply 是
+  有意改配置，注释只服务初始生成）。
+- **模板内容**：dataDir（按当前数据根插值，路径反斜杠经 JSON.stringify 转义为 TOML 基本
+  字符串合法写法）+ autoRestart/restartDelayMs + `[[accounts]]`（注释示例）+ `[onebot11]`
+  段（token/heartbeatInterval/reportSelfMessage/messagePostFormat + 四个实例数组，均带注释）。
+
+## 8. 待验证事项
 
 - 崩溃/退出时的资源清理（network 适配器、日志 flush）顺序。
 - 多账号时二维码渲染的终端复用策略（多进程并行打印 vs 排队）。
