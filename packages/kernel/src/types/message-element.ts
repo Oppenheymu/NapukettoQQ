@@ -33,7 +33,14 @@ function textToCanonical(textEl: TextElement | undefined): CanonicalElement {
         return { type: "at", target: "all" };
     }
     if (atType === AtType.ONE || atType === AtType.ME) {
-        return { type: "at", target: atUid ?? content };
+        // 2026-08-07：at 段补 display（显示名）——QQ 的 content 通常是 "@昵称"，
+        // 剥掉 @ 作 display，供 OB11 at 段 name / 日志渲染使用（此前只有 target=uid）。
+        const base = { type: "at" as const, target: atUid ?? content };
+        const display = content.startsWith("@") ? content.slice(1) : content;
+        if (display === "") {
+            return base;
+        }
+        return { ...base, display };
     }
     return { type: "text", text: content };
 }

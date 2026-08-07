@@ -54,6 +54,12 @@ export interface RawMessageLike {
 export interface CanonicalElementLike {
     type: string;
     text?: string;
+    /** at 目标（uid / "all"，日志渲染用）。 */
+    target?: string;
+    /** at 显示名（QQ content 剥 @，日志渲染用）。 */
+    display?: string;
+    /** file 文件名（日志渲染用）。 */
+    name?: string;
 }
 
 /** 登录结果（kernel LoginResult 最小面）。 */

@@ -101,11 +101,38 @@ export async function startProtocols(
                     continue;
                 }
                 try {
-                    const texts = kernel
-                        .toCanonicalElements(msg)
-                        .filter((el) => el.type === "text")
-                        .map((el) => el.text)
-                        .join("");
+                    // 2026-08-07：渲染完整消息（含 at/媒体占位）——此前只 filter
+                    // text 段，@ 目标与图片等元素在日志里丢失（「我们自己都识别不到@」）。
+                    let rendered = "";
+                    for (const el of kernel.toCanonicalElements(msg)) {
+                        if (el.type === "text") {
+                            rendered += el.text;
+                        } else if (el.type === "at") {
+                            const name = el.display ?? (el.target === "all" ? "全体" : el.target);
+                            rendered += `@${name}`;
+                        } else if (el.type === "face") {
+                            rendered += "[表情]";
+                        } else if (el.type === "image") {
+                            rendered += "[图片]";
+                        } else if (el.type === "voice") {
+                            rendered += "[语音]";
+                        } else if (el.type === "video") {
+                            rendered += "[视频]";
+                        } else if (el.type === "reply") {
+                            rendered += "[回复]";
+                        } else if (el.type === "file") {
+                            rendered += `[文件${el.name ?? ""}]`;
+                        } else if (el.type === "forward") {
+                            rendered += "[合并转发]";
+                        } else if (el.type === "json") {
+                            rendered += "[json]";
+                        } else if (el.type === "xml") {
+                            rendered += "[xml]";
+                        }
+                    }
+                    if (rendered === "") {
+                        rendered = "[空消息/媒体]";
+                    }
                     const isGroup = msg.chatType === kernel.ChatType.GROUP;
                     const kind = isGroup ? "群聊" : "私聊";
                     const peerUin = String(msg.peerUin ?? "");
@@ -118,7 +145,7 @@ export async function startProtocols(
                         ? `${ANSI.cyan}[群${peerUin}]${ANSI.reset} ${ANSI.green}[用户${senderUin}]${ANSI.reset}`
                         : `${ANSI.green}[用户${senderUin}]${ANSI.reset}`;
                     // 内容内换行补缩进（4 空格），长文本/多行消息换行后不顶格
-                    const content = texts === "" ? "[空消息/媒体]" : texts.replace(/\n/g, "\n    ");
+                    const content = rendered.replace(/\n/g, "\n    ");
                     const plain = `接收 <- ${kind} ${plainTags}： ${content}`;
                     const colored =
                         `${ANSI.gray}loader | 接收 <- ${kind}${ANSI.reset} ` +
