@@ -96,11 +96,11 @@ export function launchSelfHost(options: LaunchOptions): LaunchResult {
 }
 
 /**
- * 默认 stub QQNT.dll 目录（loader 包内闭源 native-private/stub-test-env，开发机默认）。
+ * 默认 stub QQNT.dll 目录（loader 包内闭源 native-private/build/stub-test-env，开发机默认）。
  * src 与 native-private 同层，构建后 dist 与 native-private 同层——`../native-private` 恒正确。
  */
 export function defaultStubDir(): string {
-    return join(__dirname, "..", "native-private", "stub-test-env");
+    return join(__dirname, "..", "native-private", "build", "stub-test-env");
 }
 
 /** 装配自建宿主环境变量。 */

@@ -26,7 +26,9 @@ const { log, createState } = require("./boot-util.js");
 
 const state = createState();
 
-log(`[self-host] 启动 @ ${new Date().toISOString()} pid=${process.pid} node=${process.version} type=${process.type ?? "(标准 node)"}`);
+log(
+    `[self-host] 启动 @ ${new Date().toISOString()} pid=${process.pid} node=${process.version} type=${process.type ?? "(标准 node)"}`,
+);
 log(`[self-host] stub 目录: ${process.env.NAPUTO_STUB_DIR ?? "(PATH 前置，未记录)"}`);
 
 const wrapperPath = process.env.NAPUTO_WRAPPER_PATH;
@@ -58,7 +60,7 @@ try {
 try {
     const O3 = state.wrapperExports.NodeIO3MiscService;
     if (O3 && typeof O3.get === "function") {
-        O3.get().addO3MiscListener({ getOnAmgomDataPiece() { } });
+        O3.get().addO3MiscListener({ getOnAmgomDataPiece() {} });
         log("[self-host] ✅ O3MiscService 激活事件分发");
     } else {
         log("[self-host] ⚠️ NodeIO3MiscService 缺失（版本变化？继续尝试）");
@@ -69,7 +71,8 @@ try {
 
 // 3. kernel 引导（boot-bootstrap.js 完全复用——登录/initAndStartSession/冒烟/协议装配）
 log("[self-host] 调 bootstrap(state) ...");
-(async () => {
+// void：显式忽略 IIFE promise（内部已 try/catch 兜底，不会 reject）
+void (async () => {
     try {
         const { bootstrap } = require("./boot-bootstrap.js");
         await bootstrap(state);

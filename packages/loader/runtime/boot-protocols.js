@@ -22,13 +22,13 @@ async function startProtocols(kernel, ctx, loginResult) {
         return;
     }
     try {
-        const network = await import("file://" + networkEntry.replace(/\\/g, "/"));
+        const network = await import(`file://${networkEntry.replace(/\\/g, "/")}`);
         // adapter 子路径导出（ADR-014）：onebot11 面（ob11ConfigSchema/
         // NapukettoOneBot11Adapter）走 ./onebot11，core 框架（ProtocolConfig）走 ./core。
         const onebot11Entry = adapterEntry.replace(/index\.mjs$/, "onebot11/index.mjs");
         const coreEntry = adapterEntry.replace(/index\.mjs$/, "core/index.mjs");
-        const adapter = await import("file://" + onebot11Entry.replace(/\\/g, "/"));
-        const adapterCore = await import("file://" + coreEntry.replace(/\\/g, "/"));
+        const adapter = await import(`file://${onebot11Entry.replace(/\\/g, "/")}`);
+        const adapterCore = await import(`file://${coreEntry.replace(/\\/g, "/")}`);
         const session = ctx.session;
         if (!session) {
             log("bootstrap: session 为空，无法装配协议");

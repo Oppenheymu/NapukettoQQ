@@ -66,7 +66,9 @@ async function runSmokeTest(kernel, ctx, loginResult) {
         return false;
     }
     const target = parseSmokeTarget(process.env.NAPUTO_SMOKE_PEER, loginResult.uin);
-    log(`smoke: 目标=${target.kind}:${target.uin}（peer env=${process.env.NAPUTO_SMOKE_PEER ?? "(缺省=自己)"}）`);
+    log(
+        `smoke: 目标=${target.kind}:${target.uin}（peer env=${process.env.NAPUTO_SMOKE_PEER ?? "(缺省=自己)"}）`,
+    );
 
     // ① 消息事件通道 + 桥（addKernelMsgListener 普通 JS 对象，NAPI 反射）
     const channel = new kernel.NTEventChannel("Msg");

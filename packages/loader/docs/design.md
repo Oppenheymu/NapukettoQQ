@@ -26,7 +26,7 @@
 - **不做**：DLL 注入、vtable / 内存偏移 / 结构体手写、修改 QQ 安装目录任何文件、WebUI。
 - 逆向手段（Ghidra / probe）仅限理解机制，产物不进公共仓库（见 §4 红线）。
 
-## 2. 目录结构（实然，2026-08-07）
+## 2. 目录结构（实然，2026-08-07 阶段 1 整理）
 
 ```
 packages/loader/
@@ -37,14 +37,21 @@ packages/loader/
 │   ├── index.ts
 │   ├── locate-qq.ts        # 注册表/常见路径定位 QQ.exe + 版本目录
 │   └── launcher.ts         # 装配 env + PATH 前置 stub + spawn 标准 node（launchSelfHost）
-├── runtime/                # 引导运行时（构建复制到 dist/runtime/）
+├── runtime/                # 引导运行时（构建复制到 dist/runtime/，biome 守护）
 │   ├── self-host.cjs       # 入口：dlopen wrapper.node + O3MiscService 激活 + bootstrap
-│   ├── boot-bootstrap.js   # kernel 装配 → 登录 → session → 冒烟 → 协议
+│   ├── boot-bootstrap.js   # 主编排：kernel 装配 → 登录 → session → 冒烟 → 协议
+│   ├── boot-login.js       # 登录流程（选账号 / 快速登录 / QR 回退）
+│   ├── boot-session.js     # session 候选收集 / 选择 / 就绪探测
 │   ├── boot-protocols.js   # OB11 adapter + network 装配
 │   ├── boot-smoke.js       # 收发冒烟自检（NAPUTO_SMOKE=1）
 │   ├── boot-util.js        # 日志 + 共享状态
 │   └── package.json        # {"type":"commonjs"}——项目根为 ESM，CJS 模块必须声明
-├── native-private/         # 闭源（gitignore）：stub QQNT.dll 源码/产物 + p0 验证脚本，见其 README
+├── native-private/         # 闭源（gitignore）：stub 源码 / 验证脚本 / 工具 / 产物，见其 README
+│   ├── stub/               # stub-qqnt.cpp/.def（唯一长期维护源码）
+│   ├── verify/             # p0-*.mjs（当前有效验证脚本）
+│   ├── tools/              # compare-symbols.mjs / cleanup-native-private.ps1
+│   ├── build/              # QQNT-stub-full.dll + stub-test-env/（launcher 默认引用）
+│   └── _archive/           # 历史实验
 └── scripts/
     └── build-runtime.mjs   # 复制 runtime/ → dist/runtime/（不再编译 C++）
 ```
