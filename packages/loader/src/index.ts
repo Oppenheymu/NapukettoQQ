@@ -10,6 +10,14 @@
  * 本包不再编译 C++ 组件，业务层 100% 走 NAPI。
  */
 
+export type { InstanceLockCheck, InstanceLockInfo } from "./instance-lock.js";
+export {
+    acquireInstanceLock,
+    checkInstanceLock,
+    INSTANCE_LOCK_FILE,
+    registerLockCleanup,
+    releaseInstanceLock,
+} from "./instance-lock.js";
 export type { LaunchOptions, LaunchResult } from "./launcher.js";
 export { defaultStubDir, ENV, launchSelfHost } from "./launcher.js";
 export type { QqInstallInfo } from "./locate-qq.js";

@@ -22,6 +22,7 @@
  *     → kernel 装配 → 登录（快速/QR）→ session（先 init 后 start）→ 冒烟 → 协议装配
  */
 
+import { acquireInstanceLock, checkInstanceLock, registerLockCleanup } from "../instance-lock.js";
 import { bootstrap } from "./bootstrap.js";
 import { env } from "./env.js";
 import { createState, errMsg, log } from "./util.js";
@@ -32,6 +33,26 @@ log(
     `[self-host] 启动 @ ${new Date().toISOString()} pid=${process.pid} node=${process.version} type=${(process as { type?: string }).type ?? "(标准 node)"}`,
 );
 log(`[self-host] stub 目录: ${env.NAPUTO_STUB_DIR ?? "(PATH 前置，未记录)"}`);
+
+// 0. 单实例锁兜底（2026-08-07 根治）：数据目录粒度锁——同一账号数据目录
+//    只允许一个实例（QQ 原生层 MMKV/登录单例有锁，第二个实例抢不到会挂起）。
+//    cli 已做启动前检测，此处防 supervisor/直接跑 self-host 绕过 cli 的路径。
+//    NAPUTO_CFG_DIR 即账号数据目录（launcher 注入）。
+const lockDataDir = env.NAPUTO_CFG_DIR;
+if (lockDataDir) {
+    if (!acquireInstanceLock(lockDataDir)) {
+        const { pid: holderPid } = checkInstanceLock(lockDataDir);
+        log(
+            `[self-host] ❌ 数据目录已被其他实例占用（pid=${holderPid ?? "?"}），退出；` +
+                "同一账号数据目录仅允许一个实例，请先停止已有实例",
+        );
+        process.exit(1);
+    }
+    registerLockCleanup(lockDataDir);
+    log(`[self-host] ✅ 已获取数据目录锁（${lockDataDir}）`);
+} else {
+    log("[self-host] ⚠️ NAPUTO_CFG_DIR 未设置，跳过单实例锁");
+}
 
 const wrapperPath = env.NAPUTO_WRAPPER_PATH;
 if (!wrapperPath) {
