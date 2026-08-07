@@ -6,12 +6,12 @@
     "files": [
         "dist"
     ],
-    "main": "./dist/index.js",
-    "types": "./dist/index.d.ts",
+    "main": "./dist/index.mjs",
+    "types": "./dist/index.d.mts",
     "exports": {
         ".": {
-            "types": "./dist/index.d.ts",
-            "import": "./dist/index.js"
+            "types": "./dist/index.d.mts",
+            "import": "./dist/index.mjs"
         }
     },
     "bin": {
@@ -20,7 +20,7 @@
     "scripts": {
         "dev": "tsdown --watch",
         "build": "tsdown",
-        "start": "node ./dist/index.js"
+        "start": "node ./dist/index.mjs"
     },
     "devDependencies": {
         "@types/qrcode": "^1.5.6",
