@@ -36,6 +36,8 @@ function unwrapResult<T extends GeneralCallResult>(label: string, raw: T): void 
 /** 消息 API：从 session 拿 msg service，包装成语义化方法。 */
 export class MsgApi {
     private readonly service: NodeIKernelMsgService;
+    /** 上次生成 msgId 的时间（单调递增，2026-08-07 防同毫秒并发碰撞）。 */
+    private lastMsgTime = 0;
 
     constructor(session: NodeIQQNTWrapperSession) {
         const service = session.getMsgService() as unknown as NodeIKernelMsgService | null;
@@ -46,12 +48,28 @@ export class MsgApi {
     }
 
     /**
+     * 生成 msgId 时间戳（单调递增）。
+     * generateMsgUniqueId(chatType, time) 以 time 区分消息——同毫秒并发发送
+     * （机器人群发/多会话同时回复）Date.now() 会碰撞，msgId 相同导致 wrapper
+     * 拒绝或覆盖。严格单调递增保证进程内唯一。
+     */
+    private nextMsgTime(): string {
+        const now = Date.now();
+        if (now > this.lastMsgTime) {
+            this.lastMsgTime = now;
+        } else {
+            this.lastMsgTime += 1;
+        }
+        return String(this.lastMsgTime);
+    }
+
+    /**
      * 发送消息：canonical 元素 → NT 发送元素 → sendMsg。
      * 返回 NT msgId（雪花 ID）。
      */
     async sendMessage(target: Peer, elements: CanonicalElement[]): Promise<{ msgId: string }> {
         const sendElements = toSendElements(elements);
-        const msgId = this.service.generateMsgUniqueId(target.chatType, String(Date.now()));
+        const msgId = this.service.generateMsgUniqueId(target.chatType, this.nextMsgTime());
         const raw = await this.service.sendMsg(msgId, target, sendElements, new Map());
         unwrapResult("sendMsg", raw);
         return { msgId };
