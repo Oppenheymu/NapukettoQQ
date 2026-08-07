@@ -33,7 +33,7 @@ export interface LaunchOptions {
     selfHost?: boolean;
     /** stub QQNT.dll 目录（PATH 前置，转发 napi_*、uv_* 符号到 node.exe）。 */
     stubDir?: string;
-    /** 自建宿主入口（默认 dist/runtime/self-host.cjs）。 */
+    /** 自建宿主入口（默认 dist/host/self-host.cjs）。 */
     selfHostEntry?: string;
     /**
      * 子进程 stdio（默认 "inherit"）。cli 传 ["inherit","pipe","pipe"] 并接管
@@ -61,7 +61,7 @@ export interface LaunchResult {
  */
 export function launchSelfHost(options: LaunchOptions): LaunchResult {
     const selfHostPath =
-        options.selfHostEntry ?? join(__dirname, "..", "dist", "runtime", "self-host.cjs");
+        options.selfHostEntry ?? join(__dirname, "..", "dist", "host", "self-host.cjs");
     if (!existsSync(selfHostPath)) {
         throw new Error(
             `self-host.cjs 缺失: ${selfHostPath}（先运行 pnpm --filter @napuketto/loader build）`,

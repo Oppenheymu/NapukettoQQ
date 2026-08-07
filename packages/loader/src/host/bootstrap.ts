@@ -1,12 +1,12 @@
-"use strict";
 /**
- * boot-bootstrap.js：kernel 引导核心（import kernel → 装配 → 登录 → session 替换 → 协议装配）。
- * 由 self-host.cjs（自建宿主，2026-08-07 唯一路线）在 dlopen wrapper.node 后调用。
+ * bootstrap.ts：kernel 引导核心（import kernel → 装配 → 登录 → session 替换 → 协议装配）。
+ * 2026-08-07 阶段 2：由 runtime/boot-bootstrap.js TS 化（零语义改动）。
+ * 由 self-host.ts（自建宿主，2026-08-07 唯一路线）在 dlopen wrapper.node 后调用。
  *
  * 2026-08-07 阶段 1 拆分（零语义改动）：
- *  - 登录流程（选账号 / 快速登录 / QR 回退）→ boot-login.js
- *  - session 选择 / 探测 / 就绪 → boot-session.js
- *  - 协议装配 → boot-protocols.js；冒烟自检 → boot-smoke.js
+ *  - 登录流程（选账号 / 快速登录 / QR 回退）→ login.ts
+ *  - session 选择 / 探测 / 就绪 → session.ts
+ *  - 协议装配 → protocols.ts；冒烟自检 → smoke.ts
  *
  * session 来源（2026-08-07 实测结论；V1 Proxy 捕获与 vehicle 载具已归档 archive/）：
  *  登录成功后按优先级取 session：
@@ -15,28 +15,34 @@
  *    ② get() / qqSession（V1 兼容）
  *  取到后 core.setSession 替换 → waitSessionReady 确认 getMsgService READY。
  */
-const path = require("node:path");
-const { log } = require("./boot-util.js");
-const { pickLoginAccount, doLogin } = require("./boot-login.js");
-const {
-    isSessionUsable,
-    startSessionProbe,
-    probeSessionMethods,
+import { dirname, join } from "node:path";
+import { env } from "./env.js";
+import { doLogin, type LoginTargetRef, pickLoginAccount } from "./login.js";
+import { startProtocols } from "./protocols.js";
+import {
     collectCandidateSessions,
+    isSessionUsable,
     pickBestSession,
-} = require("./boot-session.js");
-const { startProtocols } = require("./boot-protocols.js");
-const { runSmokeTest } = require("./boot-smoke.js");
+    probeSessionMethods,
+    type SessionCandidate,
+    startSessionProbe,
+    type WrapperSessionStaticLike,
+} from "./session.js";
+import { runSmokeTest } from "./smoke.js";
+import type { CoreContextLike, CoreLike, KernelLike, LoginResultLike } from "./types.js";
+import { errMsg, log, type SharedState } from "./util.js";
 
 /** 核心引导：import kernel → 装配 → 登录 → 替换 session → 等待就绪 → 协议装配。 */
-async function bootstrap(state) {
-    const kernelEntry = process.env.NAPUTO_KERNEL_ENTRY;
+export async function bootstrap(state: SharedState): Promise<void> {
+    const kernelEntry = env.NAPUTO_KERNEL_ENTRY;
     if (!kernelEntry) {
         log("bootstrap: NAPUTO_KERNEL_ENTRY not set");
         return;
     }
     try {
-        const kernel = await import(`file://${kernelEntry.replace(/\\/g, "/")}`);
+        const kernel = (await import(
+            `file://${kernelEntry.replace(/\\/g, "/")}`
+        )) as unknown as KernelLike;
         log(`bootstrap: kernel imported, keys: ${Object.keys(kernel).join(", ")}`);
         if (
             typeof kernel.startNapuketto !== "function" &&
@@ -46,9 +52,9 @@ async function bootstrap(state) {
             return;
         }
         const bootEnv = {
-            qqVersion: process.env.NAPUTO_QQ_VERSION,
-            dataDir: process.env.NAPUTO_CFG_DIR,
-            wrapperPath: process.env.NAPUTO_WRAPPER_PATH,
+            qqVersion: env.NAPUTO_QQ_VERSION,
+            dataDir: env.NAPUTO_CFG_DIR,
+            wrapperPath: env.NAPUTO_WRAPPER_PATH,
         };
 
         // ⭐ appid 动态解析（2026-08-06 P2-0 实测：硬编码 537237765 在 9.9.33 扫码失败
@@ -56,17 +62,15 @@ async function bootstrap(state) {
         const Appid =
             (typeof kernel.parseAppidFromMajor === "function" &&
                 bootEnv.wrapperPath &&
-                kernel.parseAppidFromMajor(
-                    path.join(path.dirname(bootEnv.wrapperPath), "major.node"),
-                )) ||
+                kernel.parseAppidFromMajor(join(dirname(bootEnv.wrapperPath), "major.node"))) ||
             (typeof kernel.resolveAppidQua === "function" &&
                 kernel.resolveAppidQua(bootEnv.qqVersion || "").appid) ||
             "537237765";
         log(`bootstrap: appid=${Appid}（wrapper=${bootEnv.wrapperPath}）`);
         try {
-            if (typeof kernel.NapukettoCore === "function") {
+            if (kernel.NapukettoCore !== undefined) {
                 // 装配层路径：NapukettoCore.create → attachWrapper → login
-                const core = kernel.NapukettoCore.create({
+                const core: CoreLike = kernel.NapukettoCore.create({
                     paths: { dataRoot: bootEnv.dataDir },
                     logLevel: "info",
                 });
@@ -79,20 +83,24 @@ async function bootstrap(state) {
 
                 // 探测：create() 与捕获的 QQ session 关系（确认 create() 是否干扰 QQ）
                 try {
-                    const S2 = state.wrapperExports.NodeIQQNTWrapperSession;
-                    const created = typeof S2.create === "function" ? S2.create() : null;
+                    const S2 = state.wrapperExports?.["NodeIQQNTWrapperSession"] as
+                        | WrapperSessionStaticLike
+                        | undefined;
+                    const created = S2 && typeof S2.create === "function" ? S2.create() : null;
                     log(
                         `BOOT: create()===qqSession? ${created === state.qqSession} | create()===ctx.session? ${created === ctx.session} | qqSession===ctx.session? ${state.qqSession === ctx.session}`,
                     );
+                    const sess = created as { getMsgService?: unknown } | null | undefined;
                     const svc =
-                        created && typeof created.getMsgService === "function"
-                            ? created.getMsgService()
+                        sess && typeof sess.getMsgService === "function"
+                            ? sess.getMsgService()
                             : null;
+                    const qs = state.qqSession as { getMsgService?: unknown } | null | undefined;
                     log(
-                        `BOOT: create().getMsgService=${svc !== null && svc !== undefined ? "ready" : "null"} qqSession.getMsgService=${state.qqSession && typeof state.qqSession.getMsgService === "function" && state.qqSession.getMsgService() !== null && state.qqSession.getMsgService() !== undefined ? "ready" : "null"}`,
+                        `BOOT: create().getMsgService=${svc !== null && svc !== undefined ? "ready" : "null"} qqSession.getMsgService=${qs && typeof qs.getMsgService === "function" && qs.getMsgService() !== null && qs.getMsgService() !== undefined ? "ready" : "null"}`,
                     );
                 } catch (e) {
-                    log(`BOOT: create() 探测失败: ${e?.message ?? e}`);
+                    log(`BOOT: create() 探测失败: ${errMsg(e)}`);
                 }
                 // 多源 session 就绪探测（5s 间隔，60s 上限）
                 startSessionProbe(state, ctx);
@@ -100,15 +108,15 @@ async function bootstrap(state) {
                 // 探测 session 方法面（NAPI 反射，验证 startNT/init 等关键方法）
                 probeSessionMethods(ctx);
 
-                let loginResult = null;
+                let loginResult: LoginResultLike | null = null;
                 if (typeof core.login === "function") {
                     // 打印可用快速登录账号（启动横幅）
-                    const ref = { targetUin: undefined };
+                    const ref: LoginTargetRef = { targetUin: undefined };
                     await pickLoginAccount(kernel, ctx, ref);
                     // NAPUTO_QUICK_UIN 强制指定快速登录账号（实验/自建宿主验证用，
                     // 防止自动选中风控账号 3054108135 导致挂起——HANDOVER-V10 环境事实）。
-                    const forcedUin = process.env.NAPUTO_QUICK_UIN;
-                    const loginOpts = {
+                    const forcedUin = env.NAPUTO_QUICK_UIN;
+                    const loginOpts: Record<string, unknown> = {
                         appid: Appid,
                         initTimeoutMs: 20000,
                         ...(forcedUin
@@ -132,8 +140,8 @@ async function bootstrap(state) {
                     // 且 getMainSession 内部会先 startupSession.start()——与「先 init 后
                     // start」顺序冲突（HANDOVER-V9 实证）；登录前 createSession 创建的
                     // 配套 session（ctx.session + ctx.startupSession）才是正确激活目标。
-                    const isSelfHost = process.env.NAPUTO_SELF_HOST === "1";
-                    let chosen = null;
+                    const isSelfHost = env.NAPUTO_SELF_HOST === "1";
+                    let chosen: SessionCandidate | null = null;
                     if (!isSelfHost) {
                         const candidates = collectCandidateSessions(state, kernel, ctx);
                         chosen = pickBestSession(candidates);
@@ -154,7 +162,10 @@ async function bootstrap(state) {
                     // 激活 / qqSession Proxy 捕获——候选可能为空，但 attachWrapper 时
                     // createSession（SSW.create + getNTWrapperSession("nt_1")）已创建
                     // ctx.session，直接对它走 NapCat 激活（先 init 后 start）。
-                    const activateTarget = chosen ?? { s: ctx.session, tag: "kernel 自建 session" };
+                    const activateTarget: SessionCandidate = chosen ?? {
+                        s: ctx.session,
+                        tag: "kernel 自建 session",
+                    };
                     if (activateTarget.s && !isSessionUsable(activateTarget.s)) {
                         log(
                             `bootstrap: 激活 session（${activateTarget.tag}，先 init 后 startupSession.start）...`,
@@ -177,7 +188,7 @@ async function bootstrap(state) {
                                 selfUin: loginResult.uin,
                                 selfUid: loginResult.uid,
                                 accountPath,
-                                downloadPath: path.join(accountPath, "NapCat", "temp"),
+                                downloadPath: join(accountPath, "NapCat", "temp"),
                             });
                             const listener = kernel.createLifecycleSessionListener();
                             // initAndStartSession 已修正：先 session.init 再 startupSession.start()
@@ -186,9 +197,7 @@ async function bootstrap(state) {
                             });
                             log("bootstrap: 激活 session init + start 完成");
                         } catch (initErr) {
-                            log(
-                                `bootstrap: 激活 session init 失败: ${initErr?.message ?? initErr}`,
-                            );
+                            log(`bootstrap: 激活 session init 失败: ${errMsg(initErr)}`);
                         }
                     }
 
@@ -197,17 +206,17 @@ async function bootstrap(state) {
                         await kernel.waitSessionReady(ctx, { timeoutMs: 30000 });
                         log("bootstrap: QQ session 就绪（getMsgService 可用）");
                     } catch (readyErr) {
-                        log(`bootstrap: 等待 session 就绪失败: ${readyErr?.message ?? readyErr}`);
+                        log(`bootstrap: 等待 session 就绪失败: ${errMsg(readyErr)}`);
                     }
                     // P2-1 收发消息冒烟自检（NAPUTO_SMOKE=1）：MsgBridge + MsgApi 真发/收一条
-                    if (process.env.NAPUTO_SMOKE === "1" && loginResult !== null) {
+                    if (env.NAPUTO_SMOKE === "1" && loginResult !== null) {
                         try {
                             const ok = await runSmokeTest(kernel, ctx, loginResult);
                             log(
                                 `bootstrap: 冒烟自检${ok ? "通过" : "未完全通过"}（见上文 smoke 日志）`,
                             );
                         } catch (smokeErr) {
-                            log(`bootstrap: 冒烟自检异常: ${smokeErr?.message ?? smokeErr}`);
+                            log(`bootstrap: 冒烟自检异常: ${errMsg(smokeErr)}`);
                         }
                     }
                 } else {
@@ -218,7 +227,7 @@ async function bootstrap(state) {
                     await startProtocols(kernel, ctx, loginResult);
                 }
                 // 探测模式
-                if (process.env.NAPUTO_PROBE === "1" && typeof kernel.probeRuntime === "function") {
+                if (env.NAPUTO_PROBE === "1" && typeof kernel.probeRuntime === "function") {
                     try {
                         const probe = kernel.probeRuntime(ctx);
                         log(
@@ -226,25 +235,32 @@ async function bootstrap(state) {
                         );
                         setTimeout(() => {
                             try {
+                                if (typeof kernel.probeRuntime !== "function") {
+                                    return;
+                                }
                                 const late = kernel.probeRuntime(ctx, "napuketto-probe-late.json");
                                 log(
                                     `bootstrap: probe-late done, session=${late.session ? "ok" : "null"}, services=${Object.keys(late.services ?? {}).length}`,
                                 );
                             } catch (e2) {
-                                log(`bootstrap: probe-late error: ${e2?.message ?? e2}`);
+                                log(`bootstrap: probe-late error: ${errMsg(e2)}`);
                             }
                         }, 35000);
                     } catch (e) {
-                        log(`bootstrap: probe error: ${e?.message ?? e}`);
+                        log(`bootstrap: probe error: ${errMsg(e)}`);
                     }
                 }
             } else {
                 // 回退：旧装配路径（startNapuketto + 手工 lifecycle）
                 log("bootstrap: kernel has no NapukettoCore, falling back");
-                const ctx = kernel.startNapuketto({
+                const ctx: CoreContextLike | undefined = kernel.startNapuketto?.({
                     wrapperExports: state.wrapperExports,
                     env: bootEnv,
                 });
+                if (ctx === undefined) {
+                    log("bootstrap: startNapuketto 不可用");
+                    return;
+                }
                 log(
                     `bootstrap: startNapuketto OK, engine=${typeof ctx.engine}, session=${ctx.session !== null}`,
                 );
@@ -254,7 +270,7 @@ async function bootstrap(state) {
                 ) {
                     if (typeof kernel.buildLoginConfig === "function" && ctx.loginService) {
                         const loginCfg = kernel.buildLoginConfig(
-                            Appid,
+                            Appid as number,
                             bootEnv.qqVersion || "",
                             bootEnv.dataDir || ".",
                         );
@@ -271,7 +287,7 @@ async function bootstrap(state) {
                         selfUin: loginResult.uin,
                         selfUid: loginResult.uid,
                         accountPath: bootEnv.dataDir || ".",
-                        downloadPath: path.join(bootEnv.dataDir || ".", "temp"),
+                        downloadPath: join(bootEnv.dataDir || ".", "temp"),
                     });
                     const listener = kernel.createLifecycleSessionListener();
                     await kernel.initAndStartSession(ctx, sessionConfig, listener, {
@@ -281,23 +297,21 @@ async function bootstrap(state) {
                 } else {
                     log("bootstrap: kernel missing lifecycle fns (quickLogin/initAndStartSession)");
                 }
-                if (process.env.NAPUTO_PROBE === "1" && typeof kernel.probeRuntime === "function") {
+                if (env.NAPUTO_PROBE === "1" && typeof kernel.probeRuntime === "function") {
                     try {
                         const probe = kernel.probeRuntime(ctx);
                         log(
                             `bootstrap: probe done, session=${probe.session ? "ok" : "null"}, services=${Object.keys(probe.services ?? {}).length}`,
                         );
                     } catch (e) {
-                        log(`bootstrap: probe error: ${e?.message ?? e}`);
+                        log(`bootstrap: probe error: ${errMsg(e)}`);
                     }
                 }
             }
         } catch (e) {
-            log(`bootstrap: lifecycle error: ${e?.message ?? e}`);
+            log(`bootstrap: lifecycle error: ${errMsg(e)}`);
         }
     } catch (e) {
-        log(`bootstrap: import kernel failed: ${e.message}`);
+        log(`bootstrap: import kernel failed: ${errMsg(e)}`);
     }
 }
-
-module.exports = { bootstrap };

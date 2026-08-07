@@ -26,39 +26,45 @@
 - **不做**：DLL 注入、vtable / 内存偏移 / 结构体手写、修改 QQ 安装目录任何文件、WebUI。
 - 逆向手段（Ghidra / probe）仅限理解机制，产物不进公共仓库（见 §4 红线）。
 
-## 2. 目录结构（实然，2026-08-07 阶段 1 整理）
+## 2. 目录结构（实然，2026-08-07 阶段 2 定稿：runtime TS 化 + tsdown 双构建）
 
 ```
 packages/loader/
 ├── package.json            # @napuketto/loader（自建宿主引导，无 C++ 构建）
 ├── tsconfig.json
+├── tsdown.config.ts        # 双构建：index（ESM+d.mts）+ host/self-host（CJS 单文件 bundle）
 ├── docs/design.md          # 本文件
-├── src/                    # TS 编排层
+├── src/                    # TS 编排层（tsdown 编译范围）
 │   ├── index.ts
 │   ├── locate-qq.ts        # 注册表/常见路径定位 QQ.exe + 版本目录
-│   └── launcher.ts         # 装配 env + PATH 前置 stub + spawn 标准 node（launchSelfHost）
-├── runtime/                # 引导运行时（构建复制到 dist/runtime/，biome 守护）
-│   ├── self-host.cjs       # 入口：dlopen wrapper.node + O3MiscService 激活 + bootstrap
-│   ├── boot-bootstrap.js   # 主编排：kernel 装配 → 登录 → session → 冒烟 → 协议
-│   ├── boot-login.js       # 登录流程（选账号 / 快速登录 / QR 回退）
-│   ├── boot-session.js     # session 候选收集 / 选择 / 就绪探测
-│   ├── boot-protocols.js   # OB11 adapter + network 装配
-│   ├── boot-smoke.js       # 收发冒烟自检（NAPUTO_SMOKE=1）
-│   ├── boot-util.js        # 日志 + 共享状态
-│   └── package.json        # {"type":"commonjs"}——项目根为 ESM，CJS 模块必须声明
+│   ├── launcher.ts         # 装配 env + PATH 前置 stub + spawn 标准 node（launchSelfHost）
+│   └── host/               # 自建宿主引导运行时（2026-08-07 阶段 2 由 runtime/ TS 化）
+│       ├── self-host.ts    # 入口：dlopen wrapper.node + O3MiscService 激活 + bootstrap
+│       ├── bootstrap.ts    # 主编排：kernel 装配 → 登录 → session → 冒烟 → 协议
+│       ├── login.ts        # 登录流程（选账号 / 快速登录 / QR 回退）
+│       ├── session.ts      # session 候选收集 / 选择 / 就绪探测
+│       ├── protocols.ts    # OB11 adapter + network 装配
+│       ├── smoke.ts        # 收发冒烟自检（NAPUTO_SMOKE=1）
+│       ├── util.ts         # 日志 + 共享状态（SharedState）
+│       ├── env.ts          # 引导环境变量访问层（对象字面量快照）
+│       └── types.ts        # kernel 最小交互面（KernelLike 等，自研描述）
 ├── native-private/         # 闭源（gitignore）：stub 源码 / 验证脚本 / 工具 / 产物，见其 README
 │   ├── stub/               # stub-qqnt.cpp/.def（唯一长期维护源码）
 │   ├── verify/             # p0-*.mjs（当前有效验证脚本）
 │   ├── tools/              # compare-symbols.mjs / cleanup-native-private.ps1
 │   ├── build/              # QQNT-stub-full.dll + stub-test-env/（launcher 默认引用）
 │   └── _archive/           # 历史实验
-└── scripts/
-    └── build-runtime.mjs   # 复制 runtime/ → dist/runtime/（不再编译 C++）
 ```
+
+**构建（tsdown 双配置）**：`pnpm --filter @napuketto/loader build` →
+`dist/index.mjs` + `dist/index.d.mts`（对外 API，ESM）+ `dist/host/self-host.cjs`
+（引导运行时，CJS 单文件 bundle——rolldown 内联 host 依赖树，launcher spawn 直接执行）。
+旧 `runtime/`（手写 JS）与 `scripts/build-runtime.mjs`（复制脚本）已删除，
+构建收敛为单段 `tsdown`。
 
 ## 3. 与 kernel 的边界
 
-- `loader` 依赖 `@napuketto/kernel`（runtime/self-host.cjs → boot-bootstrap.js 里 import kernel 入口）。
+- `loader` 依赖 `@napuketto/kernel`（src/host/self-host.ts → bootstrap.ts 里动态 import kernel 入口）。
 - `kernel` **不依赖 loader**：kernel 只暴露「给定 NAPI exports 即可初始化」的纯函数（`createWrapper(exports)`）。
 - `apps/cli` 依赖两者：编排「定位 QQ → launchSelfHost → 等待登录 → 常驻」。
 
@@ -121,17 +127,18 @@ cli --self-host（或直接 node self-host.cjs）
   ├─ PATH 前置 stub QQNT.dll 目录 + QQ resources\app（launcher.launchSelfHost 装配）
   ├─ self-host.cjs：dlopen wrapper.node（stub 转发 napi_*/uv_* → node.exe，98 exports）
   ├─ NodeIO3MiscService.get() + addO3MiscListener  ← 🔑 激活事件分发（否则 getLoginList 挂起）
-  ├─ bootstrap(state) 完全复用（boot-bootstrap.js：kernel 装配 → 登录 → session → 冒烟 → 协议）
+  ├─ bootstrap(state) 完全复用（src/host/bootstrap.ts：kernel 装配 → 登录 → session → 冒烟 → 协议）
   └─ 常驻（协议服务在事件循环上）
 ```
 
 ### 9.2 文件
 
-- **`runtime/self-host.cjs`（新增）**：自建宿主入口（dlopen + O3MiscService 激活 + bootstrap）。
+- **`src/host/self-host.ts`**（2026-08-07 阶段 2 由 runtime/self-host.cjs TS 化）：自建宿主入口
+  （dlopen + O3MiscService 激活 + bootstrap）。
 - **`src/launcher.ts`**：`LaunchOptions.selfHost/stubDir/selfHostEntry` + `launchSelfHost()`
   （spawn 标准 node + PATH 前置 stub/resources\app）+ `ENV.SELF_HOST`。
 - **`apps/cli`**：`--self-host` / `--stub-dir` 选项透传到 `runSingleAccount`。
-- **boot-bootstrap.js**：自建宿主跳过 `collectCandidateSessions`（getMainSession 内部会先
+- **src/host/bootstrap.ts**：自建宿主跳过 `collectCandidateSessions`（getMainSession 内部会先
   `startupSession.start()`——与「先 init 后 start」顺序冲突，V9 实测）。
 
 ### 9.3 kernel 适配（自建宿主实测发现，2026-08-07）
@@ -159,7 +166,7 @@ $env:NAPUTO_NETWORK_ENTRY = "<network dist/index.mjs>"
 $env:NAPUTO_QUICK_UIN = "3567141148"   # 3054108135 账号风控勿用
 $env:NAPUTO_SELF_HOST = "1"
 $env:NAPUTO_SMOKE = "1"                # 冒烟收发自检
-node packages\loader\dist\runtime\self-host.cjs
+node packages\loader\dist\host\self-host.cjs
 ```
 
 ### 9.5 内存实测（下一步，P2-2 候选 A 验收）

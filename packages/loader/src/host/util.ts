@@ -1,0 +1,48 @@
+/**
+ * util.ts：引导公共工具（日志 + 共享状态）。
+ * 2026-08-07 阶段 2：由 runtime/boot-util.js TS 化（零语义改动）。
+ * 由 self-host.ts 及各拆分模块 import（CJS bundle，运行在自建宿主引导进程内）。
+ */
+import { appendFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { env } from "./env.js";
+
+/** boot 日志路径（NAPUTO_CFG_DIR 下，与 stub 验证日志同目录）。 */
+export const LOG_PATH = env.NAPUTO_CFG_DIR
+    ? join(env.NAPUTO_CFG_DIR, "napuketto-boot.log")
+    : join(tmpdir(), "napuketto-boot.log");
+
+/** 追加一行 boot 日志（失败静默，不阻塞引导）。 */
+export function log(msg: string): void {
+    try {
+        appendFileSync(LOG_PATH, `[${new Date().toISOString()}] ${msg}\n`);
+    } catch {
+        // ignore
+    }
+}
+
+/** 错误信息提取（保留 JS 原语义：message 存在用 message，否则用错误对象本身）。 */
+export function errMsg(e: unknown): string {
+    return `${(e as { message?: unknown } | null | undefined)?.message ?? e}`;
+}
+
+/** 共享状态（self-host.ts 入口创建，各拆分模块读写）。
+ *  - wrapperExports：dlopen 截获的 wrapper.node exports
+ *  - qqSession / qqLoginService：Proxy 捕获的 QQ 实例（V1 路线）
+ *  - bootstrapped：kernel 引导是否已启动（防重入） */
+export interface SharedState {
+    wrapperExports: Record<string, unknown> | null;
+    qqSession: unknown;
+    qqLoginService: unknown;
+    bootstrapped: boolean;
+}
+
+export function createState(): SharedState {
+    return {
+        wrapperExports: null,
+        qqSession: null,
+        qqLoginService: null,
+        bootstrapped: false,
+    };
+}

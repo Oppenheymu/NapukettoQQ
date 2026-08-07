@@ -7,11 +7,7 @@
     },
     "files": {
         "ignoreUnknown": false,
-        "includes": [
-            "**/src/**/*.{ts,tsx,mts,cts,js,mjs,cjs,jsx}",
-            "**/loader/runtime/**",
-            "**/loader/scripts/**"
-        ]
+        "includes": ["**/src/**/*.{ts,tsx,mts,cts,js,mjs,cjs,jsx}"]
     },
     "formatter": {
         "enabled": true,

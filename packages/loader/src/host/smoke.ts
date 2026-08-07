@@ -1,6 +1,6 @@
-"use strict";
 /**
- * boot-smoke.js：P2-1 收发消息冒烟自检（NAPUTO_SMOKE=1 触发，2026-08-06）。
+ * smoke.ts：P2-1 收发消息冒烟自检（NAPUTO_SMOKE=1 触发，2026-08-06）。
+ * 2026-08-07 阶段 2：由 runtime/boot-smoke.js TS 化（零语义改动）。
  *
  * 目的：业务层最后试金石——登录 + session 就绪后，真正用 kernel MsgBridge
  * （addKernelMsgListener）+ MsgApi（sendMsg）发/收一条消息，验证：
@@ -11,16 +11,25 @@
  * 目标 peer 由环境变量 NAPUTO_SMOKE_PEER 指定（格式：c2c:<uin> 或 group:<uin>），
  * 缺省发给自己的 uin（C2C 我的设备）。发送内容固定带时间戳，便于日志核对。
  *
- * 由 boot-bootstrap.js 在登录成功、session 就绪后调用（协议装配前——不依赖
+ * 由 bootstrap.ts 在登录成功、session 就绪后调用（协议装配前——不依赖
  * adapter/network，单独验证 kernel 业务链路）。
  */
-const { log } = require("./boot-util.js");
+
+import { env } from "./env.js";
+import type { CoreContextLike, KernelLike, LoginResultLike } from "./types.js";
+import { errMsg, log } from "./util.js";
 
 /** 冒烟测试默认等待（毫秒）。 */
 const SMOKE_SETTLE_MS = 5000;
 
+/** 冒烟目标（c2c / group）。 */
+export interface SmokeTarget {
+    kind: "c2c" | "group";
+    uin: string;
+}
+
 /** 解析冒烟目标：NAPUTO_SMOKE_PEER（c2c:<uin> / group:<uin>），缺省发给自己。 */
-function parseSmokeTarget(envPeer, selfUin) {
+export function parseSmokeTarget(envPeer: string | undefined, selfUin: string): SmokeTarget {
     if (!envPeer) {
         return { kind: "c2c", uin: selfUin };
     }
@@ -35,7 +44,12 @@ function parseSmokeTarget(envPeer, selfUin) {
 }
 
 /** uin → uid（c2c 目标用；group 直接拿群号作 peerUid）。 */
-async function resolvePeerUid(kernel, ctx, target, selfUid) {
+export async function resolvePeerUid(
+    kernel: KernelLike,
+    ctx: CoreContextLike,
+    target: SmokeTarget,
+    selfUid: string,
+): Promise<{ chatType: number; peerUid: string }> {
     const groupApi = new kernel.GroupApi(ctx.session);
     if (target.kind === "group") {
         return { chatType: kernel.ChatType.GROUP, peerUid: target.uin };
@@ -54,20 +68,21 @@ async function resolvePeerUid(kernel, ctx, target, selfUid) {
 
 /**
  * 执行冒烟自检：注册 MsgBridge → 订阅 onRecvMsg → 发一条消息 → 拉历史核对。
- * @param kernel kernel 模块（import 结果）
- * @param ctx CoreContext
- * @param loginResult 登录结果（uin/uid/nick）
  * @returns 是否全部通过（发送成功 + 收到事件 + 落库验证）
  */
-async function runSmokeTest(kernel, ctx, loginResult) {
+export async function runSmokeTest(
+    kernel: KernelLike,
+    ctx: CoreContextLike,
+    loginResult: LoginResultLike,
+): Promise<boolean> {
     const session = ctx.session;
     if (!session) {
         log("smoke: ❌ session 为空，跳过");
         return false;
     }
-    const target = parseSmokeTarget(process.env.NAPUTO_SMOKE_PEER, loginResult.uin);
+    const target = parseSmokeTarget(env.NAPUTO_SMOKE_PEER, loginResult.uin);
     log(
-        `smoke: 目标=${target.kind}:${target.uin}（peer env=${process.env.NAPUTO_SMOKE_PEER ?? "(缺省=自己)"}）`,
+        `smoke: 目标=${target.kind}:${target.uin}（peer env=${env.NAPUTO_SMOKE_PEER ?? "(缺省=自己)"}）`,
     );
 
     // ① 消息事件通道 + 桥（addKernelMsgListener 普通 JS 对象，NAPI 反射）
@@ -96,7 +111,7 @@ async function runSmokeTest(kernel, ctx, loginResult) {
                     receivedText = texts;
                 }
             } catch (e) {
-                log(`smoke: onRecvMsg 解析失败: ${e?.message ?? e}`);
+                log(`smoke: onRecvMsg 解析失败: ${errMsg(e)}`);
             }
             log(
                 `smoke: 📥 onRecvMsg 收到 #${received}（msgId=${msg.msgId ?? "?"} seq=${msg.msgSeq ?? "?"} text="${receivedText}"）`,
@@ -114,7 +129,7 @@ async function runSmokeTest(kernel, ctx, loginResult) {
         sentMsgId = msgId;
         log(`smoke: ✅ 发送成功 msgId=${msgId}（content="${content}"）`);
     } catch (e) {
-        log(`smoke: ❌ 发送失败: ${e?.message ?? e}`);
+        log(`smoke: ❌ 发送失败: ${errMsg(e)}`);
     }
 
     // 等消息回显（自己发的消息 QQ 会通过 onRecvMsg 回传；不依赖则靠落库验证兜底）
@@ -139,7 +154,7 @@ async function runSmokeTest(kernel, ctx, loginResult) {
             }
         }
     } catch (e) {
-        log(`smoke: 落库验证失败: ${e?.message ?? e}`);
+        log(`smoke: 落库验证失败: ${errMsg(e)}`);
     }
 
     // 收尾：注销监听（防重复回调）
@@ -147,7 +162,7 @@ async function runSmokeTest(kernel, ctx, loginResult) {
         bridge.unregister();
         log("smoke: ✅ MsgBridge 已注销");
     } catch (e) {
-        log(`smoke: 注销失败（忽略）: ${e?.message ?? e}`);
+        log(`smoke: 注销失败（忽略）: ${errMsg(e)}`);
     }
 
     const ok = sentMsgId !== "" && (received > 0 || landed);
@@ -156,5 +171,3 @@ async function runSmokeTest(kernel, ctx, loginResult) {
     );
     return ok;
 }
-
-module.exports = { runSmokeTest };

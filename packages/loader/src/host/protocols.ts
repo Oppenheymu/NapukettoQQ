@@ -1,34 +1,63 @@
-"use strict";
 /**
- * boot-protocols.js：协议装配（登录成功后）。
+ * protocols.ts：协议装配（登录成功后）。
+ * 2026-08-07 阶段 2：由 runtime/boot-protocols.js TS 化（零语义改动）。
  * 动态 import adapter/network 入口，装配 OB11 适配器。
  * 依赖 launcher 注入的 NAPUTO_ADAPTER_ENTRY / NAPUTO_NETWORK_ENTRY。
  */
-const fs = require("node:fs");
-const path = require("node:path");
-const { log } = require("./boot-util.js");
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { env } from "./env.js";
+import type { CoreContextLike, KernelLike, LoginResultLike } from "./types.js";
+import { errMsg, log } from "./util.js";
+
+/** network 包最小面（@napuketto/network，动态 import）。 */
+interface NetworkModuleLike {
+    EventBroadcaster: new () => unknown;
+}
+
+/** adapter 包 onebot11 子路径最小面（@napuketto/adapter，动态 import）。 */
+interface Onebot11ModuleLike {
+    ob11ConfigSchema: { parse(input: unknown): unknown };
+    NapukettoOneBot11Adapter: new (
+        options: Record<string, unknown>,
+    ) => {
+        start(): Promise<unknown>;
+    };
+}
+
+/** adapter 包 core 子路径最小面（ProtocolConfig 框架）。 */
+interface AdapterCoreModuleLike {
+    ProtocolConfig: new (options: Record<string, unknown>) => unknown;
+}
 
 /**
  * 登录成功后装配协议：kernel 各 Api + network 广播 + OB11 适配器。
- * @param kernel kernel 模块（import 结果）
- * @param ctx CoreContext（kernel.NapukettoCore.create 后）
- * @param loginResult 登录结果（uin/uid/nick）
  */
-async function startProtocols(kernel, ctx, loginResult) {
-    const adapterEntry = process.env.NAPUTO_ADAPTER_ENTRY;
-    const networkEntry = process.env.NAPUTO_NETWORK_ENTRY;
+export async function startProtocols(
+    kernel: KernelLike,
+    ctx: CoreContextLike,
+    loginResult: LoginResultLike,
+): Promise<void> {
+    const adapterEntry = env.NAPUTO_ADAPTER_ENTRY;
+    const networkEntry = env.NAPUTO_NETWORK_ENTRY;
     if (!adapterEntry || !networkEntry) {
         log("bootstrap: NAPUTO_ADAPTER_ENTRY/NETWORK_ENTRY 未设置，跳过协议装配");
         return;
     }
     try {
-        const network = await import(`file://${networkEntry.replace(/\\/g, "/")}`);
+        const network = (await import(
+            `file://${networkEntry.replace(/\\/g, "/")}`
+        )) as unknown as NetworkModuleLike;
         // adapter 子路径导出（ADR-014）：onebot11 面（ob11ConfigSchema/
         // NapukettoOneBot11Adapter）走 ./onebot11，core 框架（ProtocolConfig）走 ./core。
         const onebot11Entry = adapterEntry.replace(/index\.mjs$/, "onebot11/index.mjs");
         const coreEntry = adapterEntry.replace(/index\.mjs$/, "core/index.mjs");
-        const adapter = await import(`file://${onebot11Entry.replace(/\\/g, "/")}`);
-        const adapterCore = await import(`file://${coreEntry.replace(/\\/g, "/")}`);
+        const adapter = (await import(
+            `file://${onebot11Entry.replace(/\\/g, "/")}`
+        )) as unknown as Onebot11ModuleLike;
+        const adapterCore = (await import(
+            `file://${coreEntry.replace(/\\/g, "/")}`
+        )) as unknown as AdapterCoreModuleLike;
         const session = ctx.session;
         if (!session) {
             log("bootstrap: session 为空，无法装配协议");
@@ -60,7 +89,7 @@ async function startProtocols(kernel, ctx, loginResult) {
                     console.log(`[napuketto] ${line}`);
                     log(line);
                 } catch (e) {
-                    const line2 = `收到消息（解析失败: ${e?.message ?? e}）`;
+                    const line2 = `收到消息（解析失败: ${errMsg(e)}）`;
                     console.log(`[napuketto] 📩 ${line2}`);
                     log(line2);
                 }
@@ -93,18 +122,16 @@ async function startProtocols(kernel, ctx, loginResult) {
         // 读 [onebot11] 段，zod 校验后作 seed。路径优先级：NAPKETTO_CONFIG（launcher 注入）>
         // 装配链自身探测（kernel.resolveConfigPath）> NAPUTO_CFG_DIR 兜底（旧行为兼容）。
         // （ConfigBase seed 模式：load() 直接用内存值，不再读写独立协议文件）
-        let ob11Section = {};
-        const cfgFile =
-            process.env.NAPKETTO_CONFIG ||
-            path.join(process.env.NAPUTO_CFG_DIR || ".", "napuketto.toml");
+        let ob11Section: Record<string, unknown> = {};
+        const cfgFile = env.NAPKETTO_CONFIG || join(env.NAPUTO_CFG_DIR || ".", "napuketto.toml");
         try {
-            const raw = fs.readFileSync(cfgFile, "utf8");
+            const raw = readFileSync(cfgFile, "utf8");
             const parsed = kernel.parseToml(raw);
-            if (parsed && typeof parsed.onebot11 === "object" && parsed.onebot11 !== null) {
-                ob11Section = parsed.onebot11;
+            if (parsed && typeof parsed["onebot11"] === "object" && parsed["onebot11"] !== null) {
+                ob11Section = parsed["onebot11"] as Record<string, unknown>;
             }
         } catch (e) {
-            log(`bootstrap: 全局配置读取失败（用默认 ob11 配置）: ${e?.message ?? e}`);
+            log(`bootstrap: 全局配置读取失败（用默认 ob11 配置）: ${errMsg(e)}`);
         }
         const ob11Config = new adapterCore.ProtocolConfig({
             path: cfgFile,
@@ -128,17 +155,17 @@ async function startProtocols(kernel, ctx, loginResult) {
             // P2-16：api/ 聚合（self + system 回调合并为一个对象）
             self: { uin: loginResult.uin, nickname: loginResult.nick },
             system: {
-                appVersion: process.env.NAPUTO_QQ_VERSION || "unknown",
+                appVersion: env.NAPUTO_QQ_VERSION || "unknown",
                 // clean_cache：清理 kernel 数据目录缓存（PathWrapper.clearCache）
                 cleanCache: async () => {
                     const paths = new kernel.PathWrapper({
-                        dataRoot: process.env.NAPKETTO_DATA,
+                        dataRoot: env.NAPKETTO_DATA,
                         account: loginResult.uin,
                     });
                     paths.clearCache();
                 },
                 // download_file：缓存目录
-                cacheDir: path.join(process.env.NAPUTO_CFG_DIR || ".", "cache"),
+                cacheDir: join(env.NAPUTO_CFG_DIR || ".", "cache"),
                 // bot_exit / set_restart：进程控制（退出 QQ 主进程由 launcher 观察）
                 exit: async () => {
                     log("bootstrap: bot_exit 触发，退出 QQ 主进程");
@@ -155,8 +182,6 @@ async function startProtocols(kernel, ctx, loginResult) {
         await ob11.start();
         log("bootstrap: onebot11 adapter started");
     } catch (e) {
-        log(`bootstrap: 协议装配失败: ${e?.message ?? e}`);
+        log(`bootstrap: 协议装配失败: ${errMsg(e)}`);
     }
 }
-
-module.exports = { startProtocols };
