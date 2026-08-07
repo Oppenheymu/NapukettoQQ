@@ -25,19 +25,54 @@
 - **单一 TOML 配置** — 项目根 `napuketto.toml`，配置与数据目录解耦
 - **全自研 · MIT** — 零引入 NapCat 代码，许可证纯净
 
-## 包结构（Monorepo）
 
-pnpm workspace 分层，依赖方向只允许向下：
+
+## 架构与包结构（Monorepo）
+
+```
+┌────────────────────────────────────────────────────────────┐
+│  应用 / CLI 层                                                │
+│   cli ───────────── 启动编排 · 多账号 supervisor · 配置管理    │
+│   create-napukettoqq ─ 一键部署（生成项目骨架 + 安装依赖）      │
+└───────────────────────────┬────────────────────────────────┘
+                            │ 依赖
+┌───────────────────────────▼────────────────────────────────┐
+│  协议 / 传输层                                                │
+│   adapter ────── OneBot 11 协议适配（core 框架 + 60+ 动作）   │
+│   network ────── 协议无关传输（HTTP / WebSocket / 广播）      │
+│   media ──────── 媒体转码（silk / ffmpeg）                    │
+└───────────────────────────┬────────────────────────────────┘
+                            │ 依赖
+┌───────────────────────────▼────────────────────────────────┐
+│  核心 / 宿主层                                                │
+│   kernel ─────── 唯一原生交互层（wrapper · 登录 · API · 缓存）│
+│   loader ─────── 自建宿主引导（stub QQNT.dll 转发宿主符号）    │
+└────────────────────────────────────────────────────────────┘
+```
+
+> **依赖方向严格单向向下**：上层可依赖下层，下层不得反向依赖上层（kernel 无内部依赖，仅 pino + smol-toml）。
+
+### 应用与 CLI
 
 | 包 | 职责 |
 |---|---|
-| `@napuketto/kernel` | 唯一原生交互层：wrapper 引导、登录、session 激活、业务 API、事件通道、缓存 |
-| `@napuketto/adapter` | 协议适配器：core 框架 + onebot11（60+ 动作） |
-| `@napuketto/network` | 协议无关传输层（HTTP / WebSocket / 广播） |
-| `@napuketto/media` | 媒体转码（silk / ffmpeg） |
-| `@napuketto/loader` | 自建宿主引导（stub QQNT.dll 转发宿主符号） |
-| `@napuketto/cli` | 启动编排、多账号 supervisor、配置管理 |
-| `create-napukettoqq` | 一键部署包：生成项目骨架并自动安装依赖 |
+| [@napuketto/cli](./apps/cli) | 启动编排、多账号 supervisor、配置管理 |
+| [create-napukettoqq](./apps/create-napukettoqq) | 一键部署：生成项目骨架并自动安装依赖 |
+
+### 协议与传输
+
+| 包 | 职责 |
+|---|---|
+| [@napuketto/adapter](./packages/adapter) | 协议适配器：core 框架 + onebot11（60+ 动作） |
+| [@napuketto/network](./packages/network) | 协议无关传输层（HTTP / WebSocket / 广播） |
+| [@napuketto/media](./packages/media) | 媒体转码（silk / ffmpeg） |
+
+### 核心与宿主
+
+| 包 | 职责 |
+|---|---|
+| [@napuketto/kernel](./packages/kernel) | 唯一原生交互层：wrapper 引导、登录、session 激活、业务 API、事件通道、缓存 |
+| [@napuketto/loader](./packages/loader) | 自建宿主引导（stub QQNT.dll 转发宿主符号） |
 
 ## 快速开始
 
