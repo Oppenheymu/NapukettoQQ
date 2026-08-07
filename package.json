@@ -21,6 +21,7 @@
     "keywords": [],
     "author": "睦 <oppenheymu@gmail.com>",
     "license": "MIT",
+    "private": true,
     "devEngines": {
         "packageManager": {
             "name": "pnpm",
