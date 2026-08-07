@@ -14,11 +14,12 @@ export interface LoginTargetRef {
     targetUin: string | undefined;
 }
 
-/** 打印可用快速登录账号 + 返回目标账号（启动横幅）。 */
+/** 打印可用快速登录账号 + 返回目标账号（启动横幅）。forcedUin（cli `-q` / NAPUTO_QUICK_UIN）优先。 */
 export async function pickLoginAccount(
     kernel: KernelLike,
     ctx: CoreContextLike,
     loginResultRef: LoginTargetRef,
+    forcedUin?: string,
 ): Promise<void> {
     try {
         const accounts = await kernel.listLoginAccounts(ctx);
@@ -29,10 +30,16 @@ export async function pickLoginAccount(
                 const marker = acct.isQuickLogin ? "（默认）" : "";
                 log(`${idx + 1}. ${acct.uin} ${nick}${marker}`);
             });
-            const target = accounts.find((a) => a.isQuickLogin) ?? accounts[0];
+            // forcedUin（cli -q）优先；否则自动选第一个可快速登录账号
+            const target =
+                forcedUin !== undefined
+                    ? (accounts.find((a) => a.uin === forcedUin) ?? undefined)
+                    : (accounts.find((a) => a.isQuickLogin) ?? accounts[0]);
             if (target !== undefined) {
                 loginResultRef.targetUin = target.uin;
                 log(`正在快速登录 ${target.uin}`);
+            } else if (forcedUin !== undefined) {
+                log(`指定账号 ${forcedUin} 不在登录列表（登录流程将报错）`);
             }
         } else {
             // boot 阶段尚未 loginService.initConfig（core.login 内部才做），

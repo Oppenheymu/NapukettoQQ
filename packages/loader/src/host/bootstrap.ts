@@ -111,11 +111,11 @@ export async function bootstrap(state: SharedState): Promise<void> {
                 let loginResult: LoginResultLike | null = null;
                 if (typeof core.login === "function") {
                     // 打印可用快速登录账号（启动横幅）
-                    const ref: LoginTargetRef = { targetUin: undefined };
-                    await pickLoginAccount(kernel, ctx, ref);
-                    // NAPUTO_QUICK_UIN 强制指定快速登录账号（实验/自建宿主验证用，
-                    // 防止自动选中风控账号 3054108135 导致挂起——HANDOVER-V10 环境事实）。
+                    // NAPUTO_QUICK_UIN 强制指定快速登录账号（cli `-q <uin>` 透传，2026-08-07；
+                    // 也用于实验/自建宿主验证，防止自动选中风控账号 3054108135 导致挂起）。
                     const forcedUin = env.NAPUTO_QUICK_UIN;
+                    const ref: LoginTargetRef = { targetUin: undefined };
+                    await pickLoginAccount(kernel, ctx, ref, forcedUin);
                     const loginOpts: Record<string, unknown> = {
                         appid: Appid,
                         initTimeoutMs: 20000,

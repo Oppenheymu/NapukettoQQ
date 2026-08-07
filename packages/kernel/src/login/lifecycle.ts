@@ -255,19 +255,26 @@ export async function quickLogin(
     if (items.length === 0) {
         throw kernelError("无历史登录账号", "NOT_LOGIN");
     }
-    let target = items.find((i) => i.isQuickLogin);
-    if (target === undefined) {
-        const [first] = items;
-        target = first;
-    }
+    // 目标账号选择（2026-08-07 修复：显式 uin 不在列表时**报错**而非静默 fallback——
+    // 之前会退到第一个可快速登录账号，导致 `-q <uin>` 实际登成别的号）。
+    let target: LoginAccountInfo | undefined;
     if (opts.uin !== undefined) {
-        const byUin = items.find((i) => i.uin === opts.uin);
-        if (byUin !== undefined) {
-            target = byUin;
+        target = items.find((i) => i.uin === opts.uin);
+        if (target === undefined) {
+            const available = items.map((i) => i.uin).join("、");
+            throw kernelError(`账号 ${opts.uin} 不在登录列表（可用：${available}）`, "NOT_FOUND");
+        }
+    } else {
+        // 未指定 uin：优先第一个可快速登录账号，否则列表第一个
+        target = items.find((i) => i.isQuickLogin);
+        if (target === undefined) {
+            const [first] = items;
+            target = first;
         }
     }
     if (target === undefined) {
-        throw kernelError(`账号 ${opts.uin ?? ""} 不在登录列表`, "NOT_FOUND");
+        // items 非空时不可达（类型收窄兜底：noUncheckedIndexedAccess 下 items[0] 可能 undefined）
+        throw kernelError("无可用登录账号", "NOT_LOGIN");
     }
 
     // 网络重试循环：1006511（网络未就绪）→ 等 MSF 连接 → 重试（最多 NETWORK_RETRY_MAX 次）

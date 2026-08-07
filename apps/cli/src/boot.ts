@@ -98,6 +98,7 @@ export async function runSingleAccount(opts: BootOptions = {}): Promise<void> {
         configPath: resolveConfigPath({ dataRoot }),
         selfHost: true,
         stdio: ["inherit", "pipe", "pipe"],
+        ...(opts.qq !== undefined ? { quickUin: opts.qq } : {}),
         ...(stubDir !== undefined ? { stubDir } : {}),
     });
 

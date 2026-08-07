@@ -33,6 +33,8 @@ export interface LaunchOptions {
     selfHost?: boolean;
     /** stub QQNT.dll 目录（PATH 前置，转发 napi_*、uv_* 符号到 node.exe）。 */
     stubDir?: string;
+    /** 强制指定快速登录账号（注入 NAPUTO_QUICK_UIN；cli `-q <uin>` 透传，2026-08-07）。 */
+    quickUin?: string;
     /** 自建宿主入口（默认 dist/host/self-host.cjs）。 */
     selfHostEntry?: string;
     /**
@@ -146,6 +148,9 @@ function buildLaunchEnv(options: LaunchOptions): Record<string, string> {
     if (options.configPath !== undefined) {
         env[ENV.CONFIG_PATH] = resolve(options.configPath);
     }
+    if (options.quickUin !== undefined) {
+        env[ENV.QUICK_UIN] = options.quickUin;
+    }
     return env;
 }
 
@@ -166,4 +171,6 @@ export const ENV = {
     NETWORK_ENTRY: "NAPUTO_NETWORK_ENTRY",
     /** 全局配置文件路径（项目根 napuketto.toml，boot-protocols 读取）。 */
     CONFIG_PATH: "NAPKETTO_CONFIG",
+    /** 强制指定快速登录账号（cli `-q <uin>` 透传，bootstrap 登录用）。 */
+    QUICK_UIN: "NAPUTO_QUICK_UIN",
 } as const;
