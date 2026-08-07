@@ -75,18 +75,33 @@ export interface AssembleOb11TransportsOptions {
     broadcaster: EventBroadcaster;
     /** 请求分发（adapter.handleRequest，HTTP/WS 共用）。 */
     handleRequest: (req: unknown, respond: (res: unknown) => void) => void;
+    /** 机器人自身 uin（koishi 等第三方按 X-Self-ID 识别连接归属）。 */
+    selfUin: string;
+}
+
+/**
+ * OneBot 客户端标识头：koishi 的 onebot 适配器按
+ * x-client-role === "Universal" 与 x-self-id 校验 WS 连接（NapCat 同款头），
+ * 缺失会被 close(1008) 拒绝——连接虽握手成功但应用层不认。
+ */
+function oneBotClientHeaders(selfUin: string): Record<string, string> {
+    return {
+        "X-Self-ID": selfUin,
+        "x-client-role": "Universal",
+        "User-Agent": "OneBot/11",
+    };
 }
 
 /** 按配置装配 OB11 传输。 */
 export function assembleOb11Transports(opts: AssembleOb11TransportsOptions): Ob11TransportSet {
-    const { config, broadcaster, handleRequest } = opts;
+    const { config, broadcaster, handleRequest, selfUin } = opts;
     const servers: TransportAdapter[] = [];
     const transports: TransportAdapter[] = [];
 
     assembleHttpServers(config, handleRequest, servers);
     assembleWsServers(config, handleRequest, servers);
-    assembleHttpPosts(config, transports);
-    assembleWsReverses(config, handleRequest, transports);
+    assembleHttpPosts(config, selfUin, transports);
+    assembleWsReverses(config, selfUin, handleRequest, transports);
 
     // 注册事件上报传输（正向 client：HTTP 上报 / WS 正向）
     for (const t of transports) {
@@ -160,16 +175,22 @@ function assembleWsServers(
 }
 
 /** 装配 HTTP 正向上报 client 列表（fire-and-forget）。 */
-function assembleHttpPosts(config: OB11Config, transports: TransportAdapter[]): void {
+function assembleHttpPosts(
+    config: OB11Config,
+    selfUin: string,
+    transports: TransportAdapter[],
+): void {
     for (const item of config.httpPostUrls) {
         if (item.enabled && item.url !== undefined) {
-            const headers = authorizeHeader(item.token ?? config.token);
+            // koishi HTTP 上报同样按 x-self-id 识别 bot（缺失返回 403）
+            const headers = {
+                "x-self-id": selfUin,
+                ...(authorizeHeader(item.token ?? config.token) ?? {}),
+            };
             const options: ConstructorParameters<typeof HttpClient>[0] = {
                 url: item.url,
+                headers,
             };
-            if (headers !== undefined) {
-                options.headers = headers;
-            }
             if (item.timeoutMs !== undefined) {
                 options.timeoutMs = item.timeoutMs;
             }
@@ -181,12 +202,18 @@ function assembleHttpPosts(config: OB11Config, transports: TransportAdapter[]): 
 /** 装配正向 WS client 列表（双向，心跳 + 重连 + 证书选项）。 */
 function assembleWsReverses(
     config: OB11Config,
+    selfUin: string,
     handleRequest: (req: unknown, respond: (res: unknown) => void) => void,
     transports: TransportAdapter[],
 ): void {
     for (const item of config.wsReverseUrls) {
         if (item.enabled && item.url !== undefined) {
-            const headers = authorizeHeader(item.token ?? config.token);
+            // koishi 等第三方按 X-Self-ID / x-client-role 识别并校验连接（NapCat 同款头），
+            // 与 authorization 合并后作为握手请求头
+            const headers = {
+                ...oneBotClientHeaders(selfUin),
+                ...(authorizeHeader(item.token ?? config.token) ?? {}),
+            };
             // 独立构造重连策略：maxAttempts 条件附加（exactOptionalPropertyTypes）
             const reconnect: { enabled: boolean; delayMs: number; maxAttempts?: number } = {
                 enabled: true,
@@ -197,13 +224,11 @@ function assembleWsReverses(
             }
             const options: ConstructorParameters<typeof WsClient>[0] = {
                 url: item.url,
+                headers,
                 heartbeat: { intervalMs: item.heartbeatInterval },
                 reconnect,
                 rejectUnauthorized: item.rejectUnauthorized,
             };
-            if (headers !== undefined) {
-                options.headers = headers;
-            }
             const client = new WsClient(options);
             client.onRequest = handleRequest;
             transports.push(client);

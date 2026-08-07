@@ -88,6 +88,7 @@ export class NapukettoOneBot11Adapter extends BaseProtocolAdapter<OB11Config> {
             this.transports = assembleOb11Transports({
                 config,
                 broadcaster,
+                selfUin: this.selfUin,
                 handleRequest: (req, respond) => {
                     this.handleRequest(req, respond).catch((err: unknown) => {
                         let message = String(err);
