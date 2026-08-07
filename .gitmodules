@@ -1,0 +1,3 @@
+[submodule "packages/loader/native-private"]
+	path = packages/loader/native-private
+	url = https://github.com/Oppenheymu/NapukettoQQ-Native.git

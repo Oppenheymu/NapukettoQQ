@@ -69,7 +69,7 @@ export function launchSelfHost(options: LaunchOptions): LaunchResult {
     }
 
     // stub QQNT.dll 校验（自建宿主必需：PATH 前置 stub 转发 napi_* 到 node.exe，
-    // 否则 wrapper.node dlopen 失败）。默认 loader 包内闭源 native-private/stub-test-env，
+    // 否则 wrapper.node dlopen 失败）。默认 loader 包内闭源 submodule native-private/stub-test-env，
     // 缺失时提示 --stub-dir / NAPUTO_STUB_DIR 指定。
     const stub = options.stubDir ?? defaultStubDir();
     if (!existsSync(join(stub, "QQNT.dll"))) {

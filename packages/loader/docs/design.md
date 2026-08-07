@@ -48,7 +48,7 @@ packages/loader/
 │       ├── util.ts         # 日志 + 共享状态（SharedState）
 │       ├── env.ts          # 引导环境变量访问层（对象字面量快照）
 │       └── types.ts        # kernel 最小交互面（KernelLike 等，自研描述）
-├── native-private/         # 闭源（gitignore）：stub 源码 / 验证脚本 / 工具 / 产物，见其 README
+├── native-private/         # 闭源（Git Submodule，private：Oppenheymu/NapukettoQQ-Native）：stub 源码 / 验证脚本 / 工具 / 产物，见其 README
 │   ├── stub/               # stub-qqnt.cpp/.def（唯一长期维护源码）
 │   ├── verify/             # p0-*.mjs（当前有效验证脚本）
 │   ├── tools/              # compare-symbols.mjs / cleanup-native-private.ps1
