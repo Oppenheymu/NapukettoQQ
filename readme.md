@@ -1,6 +1,6 @@
 # NapukettoQQ
 
-基于 QQ NT 原生模块 `wrapper.node` 的机器人框架，对外提供 **OneBot 11** 协议接口（Satori 规划中，OneBot 12 已放弃）。
+基于 QQ NT 原生模块 `wrapper.node` 的机器人框架，对外提供 **OneBot 11** 协议接口
 
 - **MIT** · 全自研 · 零引入 NapCat 代码
 - pnpm monorepo · TypeScript · tsdown · biome
@@ -20,20 +20,15 @@
 ## 快速开始
 
 ```bash
-pnpm install
-pnpm check
-pnpm build
-pnpm start                    # 启动 → 自动登录（快速/扫码）→ OneBot 11 服务
-pnpm start -- -q <QQ号>       # 快速登录指定账号
-pnpm start -- config init     # 生成配置文件
+# 一键创建机器人项目（pnpm create / npm create / yarn create 均可）
+pnpm create napukettoqq my-bot
+cd my-bot
+pnpm start        # 启动 → 自动登录（快速/扫码）→ OneBot 11 服务
 ```
 
-配置为项目根单一 TOML：`napuketto.toml`（`config init` 或首次启动自动生成，示例见 `napuketto.toml.example`）。数据（账号/日志/缓存）按数据根组织：`--data-dir` > `NAPKETTO_DATA` > `~/.napuketto`。
-
-> **闭源子模块**：自建宿主需要 stub QQNT.dll（`packages/loader/native`，private 仓库）。clone 后执行 `git submodule update --init --recursive`，或启动时用 `--stub-dir` 指定。
+生成的用户项目自带 `napuketto.toml`（`dataDir` 按当前用户主目录写好），配置在项目根单一 TOML 管理，数据按数据根组织：`--data-dir` > `NAPKETTO_DATA` > `~/.napuketto`。
 
 ## 文档
 
 - `docs/STATUS.md` — 现状与关键决策点
 - `docs/architecture.md` — 架构书
-- `AGENTS.md` — 工程指南
