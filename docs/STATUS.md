@@ -1,8 +1,8 @@
 # NapukettoQQ 项目现状（2026-08-07 深夜更新：🎉 session READY 突破，路线 A 可救）
 
-> **新对话开场指引**：先读本文件（现状 + 关键决策点）→ `AGENTS.md`（工程指南 + 红线）→ `docs/architecture.md`（架构书）→ 对应包 `docs/design.md`。需要了解路线演进背景时再读 `docs/DECISIONS.md`。
+> **新对话开场指引**：先读本文件（现状 + 关键决策点）→ `AGENTS.md`（工程指南 + 红线）→ `docs/architecture.md`（架构书）→ **`docs/HANDOVER-V10.md`（最终交接）** → 对应包 `docs/design.md`。需要细节时再读 HANDOVER-V6~V9。需要了解路线演进背景时再读 `docs/DECISIONS.md`。
 >
-> **git 状态**：HEAD = `d9a790e`（归档提交）之后为文档整理提交，工作区干净。`docs/` 已纳入 git 跟踪（此前仅 HANDOVER.md 被跟踪）。
+> **git 状态**：HEAD = `ea07ab4`（kernel 落地提交），工作区干净。`docs/` 已纳入 git 跟踪。
 
 ---
 
