@@ -69,18 +69,19 @@ apps/cli/src/
 ├── index.ts           # commander 参数解析 + 生命周期编排入口
 ├── supervisor.ts      # 多账号子进程编排（启动/重启/信号转发，P6）
 ├── boot.ts            # 单账号启动序列：定位 QQ → 自建宿主拉起 → 常驻
-├── logger.ts          # cli 进程级 pino logger（复用 kernel createLogger，service=cli）
+├── logger.ts          # cli 进程级 pino logger（复用 kernel createLogger，name=cli）
 └── config-cmds.ts     # napuketto config init/list/apply
 ```
 
 ## 3.1 日志规范（2026-08-07 统一改造）
 
 **全部 cli 输出走 pino 结构化日志**（ADR-007，复用 kernel `createLogger`，格式与 kernel
-子进程完全一致：`[时间戳 +0800] LEVEL (pid): (service): 消息` + 元数据，可按行解析做自动化运维）：
+子进程完全一致：`[时间戳 +0800] LEVEL (name/pid): 消息` + 元数据，可按行解析做自动化运维）：
 
 - `logger.ts` 提供模块级单例（每进程一份，ADR-015 推论）：console pretty、不写文件
-  （文件日志由 kernel 装配负责：`<数据根>/logs/napuketto.log`）、`base: { service: "cli" }`
-  标注来源、级别经 `NAPKETTO_LOG_LEVEL` 环境变量覆盖（缺省 info）。
+  （文件日志由 kernel 装配负责：`<数据根>/logs/napuketto.log`）、`base: { name: "cli" }`
+  标注来源（pino 保留字段 name，pino-pretty 渲染为 `(cli/pid)` 元数据头，不占属性行）、
+  级别经 `NAPKETTO_LOG_LEVEL` 环境变量覆盖（缺省 info）。
 - **console 渲染（2026-08-07 定稿）**：pino-pretty 原生多行展开（`singleLine: false`），
   带属性日志（安装信息/数据目录）逐字段上色高亮；高频业务日志由 loader 在调用点直接传
   纯字符串（`logger.info("[群聊] 晓筱晨 → 晓工坊: 测试")`）→ 天然单行防刷屏。

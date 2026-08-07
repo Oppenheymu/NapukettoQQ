@@ -213,10 +213,11 @@ satori:   canonical → 元素（type/attrs，img/audio 等重命名）
   **console 渲染（2026-08-07 定稿：原生 pino-pretty，不手写格式化函数）**：
   - `singleLine: false`（默认值，显式声明）——带属性的日志（如安装信息/数据目录）**多行展开**，
     key/value 由 pino-pretty 自带颜色高亮（key 紫 / 字符串青），不丢视觉；
-  - 高频业务日志（收到消息）**调用点直接传纯字符串** `logger.info("[群聊] 晓筱晨 → 晓工坊: 测试")`，
+  - 高频业务日志（收到消息）**调用点直接传纯字符串**（`logger.info("收到 ⬅ 群聊 [晓基地(978515338)] [晓筱晨(3071303571)]： 不知道啊")`），
     不传对象 → 天然单行渲染，防刷屏；
-  - `err`/`error` 键交给 prettifyError 展示完整堆栈；`service` 字段标识来源
-    （cli / kernel / loader，经 `base` 注入），console 显示为属性行，文件 JSON 保留可过滤。
+  - `err`/`error` 键交给 prettifyError 展示完整堆栈；`base.name` 用 pino 保留字段
+    （logger name）标识来源（cli / kernel / loader），pino-pretty 渲染为 `(name/pid)`
+    元数据头，不占属性行，文件 JSON 保留 name 字段可过滤。
   - ⚠️ 教训（2026-08-07）：曾用 `messageFormat` 返回带换行的拼串实现多行/单行分流——
     拼串丢失 pino-pretty 逐字段上色（全变单色），且 `\n` 缩进与下一行前缀碰撞，
     **已回退**。多行/单行的控制权交还 pino-pretty 原生渲染。

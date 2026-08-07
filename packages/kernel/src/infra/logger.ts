@@ -35,7 +35,8 @@ export interface LoggerOptions {
     console?: boolean;
     /** 文件日志路径；不传则不写文件（父目录自动创建）。 */
     file?: string;
-    /** 附加基础字段（如 `{ service: 'kernel' }`），自动保留 pid。 */
+    /** 附加基础字段（如 `{ name: 'kernel' }`），自动保留 pid；name 用 pino 保留字段
+     * （logger name），pino-pretty 渲染为 `(name/pid)` 元数据头。 */
     base?: Record<string, unknown>;
     /** 追加的敏感字段路径（默认内置 token/票据等，见 DEFAULT_REDACT_PATHS）。 */
     redact?: string[];

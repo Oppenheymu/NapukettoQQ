@@ -2,11 +2,12 @@
  * cli 进程级 logger（ADR-007 日志规范，2026-08-07 统一改造）。
  *
  * 复用 kernel `createLogger`（console pretty + redact，格式与 kernel 子进程完全一致：
- * `[时间] LEVEL (pid): 消息` + 缩进元数据）。只打 console 不写文件——文件日志由
+ * `[时间] LEVEL (name/pid): 消息` + 缩进元数据）。只打 console 不写文件——文件日志由
  * kernel 装配（NapukettoCore.create → `<数据根>/logs/napuketto.log`）负责。
  *
- * 无全局单例（ADR-015 推论）：cli 每进程一份，模块级单例即可；`base.service`
- * 标注日志来源（cli），文件/JSON 侧可按 service 过滤。
+ * 无全局单例（ADR-015 推论）：cli 每进程一份，模块级单例即可；`base.name` 用 pino
+ * 保留字段 name（logger name）标注来源——pino-pretty 自动渲染为 `(cli/pid)` 元数据头，
+ * 不占额外属性行，文件/JSON 侧仍保留 name 字段可过滤。
  *
  * 级别：`NAPKETTO_LOG_LEVEL` 环境变量可覆盖（缺省 info，非法值忽略）。
  */
@@ -46,7 +47,7 @@ export interface CliLogger {
     fatal(obj: unknown, msg?: string): void;
 }
 
-/** cli 进程日志（结构化字段含 service=cli 与 pid，自动化运维可按行解析）。 */
+/** cli 进程日志（name 渲染为 (cli/pid) 元数据头，文件 JSON 保留 name 字段可过滤）。 */
 export const logger: CliLogger = createLogger({
     level: resolveLevel(),
     console: true,

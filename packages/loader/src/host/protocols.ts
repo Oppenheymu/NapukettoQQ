@@ -39,8 +39,9 @@ export async function startProtocols(
     loginResult: LoginResultLike,
 ): Promise<void> {
     // 引导进程日志（ADR-007 统一规范：console pretty，格式与 kernel 一致；
-    // service=loader 标注来源；文件日志由 kernel 装配负责）
-    const logger = kernel.createLogger?.({ console: true, base: { service: "loader" } });
+    // base.name 用 pino 保留字段（logger name），pino-pretty 渲染为 (loader/pid)；
+    // 文件日志由 kernel 装配负责）
+    const logger = kernel.createLogger?.({ console: true, base: { name: "loader" } });
     const adapterEntry = env.NAPUTO_ADAPTER_ENTRY;
     const networkEntry = env.NAPUTO_NETWORK_ENTRY;
     if (!adapterEntry || !networkEntry) {
@@ -74,6 +75,7 @@ export async function startProtocols(
         // 独立订阅，不干扰 adapter 的 OB11 翻译广播；解析纯函数无副作用（ADR-008）。
         // 高频业务日志：调用点直接传**纯字符串**（不传对象），pino-pretty 天然单行渲染，
         // 避免对象属性多行展开刷屏；boot 文件日志保留（引导期诊断）。
+        // 格式（2026-08-07 用户定稿）：`收到 ⬅ 群聊 [会话名(会话uin)] [发送者名(发送者uin)]： 内容`
         // onRecvMsg 回调参数为消息数组（2026-08-07 运行时实证）——遍历逐条打印。
         channel.on("Msg/onRecvMsg", (msgs) => {
             const list = Array.isArray(msgs) ? msgs : [msgs];
@@ -88,16 +90,18 @@ export async function startProtocols(
                         .map((el) => el.text)
                         .join("");
                     const kind = msg.chatType === kernel.ChatType.GROUP ? "群聊" : "私聊";
-                    const sender = msg.sendNickName || msg.senderUin || "未知";
-                    const peer = msg.peerName || msg.peerUin || "未知";
+                    const peerName = msg.peerName || msg.peerUin || "未知";
+                    const peerUin = String(msg.peerUin ?? "");
+                    const senderName = msg.sendNickName || msg.senderUin || "未知";
+                    const senderUin = String(msg.senderUin ?? "");
                     const content = texts === "" ? "[空消息/媒体]" : texts;
-                    const line = `📩 收到${kind}消息 来自=${sender} 会话=${peer}（${msg.peerUin ?? ""}）: ${texts}`;
+                    const line = `收到 ⬅ ${kind} [${peerName}(${peerUin})] [${senderName}(${senderUin})]： ${content}`;
                     log(line);
-                    logger?.info(`[${kind}] ${sender} → ${peer}: ${content}`);
+                    logger?.info(line);
                 } catch (e) {
                     const line2 = `收到消息（解析失败: ${errMsg(e)}）`;
                     log(line2);
-                    logger?.warn(`收到消息（解析失败: ${errMsg(e)}）`);
+                    logger?.warn(line2);
                 }
             }
         });

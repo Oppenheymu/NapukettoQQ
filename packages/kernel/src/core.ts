@@ -81,8 +81,9 @@ export class NapukettoCore {
             level: opts.logLevel ?? "info",
             console: opts.consoleLog ?? true,
             file: opts.logFile ?? paths.file("logs", "napuketto.log"),
-            // service 标识来源（cli/loader 同款），messageFormat 前缀显示
-            base: { service: "kernel" },
+            // base.name 用 pino 保留字段（logger name）：pino-pretty 渲染为 (kernel/pid)
+            // 元数据头，不占属性行；cli/loader 同款，三来源可区分
+            base: { name: "kernel" },
         });
         return new NapukettoCore(createCoreContext({ logger, paths }));
     }

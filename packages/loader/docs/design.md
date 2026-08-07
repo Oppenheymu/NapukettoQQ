@@ -74,10 +74,10 @@ packages/loader/
 - **编译期不依赖 kernel 包**（host 是 CJS bundle，kernel 是 ESM-only，静态 import 会失败）——
   kernel 交互一律走 `KernelLike` 最小接口（`types.ts`，自研描述，运行时实证）。
 - **日志同理**：`KernelLike.createLogger`（kernel `createLogger` 导出）动态创建
-  引导进程自己的 pino 实例（console pretty + `base: { service: "loader" }`），
-  与 kernel/cli 日志格式一致（原生 pino-pretty 渲染）。
+  引导进程自己的 pino 实例（console pretty + `base: { name: "loader" }`，pino 保留字段
+  name → pino-pretty 渲染 `(loader/pid)` 元数据头），与 kernel/cli 日志格式一致。
   `LoggerLike` 为 pino 方法的最小面（info/warn/error）。
-- `protocols.ts` 消息日志**调用点直接传纯字符串**（`logger.info("[群聊] 晓筱晨 → 晓工坊: 测试")`，
+- `protocols.ts` 消息日志**调用点直接传纯字符串**（`logger.info("收到 ⬅ 群聊 [晓基地(978515338)] [晓筱晨(3071303571)]： 不知道啊")`，
   不传对象）→ pino-pretty 天然单行渲染防刷屏；boot 文件日志
   （`util.ts` `log()` → `<数据根>/napuketto-boot.log`）保留作引导期诊断。
 
