@@ -140,16 +140,29 @@ async function askStartNow(yes: boolean): Promise<boolean> {
     return ok;
 }
 
+/** 拼命令行时最小转义：含空白/引号则加双引号包裹（参数均为内部字面量，仅兜底）。 */
+function quoteShellArg(arg: string): string {
+    return /[\s"]/.test(arg) ? `"${arg.replace(/"/g, '\\"')}"` : arg;
+}
+
 /** 前台执行命令（stdio 继承，用户可见进度/交互），返回退出码。 */
 function runInteractive(bin: string, args: string[], cwd: string): Promise<number> {
     return new Promise((resolve) => {
-        // Windows 下 .cmd shim 需 shell:true（CreateProcess 不能直接执行 .cmd）
-        const child = spawn(bin, args, {
-            cwd,
-            stdio: "inherit",
-            windowsHide: false,
-            shell: process.platform === "win32",
-        });
+        // Windows 下 .cmd shim 不能直接 CreateProcess 执行，需 shell:true 经 cmd.exe；
+        // 但 Node ≥22 对「shell:true + args 数组」触发 DEP0190 告警（args 仅简单拼接、不转义），
+        // 因此 shell 模式下把命令拼成单个字符串传给 spawn 以规避告警；
+        // POSIX 下无 shell，保持 bin + args。
+        const shell = process.platform === "win32";
+        const child = spawn(
+            shell ? [bin, ...args.map(quoteShellArg)].join(" ") : bin,
+            shell ? [] : args,
+            {
+                cwd,
+                stdio: "inherit",
+                windowsHide: false,
+                shell,
+            },
+        );
         child.on("exit", (code) => {
             resolve(code ?? 0);
         });
