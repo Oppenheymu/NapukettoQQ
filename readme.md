@@ -1,41 +1,88 @@
 # NapukettoQQ
 
-基于 QQ NT 原生模块 `wrapper.node` 的机器人框架，对外提供 **OneBot 11** 协议接口
+<p align="center">
+  <b>基于 QQ NT 原生模块的高性能机器人框架</b>
+  <br/>
+  直接加载 <code>wrapper.node</code>，自建宿主运行，对外提供 OneBot 11 协议接口
+</p>
 
-- pnpm monorepo · TypeScript · tsdown · biome
-- **自建宿主**：标准 node + stub QQNT.dll 直接加载 `wrapper.node`，不拉起 QQ、不注入
+<p align="center">
+  <a href="https://opensource.org/licenses/MIT"><img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-yellow.svg"></a>
+  <img alt="Node.js" src="https://img.shields.io/badge/Node.js-20%2B-339933?logo=node.js&logoColor=white">
+  <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white">
+  <img alt="PNPM" src="https://img.shields.io/badge/PNPM-11-F69220?logo=pnpm&logoColor=white">
+  <img alt="OneBot" src="https://img.shields.io/badge/OneBot-11-0084ff">
+  <img alt="Monorepo" src="https://img.shields.io/badge/Monorepo-pnpm%20workspace-00B4A0">
+</p>
 
-## 包结构
+## ✨ 核心特性
+
+- **原生 API 直接交互** — 直接调用 `wrapper.node` 官方 NAPI 导出接口（`getMsgService` 等），不经过代理层，稳定高效
+- **高性能自建宿主** — 标准 Node 进程 + stub QQNT.dll 符号转发，直接加载原生模块，内存占用目标百兆级，远低于注入方案
+- **无侵入运行** — 不拉起 QQ 客户端、不注入任何进程、零磁盘篡改；仅运行期内存加载，升级/卸载零残留
+- **OneBot 11 深度兼容** — 60+ 动作覆盖消息/群/好友/系统管理，HTTP / WebSocket / 反向 WebSocket 多实例
+- **多账号 Supervisor** — 单进程编排多账号，崩溃自动重启
+- **单一 TOML 配置** — 项目根 `napuketto.toml`，配置与数据目录解耦
+- **全自研 · MIT** — 零引入 NapCat 代码，许可证纯净
+
+## 📦 包结构（Monorepo）
+
+pnpm workspace 分层，依赖方向只允许向下：
 
 | 包 | 职责 |
 |---|---|
-| `@napuketto/kernel` | 唯一原生交互层：wrapper引导、登录、session激活、业务API、事件通道、缓存 |
+| `@napuketto/kernel` | 唯一原生交互层：wrapper 引导、登录、session 激活、业务 API、事件通道、缓存 |
 | `@napuketto/adapter` | 协议适配器：core 框架 + onebot11（60+ 动作） |
-| `@napuketto/network` | 传输层（HTTP / WebSocket / 广播） |
+| `@napuketto/network` | 协议无关传输层（HTTP / WebSocket / 广播） |
 | `@napuketto/media` | 媒体转码（silk / ffmpeg） |
-| `@napuketto/loader` | 自建宿主引导 |
+| `@napuketto/loader` | 自建宿主引导（stub QQNT.dll 转发宿主符号） |
 | `@napuketto/cli` | 启动编排、多账号 supervisor、配置管理 |
-| `create-napukettoqq` | 一键部署包 |
+| `create-napukettoqq` | 一键部署包：生成项目骨架并自动安装依赖 |
 
-## 快速开始
+## 🚀 快速开始
 
-# 一键部署框架
+### 1. 一键部署
+
 ```bash
 pnpm create napukettoqq
 ```
 
-# 启动 → 登录
+按提示输入部署目录名（回车取默认 `NapukettoQQ`），自动生成项目骨架（`package.json` / `napuketto.toml` / `.gitignore`）并安装依赖。
+
+### 2. 启动登录
+
 ```bash
 pnpm start
 ```
 
-生成的用户项目自带 `napuketto.toml`（`dataDir` 按当前用户主目录写好），配置在项目根单一 TOML 管理，数据按数据根组织：`--data-dir` > `NAPKETTO_DATA` > `~/.napuketto`。
+自动登录（有历史登录记录走快速登录，否则二维码扫码），就绪后 OneBot 11 服务开始监听。
 
-## 文档
+### 3. 配置
 
-- `docs/STATUS.md` — 现状与关键决策点
-- `docs/architecture.md` — 架构书
+配置为项目根单一 TOML：`napuketto.toml`（首次启动自动生成，示例见 `napuketto.toml.example`）：
 
-## 许可证
+```toml
+# 数据根目录：账号/日志/缓存/QQ 数据存放位置
+dataDir = "C:\\Users\\<用户名>\\.napuketto"
 
-MIT
+[onebot11]
+# 鉴权 token（HTTP/WS 连接必须携带；留空 = 不鉴权）
+token = ""
+# 心跳 meta 事件间隔（毫秒）；0 = 关闭
+heartbeatInterval = 3000
+```
+
+数据根解析优先级：`--data-dir <dir>` > 环境变量 `NAPKETTO_DATA` > `~/.napuketto`。
+
+## 📚 文档
+
+| 文档 | 说明 |
+|---|---|
+| [`docs/STATUS.md`](docs/STATUS.md) | 项目现状与关键决策点 |
+| [`docs/architecture.md`](docs/architecture.md) | 架构书：分层 / ADR / 路线图 / 红线 |
+| [`docs/DECISIONS.md`](docs/DECISIONS.md) | 决策史：V1→V10 路线演进归档 |
+| `packages/*/docs/design.md` | 各包设计文档 |
+
+## 📄 许可证
+
+[MIT](LICENSE)
