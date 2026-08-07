@@ -42,15 +42,15 @@ export interface LaunchOptions {
     vehicleDll?: string;
     /** 无头模式（阻断 UI/GPU，boot.cjs 侧实现，默认 false）。 */
     headless?: boolean;
-    /** 路线 B（utilityProcess Worker 模式，2026-08-06 定稿默认开启）。 */
+    /** 路线 B（utilityProcess Worker 模式，2026-08-06；⚠️ 2026-08-07 用户拍板淘汰，显式开启才用）。 */
     routeB?: boolean;
-    /** 自建宿主（路线 A，NAPUTO_SELF_HOST）：标准 node + stub QQNT.dll 直接引导，不拉起 QQ（2026-08-07）。 */
+    /** 自建宿主（路线 A，NAPUTO_SELF_HOST，2026-08-07 定稿唯一路线）：标准 node + stub QQNT.dll 直接引导，不拉起 QQ。 */
     selfHost?: boolean;
     /** stub QQNT.dll 目录（自建宿主 PATH 前置，转发 napi_*、uv_* 符号到 node.exe）。 */
     stubDir?: string;
     /** 自建宿主入口（默认 dist/native/runtime/self-host.cjs）。 */
     selfHostEntry?: string;
-    /** BootMain.exe 路径（默认 dist/native/NapukettoBootMain.exe）。 */
+    /** BootMain.exe 路径（默认 dist/native/NapukettoBootMain.exe，路线 B 历史遗留）。 */
     bootMain?: string;
 }
 
@@ -63,7 +63,10 @@ export interface LaunchResult {
     hookDllPath: string;
 }
 
-/** 启动 QQ 并注入。 */
+/** 启动 QQ 并注入。
+ * ⚠️ 2026-08-07 用户拍板：路线 B（拉起 QQ + 注入）淘汰，只保留自建宿主
+ *（launchSelfHost）。本函数保留仅作历史回退，cli 默认不再调用。
+ */
 export function launchQqWithLoader(options: LaunchOptions): LaunchResult {
     const nativeDirPath = nativeDir();
     const bootMainPath = options.bootMain ?? join(nativeDirPath, "NapukettoBootMain.exe");
@@ -110,16 +113,24 @@ export function launchSelfHost(options: LaunchOptions): LaunchResult {
         );
     }
 
+    // stub QQNT.dll 校验（自建宿主必需：PATH 前置 stub 转发 napi_* 到 node.exe，
+    // 否则 wrapper.node dlopen 失败）。默认 loader 包内闭源 native-private/stub-test-env，
+    // 缺失时提示 --stub-dir / NAPUTO_STUB_DIR 指定。
+    const stub = options.stubDir ?? defaultStubDir();
+    if (!existsSync(join(stub, "QQNT.dll"))) {
+        throw new Error(
+            `stub QQNT.dll 未找到: ${stub}（自建宿主必需：stub 转发 QQNT.dll 符号到 node.exe；` +
+                "请用 --stub-dir 或环境变量 NAPUTO_STUB_DIR 指定 stub 目录）",
+        );
+    }
+
     const env = buildLaunchEnv(options, selfHostPath, "");
     // PATH 前置 stub 目录（stub QQNT.dll 转发）+ QQ resources\app（wrapper.node 依赖 DLL）
-    const pathEntries = [
-        options.stubDir,
-        dirname(options.qq.wrapperPath),
-        process.env["PATH"] ?? "",
-    ]
+    const pathEntries = [stub, dirname(options.qq.wrapperPath), process.env["PATH"] ?? ""]
         .filter((p) => p !== undefined && p !== "")
         .join(";");
     env["PATH"] = pathEntries;
+    env[ENV.STUB_DIR] = stub;
 
     // 标准 node 直接跑入口（不拉起 QQ，不注入）
     const child = spawn(process.execPath, [selfHostPath], {
@@ -129,6 +140,14 @@ export function launchSelfHost(options: LaunchOptions): LaunchResult {
     });
 
     return { child, bootJsPath: selfHostPath, hookDllPath: "" };
+}
+
+/**
+ * 默认 stub QQNT.dll 目录（loader 包内闭源 native-private/stub-test-env，开发机默认）。
+ * src 与 native-private 同层，构建后 dist 与 native-private 同层——`../native-private` 恒正确。
+ */
+export function defaultStubDir(): string {
+    return join(__dirname, "..", "native-private", "stub-test-env");
 }
 
 /** 装配注入环境变量（含路线 B / 无头 / vehicle 注入策略）。 */
@@ -167,11 +186,11 @@ function buildLaunchEnv(
     }
     // 路线 B（默认开启，2026-08-06 定稿）：boot.cjs fork utilityProcess Worker →
     // worker 内 dlopen wrapper.node + kernel 引导（QQ env 原生，P0-B 纯 Node 崩溃点消失）。
-    // 自建宿主（路线 A）优先：不设路线 B——self-host.cjs 直接 dlopen（stub 转发），
-    // 无 QQ 环境也不需要 fork worker。
+    // ⚠️ 2026-08-07 用户拍板：路线 B 淘汰，只保留自建宿主——routeB 改为显式开启
+    //（launchQqWithLoader 调用方传 routeB: true 才设置），自建宿主不误设 ROUTE_B。
     if (options.selfHost === true) {
         env[ENV.SELF_HOST] = "1";
-    } else if (options.routeB !== false) {
+    } else if (options.routeB === true) {
         env[ENV.ROUTE_B] = "1";
     }
     if (options.headless === true) {
@@ -213,6 +232,8 @@ export const ENV = {
     ROUTE_B: "NAPUTO_ROUTE_B",
     /** 自建宿主（路线 A）：标准 node + stub QQNT.dll 引导（self-host.cjs 分支）。 */
     SELF_HOST: "NAPUTO_SELF_HOST",
+    /** stub QQNT.dll 目录（launchSelfHost 注入，self-host.cjs 诊断用）。 */
+    STUB_DIR: "NAPUTO_STUB_DIR",
     /** adapter 包入口（boot.cjs 协议装配用）。 */
     ADAPTER_ENTRY: "NAPUTO_ADAPTER_ENTRY",
     /** network 包入口（boot.cjs 协议装配用）。 */

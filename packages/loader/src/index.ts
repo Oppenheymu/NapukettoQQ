@@ -10,7 +10,7 @@
  */
 
 export type { LaunchOptions, LaunchResult } from "./launcher.js";
-export { ENV, launchQqWithLoader, launchSelfHost } from "./launcher.js";
+export { defaultStubDir, ENV, launchQqWithLoader, launchSelfHost } from "./launcher.js";
 export type { QqInstallInfo } from "./locate-qq.js";
 export { locateQqPath, resolveQqInstall } from "./locate-qq.js";
 export type { StageResult } from "./stage.js";

@@ -60,9 +60,12 @@ apps/cli             kernel + adapter + loader
 
 | 路线 | 形态 | 内存 | 状态 |
 |---|---|---|---|
-| **A. 自建宿主复活**（主攻） | 标准 Node + QQNT.dll + Base_PowerMessageWindow 窗口类（napi2native 自研等价） | ~100MB | 待验证实验（P2-2 第一优先） |
-| **B. 注入 utilityProcess Worker**（兜底，NapCat 同款） | 注入 QQ 主进程 → worker dlopen | 300MB+（无头后待实测） | ✅ 全链路验证通过（P0-A/B → P2-1） |
+| **A. 自建宿主（唯一路线，2026-08-07 用户拍板）** | 标准 Node + stub QQNT.dll 转发（napi_* → node.exe）+ O3MiscService 激活 | ~100MB（待实测） | ✅ 登录 + session READY + 冒烟收发 + onebot11 装配，cli 默认（pnpm start） |
+| **B. 注入 utilityProcess Worker**（NapCat 同款） | 注入 QQ 主进程 → worker dlopen | 300MB+ | ❌ **已淘汰（2026-08-07 用户拍板）**，launchQqWithLoader 仅历史回退 |
 | C. V1/V2 主进程注入 | — | 1.01GB | ❌ 已排除 |
+
+> **2026-08-07 用户拍板**：只保留自建宿主实现方式（NapCat 同款纯 Node 模式），路线 B
+>（拉起 QQ + 注入）淘汰。cli `pnpm start` 默认走自建宿主（`launchSelfHost` → self-host.cjs）。
 
 ### 4.1 混合模式总览（两路线共用）
 
@@ -79,10 +82,10 @@ apps/cli             kernel + adapter + loader
 └─────────────────────────────────────────────────────────────┘
 ```
 
-### 4.2 路线 B 链路（已验证，兜底基线）
+### 4.2 路线 B 链路（❌ 已淘汰，2026-08-07 用户拍板；仅历史回退）
 
 ```
-pnpm start（apps/cli）
+pnpm start（apps/cli）——2026-08-07 起 cli 默认走自建宿主（4.3），不再走本链路
   └─ NapukettoBootMain.exe 拉起 QQ.exe + 注入 NapukettoWinBootHook.dll（自研 V1 资产）
   └─ hookdll IAT hook → 引导 boot.cjs（NAPUTO_ROUTE_B=1 分支）
   └─ boot.cjs fork utilityProcess Worker（继承 QQ env）→ route-b-worker.cjs

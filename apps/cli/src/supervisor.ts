@@ -1,8 +1,9 @@
 /**
- * supervisor：多账号子进程编排（P6，2026-08-05）
+ * supervisor：多账号子进程编排（P6，2026-08-05；2026-08-07 自建宿主唯一）
  *
  * 多账号走多进程（ADR-015）：每账号一个独立子进程（node <入口> -q <uin>
- * --data-dir <dataRoot>，复用单账号 runSingleAccount 零改动），本模块作为父进程：
+ * --data-dir <dataRoot> [--stub-dir <dir>]，复用单账号 runSingleAccount 零改动），
+ * 本模块作为父进程：
  *   - 拉起：主配置 accounts（supervisor 子命令）或显式 -q 列表
  *   - 守护：账号异常退出且 autoRestart → 延迟重启
  *   - 信号转发：SIGINT/SIGTERM → 停止全部子进程 → 父进程退出
@@ -24,6 +25,8 @@ export interface SupervisorOptions {
     dataDir?: string;
     /** 显式账号列表（-q A -q B），优先于主配置 accounts。 */
     qqs?: string[];
+    /** stub QQNT.dll 目录（自建宿主 PATH 前置，透传给子进程 --stub-dir）。 */
+    stubDir?: string;
 }
 
 /** 解析账号列表（显式 -q 优先，否则主配置 accounts 过滤启用项）。 */
@@ -48,6 +51,7 @@ interface SupervisorCtx {
     entry: string;
     restartDelayMs: number;
     autoRestart: boolean;
+    stubDir?: string;
     children: Map<string, ChildProcess>;
     isStopping: () => boolean;
 }
@@ -58,7 +62,11 @@ function startAccount(ctx: SupervisorCtx, acct: CliAccountConfig): void {
         return;
     }
     process.stdout.write(`[napuketto] 启动账号 ${acct.qq}...\n`);
-    const child = spawn(process.execPath, [ctx.entry, "-q", acct.qq, "--data-dir", ctx.dataRoot], {
+    const args = [ctx.entry, "-q", acct.qq, "--data-dir", ctx.dataRoot];
+    if (ctx.stubDir !== undefined) {
+        args.push("--stub-dir", ctx.stubDir);
+    }
+    const child = spawn(process.execPath, args, {
         stdio: "inherit",
     });
     ctx.children.set(acct.qq, child);
@@ -115,6 +123,7 @@ export async function runSupervisor(opts: SupervisorOptions = {}): Promise<void>
         entry,
         restartDelayMs,
         autoRestart: config.autoRestart,
+        ...(opts.stubDir !== undefined ? { stubDir: opts.stubDir } : {}),
         children,
         isStopping: () => stopping,
     };

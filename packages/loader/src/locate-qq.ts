@@ -41,6 +41,8 @@ function findQqViaCommonPaths(): string | null {
         "C:/Program Files/Tencent/QQNT/QQ.exe",
         "C:/Program Files (x86)/Tencent/QQNT/QQ.exe",
         join(localAppData, "Programs", "Tencent", "QQNT", "QQ.exe"),
+        // 开发机目录（2026-08-07 环境事实：QQ 9.9.33-51802 在 C:\Dev\QQBot-Dev\QQNT）
+        "C:/Dev/QQBot-Dev/QQNT/QQ.exe",
     ];
     for (const p of candidates) {
         if (existsSync(p)) {

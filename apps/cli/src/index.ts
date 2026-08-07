@@ -1,10 +1,12 @@
 /**
- * @napuketto/cli 入口（P2-6 + P6，2026-08-05）
+ * @napuketto/cli 入口（P2-6 + P6，2026-08-05；2026-08-07 用户拍板：只保留自建宿主）
  *
  * commander 参数解析：
- *   - 单账号：-q <uin> → runSingleAccount（定位 QQ + 拉起注入 + 常驻）
+ *   - 单账号：-q <uin> → runSingleAccount（自建宿主：标准 node + stub QQNT.dll，不拉起 QQ）
  *   - 多账号：-q A -q B 或 supervisor 子命令 → runSupervisor（子进程编排）
  *   - config 子命令：init / list / apply（主配置管理）
+ *
+ * 路线 B（拉起 QQ + 注入）已淘汰（2026-08-07 用户拍板），仅 launchQqWithLoader 历史回退。
  */
 
 import process from "node:process";
@@ -108,7 +110,7 @@ function registerSupervisorCommand(program: Command): void {
 
 /** 单账号启动分支（-q 单值；构造 bootOptions 后走 runSingleAccount）。 */
 async function runSingleAccountBranch(
-    opts: { dataDir?: string; qqPath?: string; selfHost?: boolean; stubDir?: string },
+    opts: { dataDir?: string; qqPath?: string; stubDir?: string },
     qqs: string[],
 ): Promise<void> {
     const [only] = qqs;
@@ -119,7 +121,6 @@ async function runSingleAccountBranch(
         qq?: string;
         dataDir?: string;
         qqPath?: string;
-        selfHost?: boolean;
         stubDir?: string;
     } = { qq: only };
     if (opts.dataDir !== undefined) {
@@ -128,37 +129,30 @@ async function runSingleAccountBranch(
     if (opts.qqPath !== undefined) {
         bootOptions.qqPath = opts.qqPath;
     }
-    if (opts.selfHost === true) {
-        bootOptions.selfHost = true;
-    }
     if (opts.stubDir !== undefined) {
         bootOptions.stubDir = opts.stubDir;
     }
     await runSingleAccount(bootOptions);
 }
 
-/** 无 -q 时：读全局配置 accounts → 有则 supervisor 拉起；无则单账号启动（boot.cjs 自动快速登录/QR）。 */
-async function autoStart(opts: {
-    dataDir?: string;
-    selfHost?: boolean;
-    stubDir?: string;
-}): Promise<void> {
+/** 无 -q 时：读全局配置 accounts → 有则 supervisor 拉起；无则单账号启动（自建宿主自动快速登录/QR）。 */
+async function autoStart(opts: { dataDir?: string; stubDir?: string }): Promise<void> {
     try {
         const dataRoot = resolveDataRoot(opts.dataDir);
         const config = await loadCliConfig(dataRoot);
         if (config.accounts.length > 0) {
-            await runSupervisor(withDataDir(opts.dataDir));
+            await runSupervisor({
+                ...(opts.dataDir !== undefined ? { dataDir: opts.dataDir } : {}),
+                ...(opts.stubDir !== undefined ? { stubDir: opts.stubDir } : {}),
+            });
             return;
         }
     } catch {
         // 配置读取失败忽略，直接单账号启动
     }
-    const bootOptions: { dataDir?: string; selfHost?: boolean; stubDir?: string } = {};
+    const bootOptions: { dataDir?: string; stubDir?: string } = {};
     if (opts.dataDir !== undefined) {
         bootOptions.dataDir = opts.dataDir;
-    }
-    if (opts.selfHost === true) {
-        bootOptions.selfHost = true;
     }
     if (opts.stubDir !== undefined) {
         bootOptions.stubDir = opts.stubDir;
@@ -170,13 +164,7 @@ async function autoStart(opts: {
 /** 注册主命令 action（-q 单账号 / 多 -q supervisor / 无 -q 自动读配置或单账号启动）。 */
 function registerMainAction(program: Command): void {
     program.action(
-        async (opts: {
-            qq?: string[];
-            dataDir?: string;
-            qqPath?: string;
-            selfHost?: boolean;
-            stubDir?: string;
-        }) => {
+        async (opts: { qq?: string[]; dataDir?: string; qqPath?: string; stubDir?: string }) => {
             const qqs = opts.qq ?? [];
             if (qqs.length === 0) {
                 await autoStart(opts);
@@ -186,9 +174,12 @@ function registerMainAction(program: Command): void {
                 if (qqs.length === 1) {
                     await runSingleAccountBranch(opts, qqs);
                 } else {
-                    const supOpts: { dataDir?: string; qqs: string[] } = { qqs };
+                    const supOpts: { dataDir?: string; qqs: string[]; stubDir?: string } = { qqs };
                     if (opts.dataDir !== undefined) {
                         supOpts.dataDir = opts.dataDir;
+                    }
+                    if (opts.stubDir !== undefined) {
+                        supOpts.stubDir = opts.stubDir;
                     }
                     await runSupervisor(supOpts);
                 }
@@ -219,8 +210,10 @@ function main(): void {
         )
         .option("-d, --data-dir <dir>", "数据根目录（缺省 ~/.napuketto）")
         .option("--qq-path <path>", "QQ 安装路径（联调覆盖）")
-        .option("--self-host", "自建宿主（路线 A：标准 node + stub QQNT.dll，不拉起 QQ）")
-        .option("--stub-dir <dir>", "stub QQNT.dll 目录（--self-host 时 PATH 前置）");
+        .option(
+            "--stub-dir <dir>",
+            "stub QQNT.dll 目录（自建宿主 PATH 前置，缺省 loader/native-private/stub-test-env）",
+        );
 
     registerConfigCommands(program);
     registerSupervisorCommand(program);

@@ -1,17 +1,18 @@
 /**
- * cli boot：单账号启动序列（P2-6）
+ * cli boot：单账号启动序列（2026-08-07 用户拍板：只保留自建宿主）
  *
- * locate QQ → 解析各包 dist 入口 → launchQqWithLoader（BootMain 拉起 QQ + 注入）
- * → 常驻等待 QQ 退出（信号转发由父进程/系统处理）。
+ * locate QQ（取版本/wrapper 路径）→ 解析各包 dist 入口 → launchSelfHost
+ * （标准 node + stub QQNT.dll 直接 dlopen，不拉起 QQ / 不注入）→ 常驻。
  *
- * 不写业务逻辑：kernel 装配 + 登录 + 协议装配全部在 QQ 主进程内的 boot.cjs 完成。
+ * 不写业务逻辑：kernel 装配 + 登录 + 协议装配全部在 self-host.cjs → boot-bootstrap.js 完成。
+ * 路线 B（拉起 QQ + 注入）已淘汰（launchQqWithLoader 仅历史回退，cli 不再调用）。
  */
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { resolveDataRoot } from "@napuketto/kernel";
 import {
-    launchQqWithLoader,
+    defaultStubDir,
     launchSelfHost,
     type QqInstallInfo,
     resolveQqInstall,
@@ -25,9 +26,7 @@ export interface BootOptions {
     dataDir?: string;
     /** 覆盖 QQ 安装路径（联调）。 */
     qqPath?: string;
-    /** 自建宿主（路线 A，2026-08-07）：标准 node + stub QQNT.dll，不拉起 QQ。 */
-    selfHost?: boolean;
-    /** stub QQNT.dll 目录（--self-host 时 PATH 前置，转发 napi_* → node.exe）。 */
+    /** stub QQNT.dll 目录（缺省 loader 包内闭源 native-private/stub-test-env）。 */
     stubDir?: string;
 }
 
@@ -37,7 +36,7 @@ async function packageEntry(pkg: string): Promise<string> {
     return fileURLToPath(url);
 }
 
-/** 启动单个 QQ 账号（注入 + 常驻）。 */
+/** 启动单个账号（自建宿主 + 常驻）。 */
 export async function runSingleAccount(opts: BootOptions = {}): Promise<void> {
     const dataRoot = resolveDataRoot(opts.dataDir);
     const qq: QqInstallInfo = resolveQqInstall(opts.qqPath);
@@ -47,41 +46,29 @@ export async function runSingleAccount(opts: BootOptions = {}): Promise<void> {
     const adapterEntry = await packageEntry("@napuketto/adapter");
     const networkEntry = await packageEntry("@napuketto/network");
 
+    const stubDir = opts.stubDir ?? process.env["NAPUTO_STUB_DIR"] ?? defaultStubDir();
+
     process.stdout.write(
         `[napuketto] QQ: ${qq.version} (${qq.qqPath})\n` +
             `[napuketto] 数据目录: ${cfgDir}\n` +
-            `[napuketto] ${opts.selfHost === true ? "自建宿主引导（标准 node + stub QQNT.dll）..." : "拉起 QQ 并注入 hook..."}\n`,
+            `[napuketto] 自建宿主引导（标准 node + stub QQNT.dll）...\n`,
     );
 
-    // 路线选择（2026-08-07 产品化）：自建宿主（标准 node 直接 dlopen，百兆级目标）
-    // vs 路线 B（拉起 QQ + 注入 worker，兜底基线）。
-    const { child } =
-        opts.selfHost === true
-            ? launchSelfHost({
-                  qq,
-                  kernelEntry,
-                  adapterEntry,
-                  networkEntry,
-                  cfgDir,
-                  selfHost: true,
-                  ...(opts.stubDir !== undefined ? { stubDir: opts.stubDir } : {}),
-              })
-            : launchQqWithLoader({
-                  qq,
-                  kernelEntry,
-                  adapterEntry,
-                  networkEntry,
-                  cfgDir,
-                  // 默认无头（V2）：载具激活 cpp_impl 后主进程不再依赖渲染进程 UI，
-                  // 登录走主进程 NAPI 快速登录 / QR（二维码写文件）。QQ 界面不再弹出。
-                  headless: true,
-              });
+    // 唯一启动路径：自建宿主（2026-08-07 用户拍板，路线 B 淘汰）
+    const { child } = launchSelfHost({
+        qq,
+        kernelEntry,
+        adapterEntry,
+        networkEntry,
+        cfgDir,
+        selfHost: true,
+        ...(stubDir !== undefined ? { stubDir } : {}),
+    });
 
-    // 常驻：等待进程退出
-    const who = opts.selfHost === true ? "自建宿主" : "QQ";
+    // 常驻：等待自建宿主进程退出
     await new Promise<void>((resolve) => {
         child.on("exit", (code) => {
-            process.stdout.write(`[napuketto] ${who} 进程退出 code=${code}\n`);
+            process.stdout.write(`[napuketto] 自建宿主进程退出 code=${code}\n`);
             resolve();
         });
         child.on("error", (err) => {

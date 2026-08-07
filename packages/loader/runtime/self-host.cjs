@@ -27,6 +27,7 @@ const { log, createState } = require("./boot-util.js");
 const state = createState();
 
 log(`[self-host] 启动 @ ${new Date().toISOString()} pid=${process.pid} node=${process.version} type=${process.type ?? "(标准 node)"}`);
+log(`[self-host] stub 目录: ${process.env.NAPUTO_STUB_DIR ?? "(PATH 前置，未记录)"}`);
 
 const wrapperPath = process.env.NAPUTO_WRAPPER_PATH;
 if (!wrapperPath) {
