@@ -90,6 +90,9 @@ export async function runSingleAccount(opts: BootOptions = {}): Promise<void> {
         adapterEntry,
         networkEntry,
         cfgDir,
+        // 子进程 cwd 指向数据根：QQ 原生层 fallback 落盘（guild1.db 等）
+        // 落在专门的数据目录，不污染项目根（实测 08-07）。
+        cwd: dataRoot,
         configPath: resolveConfigPath({ dataRoot }),
         selfHost: true,
         stdio: ["inherit", "pipe", "pipe"],

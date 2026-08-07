@@ -36,6 +36,14 @@ export interface LaunchOptions {
     /** 自建宿主入口（默认 dist/host/self-host.cjs）。 */
     selfHostEntry?: string;
     /**
+     * 子进程工作目录（缺省继承父进程 cwd）。
+     *
+     * ⚠️ 必须指向数据根（~/.napuketto）：QQ 原生层在账号上下文就绪前会
+     * fallback 到进程 cwd 落盘（如频道库 guild1.db），不指定则污染调用方
+     * 目录（实测写入项目根，guild1.db 08-07）。cli 传 dataRoot 根治。
+     */
+    cwd?: string;
+    /**
      * 子进程 stdio（默认 "inherit"）。cli 传 ["inherit","pipe","pipe"] 并接管
      * 子进程 stdout/stderr：逐行过滤 wrapper 原生噪音（MMKV 刷屏、Node 符号
      * 查找失败警告），其余转发——原生 printf 直写 fd 的字节无法从 JS 层拦截。
@@ -88,7 +96,14 @@ export function launchSelfHost(options: LaunchOptions): LaunchResult {
     env[ENV.STUB_DIR] = stub;
 
     // 标准 node 直接跑入口（不拉起 QQ，不注入）
+    // cwd 显式指向数据根（cli 传入）：QQ 原生层 fallback 落盘（guild1.db 等）
+    // 不再污染项目根目录（实测 08-07，GPro 模块初始化早于账号上下文）。
+    if (options.cwd !== undefined) {
+        mkdirSync(options.cwd, { recursive: true });
+    }
     const child = spawn(process.execPath, [selfHostPath], {
+        // exactOptionalPropertyTypes：未传 cwd 时不显式写入 undefined（继承父进程）
+        ...(options.cwd !== undefined ? { cwd: options.cwd } : {}),
         env,
         stdio: options.stdio ?? "inherit",
         windowsHide: false,
