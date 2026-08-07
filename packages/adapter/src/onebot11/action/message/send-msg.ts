@@ -13,7 +13,7 @@ import { type CanonicalElement, ChatType, kernelError, type Peer } from "@napuke
 import { z } from "zod";
 import { BaseAction } from "../../../core/index.js";
 import type { OneBotApi } from "../../api/one-bot-api.js";
-import { cqMessageToCanonical, segmentsToCanonical } from "../../helper/index.js";
+import { applySendContext, cqMessageToCanonical, segmentsToCanonical } from "../../helper/index.js";
 import type { OB11MessageSegment } from "../../types/index.js";
 import { ob11ErrorCodeMap } from "../error-map.js";
 
@@ -61,6 +61,26 @@ export async function sendOb11Message(
     } else {
         canonical = cqMessageToCanonical(payload.message);
     }
+    // P2-19 发送方向 ID 转换：at.qq 是 uin → uid（一次批量 uinToUid）；
+    // reply.id 是 OB11 message_id → NT msgId（MessageUnique 反查，反查不到原样透传）
+    const atUins: string[] = [];
+    for (const el of canonical) {
+        if (el.type === "at" && el.target !== "all") {
+            atUins.push(el.target);
+        }
+    }
+    let uinToUid: Map<string, string> | undefined;
+    if (atUins.length > 0) {
+        try {
+            uinToUid = await deps.uinToUid(atUins);
+        } catch {
+            // uin 解析失败：at 原样（uin），交给 QQ 端判断
+        }
+    }
+    canonical = applySendContext(canonical, {
+        ...(uinToUid !== undefined ? { uinToUid } : {}),
+        ob11IdToMsgId: (id) => deps.messageUnique.getMsgId(id),
+    });
     // auto_escape：文本段转义 CQ 特殊字符
     if (payload.auto_escape === true) {
         canonical = canonical.map((el) => {
