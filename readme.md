@@ -9,7 +9,7 @@
 <p align="center">
   <a href="https://opensource.org/licenses/MIT"><img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-yellow.svg"></a>
   <img alt="Node.js" src="https://img.shields.io/badge/Node.js-20%2B-339933?logo=node.js&logoColor=white">
-  <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white">
+  <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-7-3178C6?logo=typescript&logoColor=white">
   <img alt="PNPM" src="https://img.shields.io/badge/PNPM-11-F69220?logo=pnpm&logoColor=white">
   <img alt="OneBot" src="https://img.shields.io/badge/OneBot-11-0084ff">
   <img alt="Monorepo" src="https://img.shields.io/badge/Monorepo-pnpm%20workspace-00B4A0">
