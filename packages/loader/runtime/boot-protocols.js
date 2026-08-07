@@ -89,11 +89,15 @@ async function startProtocols(kernel, ctx, loginResult) {
         });
         // network 广播 + OB11 适配器
         const broadcaster = new network.EventBroadcaster();
-        // 全局 TOML 配置（<cfgDir>/napuketto.toml）：读 [onebot11] 段，zod 校验后作 seed
+        // 全局 TOML 配置（<项目根>/napuketto.toml，2026-08-07 用户拍板：配置文件放项目根）：
+        // 读 [onebot11] 段，zod 校验后作 seed。路径优先级：NAPKETTO_CONFIG（launcher 注入）>
+        // 装配链自身探测（kernel.resolveConfigPath）> NAPUTO_CFG_DIR 兜底（旧行为兼容）。
         // （ConfigBase seed 模式：load() 直接用内存值，不再读写独立协议文件）
         let ob11Section = {};
+        const cfgFile =
+            process.env.NAPKETTO_CONFIG ||
+            path.join(process.env.NAPUTO_CFG_DIR || ".", "napuketto.toml");
         try {
-            const cfgFile = path.join(process.env.NAPUTO_CFG_DIR || ".", "napuketto.toml");
             const raw = fs.readFileSync(cfgFile, "utf8");
             const parsed = kernel.parseToml(raw);
             if (parsed && typeof parsed.onebot11 === "object" && parsed.onebot11 !== null) {
@@ -103,7 +107,7 @@ async function startProtocols(kernel, ctx, loginResult) {
             log(`bootstrap: 全局配置读取失败（用默认 ob11 配置）: ${e?.message ?? e}`);
         }
         const ob11Config = new adapterCore.ProtocolConfig({
-            path: path.join(process.env.NAPUTO_CFG_DIR || ".", "napuketto.toml"),
+            path: cfgFile,
             schema: adapter.ob11ConfigSchema,
             defaults: adapter.ob11ConfigSchema.parse({}),
             seed: adapter.ob11ConfigSchema.parse(ob11Section),

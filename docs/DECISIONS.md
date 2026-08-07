@@ -215,7 +215,10 @@ initializeSession 顺序）。此前失败原因：① 先 `ssw.start()` 再 ini
   （appid 解析 → wrapper-config.ts；session 创建 → wrapper-loader.ts；worker 引导 → route-b-worker.cjs）
 - `.gitignore` 保留 `scripts-tmp/` 规则（防再建临时目录泄漏）
 - **onebot12 已删除**（commit ac5ebba，规范过于模糊，用户拍板放弃）；satori 仍占位
-- **全局配置 = 单一 TOML**（`<数据根>/napuketto.toml`，2026-08-05 用户拍板，不再用独立 JSON）
+- **全局配置 = 单一 TOML**（`<数据根>/napuketto.toml`，2026-08-05 用户拍板，不再用独立 JSON）；
+  **2026-08-07 修订：配置文件移到项目根 `<项目根>/napuketto.toml`**（用户拍板：不喜欢东西堆用户目录），
+  数据（账号目录/日志/缓存/QQ 数据）仍按数据根组织；路径解析 kernel `resolveConfigPath`（
+  NAPKETTO_CONFIG 显式 > 项目根探测 > cwd > 数据根兜底）
 
 ---
 

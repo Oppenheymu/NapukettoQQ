@@ -11,7 +11,7 @@ import path from "node:path";
 import process from "node:process";
 import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
-import { resolveDataRoot } from "@napuketto/kernel";
+import { resolveConfigPath, resolveDataRoot } from "@napuketto/kernel";
 import {
     defaultStubDir,
     launchSelfHost,
@@ -83,12 +83,14 @@ export async function runSingleAccount(opts: BootOptions = {}): Promise<void> {
 
     // 唯一启动路径：自建宿主（2026-08-07 用户拍板，路线 B 淘汰）
     // stdio 接管 stdout/stderr：过滤 MMKV / 符号查找失败等原生噪音，其余转发
+    // configPath：全局配置文件（项目根 napuketto.toml），注入 NAPKETTO_CONFIG 供装配链读取
     const { child } = launchSelfHost({
         qq,
         kernelEntry,
         adapterEntry,
         networkEntry,
         cfgDir,
+        configPath: resolveConfigPath({ dataRoot }),
         selfHost: true,
         stdio: ["inherit", "pipe", "pipe"],
         ...(stubDir !== undefined ? { stubDir } : {}),

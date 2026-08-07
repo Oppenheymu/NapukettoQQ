@@ -1,10 +1,11 @@
 /**
- * cli config 子命令：init / list / apply（P6，2026-08-05）
+ * cli config 子命令：init / list / apply（P6，2026-08-05；2026-08-07 配置文件移到项目根）
  *
- * **全局单配置文件**：`<数据根>/napuketto.toml`，本项目所有配置都在里面管理
- * （TOML + smol-toml，配合 zod 校验，用户 2026-08-05 拍板：JSON 门槛太高）：
+ * **全局单配置文件**：`<项目根>/napuketto.toml`（2026-08-07 用户拍板：配置文件放项目根，
+ * 数据仍按数据根组织），本项目所有配置都在里面管理（TOML + smol-toml，配合 zod 校验，
+ * 用户 2026-08-05 拍板：JSON 门槛太高）：
  *
- *   dataDir = "C:\\...\\.napuketto"
+ *   dataDir = "C:\\...\\.napuketto"   # 数据根（账号目录/日志/缓存/QQ 数据），与配置文件位置解耦
  *   autoRestart = true
  *   restartDelayMs = 2000
  *   [[accounts]]
@@ -17,10 +18,10 @@
  *   host = "127.0.0.1"
  *   port = 3000
  *
+ * 配置文件路径解析见 kernel `resolveConfigPath`（NAPKETTO_CONFIG 显式 > 项目根探测 > cwd > 数据根兜底）；
  * 校验器为手写 parse（适配 kernel ConfigBase 的 ConfigSchema 形状）；
  * 协议段由对应协议包的 zod schema 校验（boot.cjs 装配时经 seed 传入）。
  */
-
 import type { Dirent } from "node:fs";
 import { mkdirSync, readdirSync } from "node:fs";
 import { readFile } from "node:fs/promises";
@@ -31,12 +32,10 @@ import {
     ConfigBase,
     kernelError,
     parseToml,
+    resolveConfigPath,
     resolveDataRoot,
     stringifyToml,
 } from "@napuketto/kernel";
-
-/** 全局配置文件名。 */
-const MAIN_CONFIG_FILE = "napuketto.toml";
 
 /** 默认自动重启。 */
 const DEFAULT_AUTO_RESTART = true;
@@ -174,11 +173,12 @@ function parseAccount(item: unknown): CliAccountConfig {
     return out;
 }
 
-/** 主配置 store（读/写/校验；.toml 后缀 → smol-toml 序列化）。 */
+/** 主配置 store（读/写/校验；.toml 后缀 → smol-toml 序列化）。
+ * 配置文件在项目根（resolveConfigPath），dataRoot 仅作兜底与 dataDir 默认值。 */
 export class CliConfigStore extends ConfigBase<CliConfig> {
     constructor(dataRoot: string) {
         super({
-            path: join(dataRoot, MAIN_CONFIG_FILE),
+            path: resolveConfigPath({ dataRoot }),
             schema: { parse: parseCliConfig } satisfies ConfigSchema<CliConfig>,
             defaults: defaultCliConfig(dataRoot),
         });
@@ -196,12 +196,13 @@ function toRecord(config: CliConfig): Record<string, unknown> {
     return config as unknown as Record<string, unknown>;
 }
 
-/** config init：生成全局 TOML 配置文件 + 数据根目录。 */
+/** config init：生成全局 TOML 配置文件（项目根）+ 数据根目录。 */
 export async function cmdConfigInit(opts: { dataDir?: string }): Promise<void> {
     const dataRoot = resolveDataRoot(opts.dataDir);
     mkdirSync(dataRoot, { recursive: true });
     const store = new CliConfigStore(dataRoot);
     const config = await store.load();
+    process.stdout.write(`[napuketto] 数据根: ${dataRoot}\n`);
     process.stdout.write(`[napuketto] 全局配置已就绪: ${store.path}\n`);
     process.stdout.write(`${stringifyToml(toRecord(config))}\n`);
 }

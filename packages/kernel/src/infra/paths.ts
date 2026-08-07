@@ -1,22 +1,29 @@
 /**
- * 数据目录布局（ADR-016）
+ * 数据目录布局（ADR-016，2026-08-07 修订：配置文件独立于数据根）
  *
  * ```
- * <用户数据根>/<qq号>/          # 每账号独立目录（ADR-015 多账号前提）
- * ├── config/                   # napuketto.json + onebot11.json 等
- * ├── logs/                     # pino 文件日志
- * └── cache/                    # 临时文件、媒体缓存
+ * <数据根>/<qq号>/             # 每账号独立目录（ADR-015 多账号前提）
+ * ├── config/                  # 各账号独立配置（历史产物，协议段已走 seed）
+ * ├── logs/                    # pino 文件日志
+ * └── cache/                   # 临时文件、媒体缓存
+ *
+ * <项目根>/napuketto.toml      # 全局配置文件（2026-08-07 用户拍板：放项目根目录）
  * ```
  *
  * 数据根优先级：cli `--data-dir`（显式参数）> `NAPKETTO_DATA` 环境变量 > `~/.napuketto`（默认）。
+ * 配置文件路径见 `resolveConfigPath`（项目根探测，与数据根解耦）。
  */
-import { mkdirSync, readdirSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, rmSync } from "node:fs";
 import { homedir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import process from "node:process";
+import { fileURLToPath } from "node:url";
 
 /** 默认数据根目录名（用户目录下，程序目录可能只读，见 ADR-016）。 */
 export const DEFAULT_DATA_ROOT_NAME = ".napuketto";
+
+/** 全局配置文件名。 */
+export const MAIN_CONFIG_FILE = "napuketto.toml";
 
 export interface PathOptions {
     /** 显式数据根（cli `--data-dir` 传入，优先级最高）。 */
@@ -35,6 +42,57 @@ export function resolveDataRoot(dataRoot?: string): string {
         return resolve(explicit);
     }
     return join(homedir(), DEFAULT_DATA_ROOT_NAME);
+}
+
+/** 向上查找含标志文件的目录（项目根探测：monorepo 根 / 用户项目根）。 */
+function findProjectRoot(startDir: string, marker: string): string | undefined {
+    let dir = startDir;
+    for (;;) {
+        if (existsSync(join(dir, marker))) {
+            return dir;
+        }
+        const parent = dirname(dir);
+        if (parent === dir) {
+            return undefined;
+        }
+        dir = parent;
+    }
+}
+
+export interface ConfigPathOptions {
+    /** 兜底数据根（探测全部失败时用 `<dataRoot>/napuketto.toml`，保持旧行为）。 */
+    dataRoot?: string;
+}
+
+/**
+ * 全局配置文件路径解析（2026-08-07 用户拍板：**配置文件放项目根目录，
+ * 数据仍按数据根组织**——数据根只承载账号目录/日志/缓存/QQ 数据）。
+ *
+ * 优先级：
+ *  1. `NAPKETTO_CONFIG` 环境变量（显式指定完整路径，任意场景可用）
+ *  2. 入口模块向上找 `pnpm-workspace.yaml`（monorepo 开发场景，即项目根）
+ *  3. 运行目录（cwd）向上找 `pnpm-workspace.yaml` / `package.json`（发布后用户项目）
+ *  4. 数据根兜底 `<dataRoot>/napuketto.toml`（旧行为兼容）
+ *
+ * 返回绝对路径。独立导出便于 cli / loader 装配链复用。
+ */
+export function resolveConfigPath(opts: ConfigPathOptions = {}): string {
+    const explicit = process.env["NAPKETTO_CONFIG"];
+    if (explicit !== undefined && explicit !== "") {
+        return resolve(explicit);
+    }
+    const moduleDir = dirname(fileURLToPath(import.meta.url));
+    const moduleRoot = findProjectRoot(moduleDir, "pnpm-workspace.yaml");
+    if (moduleRoot !== undefined) {
+        return join(moduleRoot, MAIN_CONFIG_FILE);
+    }
+    const cwdRoot =
+        findProjectRoot(process.cwd(), "pnpm-workspace.yaml") ??
+        findProjectRoot(process.cwd(), "package.json");
+    if (cwdRoot !== undefined) {
+        return join(cwdRoot, MAIN_CONFIG_FILE);
+    }
+    return join(opts.dataRoot ?? resolveDataRoot(), MAIN_CONFIG_FILE);
 }
 
 /**

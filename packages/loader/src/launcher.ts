@@ -21,8 +21,10 @@ export interface LaunchOptions {
     qq: QqInstallInfo;
     /** kernel 入口（.mjs，self-host.cjs 里 import）。 */
     kernelEntry: string;
-    /** 配置目录。 */
+    /** 配置目录（账号数据目录，NAPUTO_CFG_DIR）。 */
     cfgDir: string;
+    /** 全局配置文件路径（项目根 napuketto.toml，注入 NAPKETTO_CONFIG 供装配链读取）。 */
+    configPath?: string;
     /** adapter 入口（.mjs，协议装配用）。 */
     adapterEntry?: string;
     /** network 入口（.mjs，协议装配用）。 */
@@ -126,6 +128,9 @@ function buildLaunchEnv(options: LaunchOptions): Record<string, string> {
     if (options.networkEntry !== undefined) {
         env[ENV.NETWORK_ENTRY] = resolve(options.networkEntry);
     }
+    if (options.configPath !== undefined) {
+        env[ENV.CONFIG_PATH] = resolve(options.configPath);
+    }
     return env;
 }
 
@@ -144,4 +149,6 @@ export const ENV = {
     ADAPTER_ENTRY: "NAPUTO_ADAPTER_ENTRY",
     /** network 包入口（协议装配用）。 */
     NETWORK_ENTRY: "NAPUTO_NETWORK_ENTRY",
+    /** 全局配置文件路径（项目根 napuketto.toml，boot-protocols 读取）。 */
+    CONFIG_PATH: "NAPKETTO_CONFIG",
 } as const;

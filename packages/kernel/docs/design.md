@@ -415,18 +415,23 @@ LoginState = "idle" | "waiting_scan" | "scanned" | "logged_in" | "failed"
 
 **selfInfo**：登录成功后填 `{ uin, uid, nick }`；供 get_login_info 与协议层 meta 事件用。协议层订阅登录事件做生命周期 meta（P2-8 接入 adapter）。
 
-### 8.1 路径布局（ADR-016）
+### 8.1 路径布局（ADR-016，2026-08-07 修订：配置与数据解耦）
 
-数据（日志/配置/缓存）放**用户数据目录**而非程序目录（程序目录可能只读；多账号需要分离）：
+数据（账号目录/日志/缓存/QQ 数据）放**用户数据目录**而非程序目录（程序目录可能只读；多账号需要分离）；
+**全局配置文件独立放项目根**（用户 2026-08-07 拍板：不喜欢配置堆用户目录）：
 
 ```
+<项目根>/napuketto.toml        # 全局配置（resolveConfigPath 解析）
+
 <用户数据根>/<qq号>/          # 每账号独立目录（ADR-015 多账号前提）
-├── config/                   # napcat.json + onebot11.json 等
+├── config/                   # 各账号独立配置（历史产物，协议段已走 seed）
 ├── logs/                     # pino 文件日志
 └── cache/                    # 临时文件、媒体缓存
 ```
 
-根路径优先级：cli `--data-dir`（显式参数）→ `NAPKETTO_DATA` 环境变量 → `~/.napuketto`（默认）。
+- 数据根优先级：cli `--data-dir`（显式参数）→ `NAPKETTO_DATA` 环境变量 → `~/.napuketto`（默认）。
+- 配置文件路径 `resolveConfigPath`：`NAPKETTO_CONFIG` 显式 > 入口模块向上找 `pnpm-workspace.yaml`
+  （monorepo 项目根）> cwd 向上找 `pnpm-workspace.yaml`/`package.json`（发布后用户项目）> 数据根兜底。
 
 ### 8.2 QQ 版本探测（ADR-018）
 

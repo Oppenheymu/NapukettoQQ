@@ -41,7 +41,7 @@ NapukettoQQ：基于 QQ NT 客户端原生模块（`wrapper.node`）的机器人
      - **绝对禁止（许可证底线，不变）**：复制/移植 NapCat 代码（GPL-2.0-only 与 MIT 不兼容），任何文件（含类型定义）不得来自 NapCat。
    - **零磁盘篡改**：内存 Patch 仅在 QQ.exe 运行期 RAM 生效，**严禁修改/覆盖磁盘上 QQ 安装目录任何二进制**（QQNT.dll / wrapper.node / package.json / asar）；升级/卸载零残留。
    - **逆向产物管理**：Ghidra 分析（RVA 表/Offset）不提交公共仓库，仅存私有；`scripts/probe/` 旧 koffi 脚本仅作历史参考。
-8. **全局配置 = 单一 TOML 文件**（2026-08-05 用户拍板）：所有配置统一放 `<数据根>/napuketto.toml`（主配置段 + `[onebot11]` 等协议段），**不再使用独立 JSON 配置文件**（JSON 门槛太高）。kernel `ConfigBase` 支持 TOML（smol-toml 解析/序列化，按 `.toml` 扩展名推断）+ `seed`（内存初值：boot.cjs 从全局 TOML 取协议段 zod 校验后作 seed，adapter 不再读独立协议文件）。cli `config init/list/apply` 读写该文件。
+8. **全局配置 = 单一 TOML 文件**（2026-08-05 用户拍板；2026-08-07 移到项目根）：所有配置统一放 `<项目根>/napuketto.toml`（主配置段 + `[onebot11]` 等协议段），**不再使用独立 JSON 配置文件**（JSON 门槛太高）。**配置文件与数据根解耦**：数据（账号目录/日志/缓存/QQ 数据）仍按数据根（`--data-dir` > `NAPKETTO_DATA` > `~/.napuketto`）组织，路径解析见 kernel `resolveConfigPath`（`NAPKETTO_CONFIG` 显式 > 项目根探测 > cwd > 数据根兜底）。kernel `ConfigBase` 支持 TOML（smol-toml 解析/序列化，按 `.toml` 扩展名推断）+ `seed`（内存初值：boot.cjs 从全局 TOML 取协议段 zod 校验后作 seed，adapter 不再读独立协议文件）。cli `config init/list/apply` 读写该文件。
 
 ## 工作流
 

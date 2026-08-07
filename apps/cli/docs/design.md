@@ -26,12 +26,13 @@ napuketto supervisor             # 从主配置 napuketto.json 的 accounts 批�
 - cli 父进程职责：拉起子进程、崩溃自动重启、信号转发（SIGINT/SIGTERM → 优雅退出）。
 - **kernel 无全局单例**（ADR-015 推论）：每进程一份实例，由子进程持有。
 
-### 2.1 全局配置 napuketto.toml（2026-08-05 用户拍板，单一 TOML 文件）
+### 2.1 全局配置 napuketto.toml（2026-08-05 用户拍板，单一 TOML 文件；2026-08-07 移到项目根）
 
-**所有配置统一放 `<数据根>/napuketto.toml`**（不再用独立 JSON）：
+**所有配置统一放 `<项目根>/napuketto.toml`**（不再用独立 JSON；2026-08-07 用户拍板：配置文件
+放项目根目录，数据（账号目录/日志/缓存/QQ 数据）仍按数据根组织）：
 
 ```toml
-dataDir = "C:\\Users\\xxx\\.napuketto"
+dataDir = "C:\\Users\\xxx\\.napuketto"   # 数据根，与配置文件位置解耦
 autoRestart = true
 restartDelayMs = 2000
 
@@ -48,6 +49,8 @@ host = "127.0.0.1"
 port = 3000
 ```
 
+- 配置文件路径解析：kernel `resolveConfigPath`（`NAPKETTO_CONFIG` 显式 > 项目根探测 > cwd > 数据根兜底），
+  cli 读写、boot.ts 经 launchSelfHost 注入 `NAPKETTO_CONFIG` 供装配链读取。
 - 文本格式：smol-toml 解析/序列化（kernel ConfigBase 按 `.toml` 扩展名推断）。
 - 校验器：cli 手写 `parse`（适配 kernel ConfigBase 的 ConfigSchema 形状，不引入 zod）；协议段由对应协议包 zod schema 校验（boot.cjs 装配时经 seed 传入）。
 - `config init` 生成默认全局配置；账号协议配置不再单独落盘（boot.cjs 从全局 TOML 取段作 seed）。

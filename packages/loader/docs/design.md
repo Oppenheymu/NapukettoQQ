@@ -152,6 +152,7 @@ $env:PATH = "stub-test-env;QQ\resources\app;" + $env:PATH
 $env:NAPUTO_WRAPPER_PATH = "<QQ 版本目录>\resources\app\wrapper.node"
 $env:NAPUTO_QQ_VERSION = "9.9.33-51802"
 $env:NAPUTO_CFG_DIR = "<数据目录>"
+$env:NAPKETTO_CONFIG = "<项目根>\napuketto.toml"   # 全局配置文件（2026-08-07 起在项目根）
 $env:NAPUTO_KERNEL_ENTRY = "<kernel dist/index.mjs>"
 $env:NAPUTO_ADAPTER_ENTRY = "<adapter dist/index.mjs>"
 $env:NAPUTO_NETWORK_ENTRY = "<network dist/index.mjs>"

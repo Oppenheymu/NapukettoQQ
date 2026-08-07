@@ -42,7 +42,13 @@ export { isKernelError, KERNEL_ERROR_CODES, KernelError, kernelError } from "./i
 export type { LoggerOptions, LogLevel } from "./infra/logger.js";
 export { createLogger } from "./infra/logger.js";
 export type { PathOptions } from "./infra/paths.js";
-export { DEFAULT_DATA_ROOT_NAME, PathWrapper, resolveDataRoot } from "./infra/paths.js";
+export {
+    DEFAULT_DATA_ROOT_NAME,
+    MAIN_CONFIG_FILE,
+    PathWrapper,
+    resolveConfigPath,
+    resolveDataRoot,
+} from "./infra/paths.js";
 export type { LoginAccountInfo, LoginResult } from "./login/lifecycle.js";
 export {
     initAndStartSession,

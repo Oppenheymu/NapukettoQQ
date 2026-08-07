@@ -130,6 +130,10 @@ msgService 299 方法**（addKernelMsgListener/sendMsg/fetchMsgList 全在）。
   （native-private/vehicle.cpp，闭源）+ 路线 B worker 引导
 - **cli**：commander（-q/-d/--qq-path）+ 一键启动（读全局配置 accounts）+ config 子命令
   （init/list/apply，napuketto.toml 单一 TOML）+ supervisor 多账号编排
+- **配置路径修订（2026-08-07）**：全局配置文件移到项目根 `<项目根>/napuketto.toml`（用户拍板：
+  不喜欢配置堆用户目录），数据（账号目录/日志/缓存/QQ 数据）仍按数据根组织；kernel 新增
+  `resolveConfigPath`（NAPKETTO_CONFIG 显式 > 项目根探测 > cwd > 数据根兜底），
+  cli config 子命令 / boot / loader 装配链同步更新
 
 **API 来源分层**（回答「onebot11 规范吗」）：标准 OneBot 11 规范 30 个 + go-cqhttp 扩展 + NapCat
 扩展三层；`protocol_version: "v11"` 不变，扩展动作 schema 来自 NapCat/go-cqhttp 而非规范，以

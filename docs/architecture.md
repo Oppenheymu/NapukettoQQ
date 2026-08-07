@@ -16,8 +16,9 @@ NapukettoQQ 是基于 **QQ NT 架构客户端**的机器人框架：
 - 对外提供 **OneBot 11**（当前）协议接口（HTTP / WebSocket）；**Satori**（规划）。
   **OneBot 12 已放弃**（2026-08-05 用户拍板：规范过于模糊，commit ac5ebba 删除占位）。
 - **永远不做 WebUI**；**不做 framework 模式**（QQNT 插件形式），只做独立进程/宿主模式。
-- **全局配置 = 单一 TOML**：`<数据根>/napuketto.toml`（主配置段 + `[onebot11]` 协议段，
-  cli 读写 + zod 校验，seed 注入 kernel ConfigBase）。
+- **全局配置 = 单一 TOML**：`<项目根>/napuketto.toml`（主配置段 + `[onebot11]` 协议段，
+  cli 读写 + zod 校验，seed 注入 kernel ConfigBase）。**配置文件与数据根解耦**（2026-08-07）：
+  数据根只承载账号目录/日志/缓存/QQ 数据，路径解析见 kernel `resolveConfigPath`。
 
 ## 2. 包结构与依赖方向（只允许向下依赖）
 
@@ -175,7 +176,7 @@ wrapper.node 原生回调
 | ADR-013 | **协议适配器统一进 adapter 包（core 框架 + onebot11/satori）** | 每个协议一个平级包、翻译各写各的 | 适配器骨架只写一次，协议只需薄映射层 |
 | ADR-014 | **adapter 子路径导出（subpath exports）** | 单入口聚合全部协议 | cli 只依赖用到的协议；tree-shaking 友好 |
 | ADR-015 | **多进程多账号，cli 编排** | 单进程多账号 | wrapper 多 session 共存未验证；进程天然隔离；kernel 无全局单例 |
-| ADR-016 | **数据目录按账号隔离，放用户目录** | 数据放程序目录 | 程序目录可能只读；多账号天然分离 |
+| ADR-016 | **数据目录按账号隔离，放用户目录；配置文件独立放项目根** | 数据放程序目录 | 程序目录可能只读；多账号天然分离；配置文件靠近项目便于管理（2026-08-07 修订） |
 | ADR-017 | **KernelError 类型化错误 + 协议层映射表** | 原生 `{result, errMsg}` 透传（细化 ADR-009） | 错误分类在 kernel 只做一次 |
 | ADR-018 | **wrapper 版本探测独立模块（wrapper-version）** | 硬编码版本路径 | appid/qua 与版本强相关（每版本从 major.node 解析） |
 
