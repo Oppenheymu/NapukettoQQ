@@ -2,7 +2,6 @@
 
 基于 QQ NT 原生模块 `wrapper.node` 的机器人框架，对外提供 **OneBot 11** 协议接口
 
-- **MIT** · 全自研 · 零引入 NapCat 代码
 - pnpm monorepo · TypeScript · tsdown · biome
 - **自建宿主**：标准 node + stub QQNT.dll 直接加载 `wrapper.node`，不拉起 QQ、不注入
 
@@ -10,13 +9,13 @@
 
 | 包 | 职责 |
 |---|---|
-| `@napuketto/kernel` | 唯一原生交互层：wrapper 引导、登录（快速/扫码）、session 激活、业务 API、事件通道、缓存 |
-| `@napuketto/adapter` | 协议适配器：core 框架 + onebot11（60+ 动作，HTTP/WS 多实例） |
-| `@napuketto/network` | 协议无关传输层（HTTP / WebSocket / 广播） |
+| `@napuketto/kernel` | 唯一原生交互层：wrapper引导、登录、session激活、业务API、事件通道、缓存 |
+| `@napuketto/adapter` | 协议适配器：core 框架 + onebot11（60+ 动作） |
+| `@napuketto/network` | 传输层（HTTP / WebSocket / 广播） |
 | `@napuketto/media` | 媒体转码（silk / ffmpeg） |
-| `@napuketto/loader` | 自建宿主引导（spawn 标准 node + stub QQNT.dll 转发宿主符号） |
+| `@napuketto/loader` | 自建宿主引导 |
 | `@napuketto/cli` | 启动编排、多账号 supervisor、配置管理 |
-| `create-napukettoqq` | 一键部署包：生成机器人项目骨架（package.json / napuketto.toml / readme / .gitignore）并自动安装 |
+| `create-napukettoqq` | 一键部署包 |
 
 ## 快速开始
 
@@ -36,3 +35,7 @@ pnpm start
 
 - `docs/STATUS.md` — 现状与关键决策点
 - `docs/architecture.md` — 架构书
+
+## 许可证
+
+MIT
