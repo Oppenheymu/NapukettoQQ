@@ -9,6 +9,26 @@
  * 返回值形态可能是 JSON 字符串（对象/数组）或纯路径字符串，此处做宽容解析。
  */
 
+import { join } from "node:path";
+
+/**
+ * QQ 全局数据目录（commonPath / desktopGlobalPath = 数据根/nt_qq/global，
+ * HANDOVER-V6 自建宿主三要素之三，p0-kernel-flow 实证）。
+ *
+ * 防御：已含 nt_qq/global 后缀（worker 环境下 getNTUserDataInfoConfig 可能
+ * 返回完整路径）则不重复拼接，避免 `nt_qq/global/nt_qq/global` 错位。
+ */
+export function resolveQqGlobalPath(root: string): string {
+    const norm = root.replace(/\\/g, "/");
+    if (norm.endsWith("/nt_qq/global")) {
+        return root;
+    }
+    if (norm.endsWith("/nt_qq")) {
+        return join(root, "global");
+    }
+    return join(root, "nt_qq", "global");
+}
+
 /** 从 getNTUserDataInfoConfig 返回值提取数据根（JSON 字符串解析或纯路径）。 */
 export function extractDataRoot(raw: string): string | null {
     if (raw.startsWith("{") || raw.startsWith("[")) {

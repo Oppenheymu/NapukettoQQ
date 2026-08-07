@@ -23,7 +23,7 @@ import type {
     WrapperSessionInitConfig,
 } from "../types/wrapper.js";
 import { PlatformType } from "../types/wrapper.js";
-import { extractDataRoot } from "./qq-data-path.js";
+import { extractDataRoot, resolveQqGlobalPath } from "./qq-data-path.js";
 import {
     createSessionListener,
     DependsAdapter,
@@ -265,32 +265,57 @@ export function startNapuketto(options: StartNapukettoOptions): WrapperContext {
         buildVersion: env?.qqVersion ?? "",
     };
     const ctx = createWrapper(wrapperExports, versionInfo);
-    // worker（utilityProcess）模式下 desktopGlobalPath 必须指向 QQ 真实数据路径
-    //（getNTUserDataInfoConfig），否则登录数据读写错位（P2-1 实测，2026-08-06）。
-    // 主进程（V1）模式 QQ 自己已配置 engine，保持 env.dataDir 原行为。
-    let qqDataPath: string | null = null;
-    if (electronProcessType() === "utility") {
-        qqDataPath = resolveQqUserDataRoot(wrapperExports);
+    // session 创建时机：**自建宿主（标准 node）必须在 engine init 之前创建**——
+    // p0-kernel-flow 决定性顺序（HANDOVER-V6）：SSW.create + getNTWrapperSession("nt_1")
+    // 在 engine.initWithDeskTopConfig 前；engine 先建 session 后建 → 登录后
+    // session.init 的 onOpentelemetryInit 不触发（2026-08-07 自建宿主实测）。
+    // 路线 B（utility）与 QQ 主进程（browser）保持 engine 先建原顺序（已验证）。
+    const isSelfHost = electronProcessType() === undefined;
+    if (qqSession !== undefined && qqSession !== null) {
+        ctx.session = qqSession;
+    } else if (isSelfHost) {
+        createSession(ctx);
     }
-    initEngine(ctx, engineConfig ?? defaultEngineConfig(env ?? {}, qqDataPath ?? undefined));
+    // worker（utilityProcess）模式 + 自建宿主（标准 node）下 desktopGlobalPath 必须指向
+    // QQ 真实数据目录（数据根/nt_qq/global，HANDOVER-V6 三要素之三），否则登录数据读写
+    // 错位（P2-1 实测 2026-08-06；getLoginList 空）。
+    // QQ 主进程（V1）模式 QQ 自己已配置 engine，保持 env.dataDir 原行为。
+    // 判断条件：electronProcessType() === "browser" 是 QQ 主进程；utility=worker，
+    // undefined=标准 node（自建宿主）——两者都需要解析 QQ 数据目录。
+    let qqGlobalPath: string | null = null;
+    if (electronProcessType() !== "browser") {
+        const root = resolveQqUserDataRoot(wrapperExports);
+        if (root !== null) {
+            qqGlobalPath = resolveQqGlobalPath(root);
+        }
+    }
+    initEngine(ctx, engineConfig ?? defaultEngineConfig(env ?? {}, qqGlobalPath ?? undefined));
 
-    // loginService：优先 QQ 捕获实例，否则 new（实测确认）
+    // loginService：优先捕获实例，其次单例 get()（自建宿主/worker 下 QQ 环境创建
+    // 的实例才完整——`new` 自建实例读不到登录列表（getLoginList 空），HANDOVER-V6
+    // p0-login3 实证），最后 new 回退。
     if (qqLoginService !== undefined && qqLoginService !== null) {
         ctx.loginService = qqLoginService;
     } else {
         try {
-            ctx.loginService = new ctx.exports.NodeIKernelLoginService();
+            const loginSvcCtor = ctx.exports.NodeIKernelLoginService as unknown as {
+                get?: () => unknown;
+            } | null;
+            if (loginSvcCtor !== null && typeof loginSvcCtor.get === "function") {
+                ctx.loginService = loginSvcCtor.get();
+            } else {
+                ctx.loginService = new ctx.exports.NodeIKernelLoginService();
+            }
         } catch {
             ctx.loginService = null;
         }
     }
 
-    // session：实测可用 = `new NodeIQQNTWrapperSession()`（createSession）。
-    // getMainSession 实测返回空壳——核心 service 全 null 且缺 startNT（2026-08-05
-    // 快速登录 startNT 失败定位）；qqSession 拦截机制尚未在 boot.cjs 落地。
+    // session：路线 B（utility）与 QQ 主进程（browser）在 engine 后创建；
+    // 自建宿主已在 engine 前创建（isSelfHost 分支），此处跳过避免重复。
     if (qqSession !== undefined && qqSession !== null) {
         ctx.session = qqSession;
-    } else {
+    } else if (!isSelfHost) {
         createSession(ctx);
     }
 

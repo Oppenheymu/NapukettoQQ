@@ -134,6 +134,7 @@ export type {
     WrapperSessionInitConfig,
 } from "./types/wrapper.js";
 export { probeRuntime } from "./wrapper/probe.js";
+export { resolveQqGlobalPath } from "./wrapper/qq-data-path.js";
 export { getExistingSession, getMainSession } from "./wrapper/session-resolver.js";
 export {
     createLoginListener,

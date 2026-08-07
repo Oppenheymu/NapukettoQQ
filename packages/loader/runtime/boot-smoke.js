@@ -80,7 +80,8 @@ async function runSmokeTest(kernel, ctx, loginResult) {
     channel.on("Msg/onRecvMsg", (msg) => {
         received += 1;
         try {
-            const texts = kernel.toCanonicalElements(msg.elements ?? [])
+            const texts = kernel
+                .toCanonicalElements(msg)
                 .filter((el) => el.type === "text")
                 .map((el) => el.text)
                 .join("");
@@ -120,7 +121,7 @@ async function runSmokeTest(kernel, ctx, loginResult) {
         if (!landed) {
             for (const m of recent.slice(0, 3)) {
                 const texts = kernel
-                    .toCanonicalElements(m.elements ?? [])
+                    .toCanonicalElements(m)
                     .filter((el) => el.type === "text")
                     .map((el) => el.text)
                     .join("");

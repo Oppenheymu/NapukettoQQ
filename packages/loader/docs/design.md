@@ -218,6 +218,66 @@ runtime/（含新文件），无需改构建脚本。
 6. 引导 boot.cjs（复用 hookdll 现有 IAT hook 链）
 ```
 
+---
+
+## 9. 自建宿主引导（路线 A，2026-08-07 产品化落地，实测全通）
+
+> **背景**：HANDOVER-V6/V9 实证自建宿主可救（标准 node + 自研 stub QQNT.dll 转发 → 登录 +
+> session READY）。本会话（2026-08-07）完成产品化落地：`NAPUTO_SELF_HOST` 分支 + kernel 四处
+> 适配，**实测：登录 3567141148 → session READY（getMsgService 298 方法）→ 冒烟收发通过 →
+> onebot11 adapter 启动**。
+
+### 9.1 链路（标准 node，无 QQ 进程）
+
+```
+cli --self-host（或直接 node self-host.cjs）
+  ├─ PATH 前置 stub QQNT.dll 目录 + QQ resources\app（launcher.launchSelfHost 装配）
+  ├─ self-host.cjs：dlopen wrapper.node（stub 转发 napi_*/uv_* → node.exe，98 exports）
+  ├─ NodeIO3MiscService.get() + addO3MiscListener  ← 🔑 激活事件分发（否则 getLoginList 挂起）
+  ├─ bootstrap(state) 完全复用（boot-bootstrap.js：kernel 装配 → 登录 → session → 冒烟 → 协议）
+  └─ 常驻（协议服务在事件循环上）
+```
+
+### 9.2 文件
+
+- **`runtime/self-host.cjs`（新增）**：自建宿主入口（dlopen + O3MiscService 激活 + bootstrap）。
+- **`src/launcher.ts`**：`LaunchOptions.selfHost/stubDir/selfHostEntry` + `launchSelfHost()`
+  （spawn 标准 node + PATH 前置 stub/resources\app）+ `ENV.SELF_HOST`。
+- **`apps/cli`**：`--self-host` / `--stub-dir` 选项透传到 `runSingleAccount`。
+- **boot-bootstrap.js**：自建宿主跳过 `collectCandidateSessions`（getMainSession 内部会先
+  `startupSession.start()`——与「先 init 后 start」顺序冲突，V9 实测）。
+
+### 9.3 kernel 适配（自建宿主实测发现，2026-08-07）
+
+| 修复 | 说明 |
+|---|---|
+| `resolveQqGlobalPath` | commonPath/desktopGlobalPath = **数据根/nt_qq/global**（三要素之三；数据根本身 getLoginList 空） |
+| loginService 优先 `get()` | `new NodeIKernelLoginService()` 实例读不到登录列表（自建宿主实测） |
+| `ensureLoginConnected` | 快速登录前 `connect()` + 等 `onLoginConnected` + 3s 缓冲（无缓冲则「登录系统连接异常」） |
+| 自建宿主 session 先建 | session（SSW.create + getNTWrapperSession）在 **engine init 之前**创建（p0-kernel-flow 决定性顺序，engine 先建 session 后建则 onOpentelemetryInit 不触发） |
+| 网络错误判定扩展 | 「登录系统连接异常」并入可重试网络错误 |
+
+### 9.4 运行（验证命令，闭源 stub 环境）
+
+```powershell
+cd packages\loader\native-private
+$env:PATH = "stub-test-env;QQ\resources\app;" + $env:PATH
+$env:NAPUTO_WRAPPER_PATH = "<QQ 版本目录>\resources\app\wrapper.node"
+$env:NAPUTO_QQ_VERSION = "9.9.33-51802"
+$env:NAPUTO_CFG_DIR = "<数据目录>"
+$env:NAPUTO_KERNEL_ENTRY = "<kernel dist/index.mjs>"
+$env:NAPUTO_ADAPTER_ENTRY = "<adapter dist/index.mjs>"
+$env:NAPUTO_NETWORK_ENTRY = "<network dist/index.mjs>"
+$env:NAPUTO_QUICK_UIN = "3567141148"   # 3054108135 账号风控勿用
+$env:NAPUTO_SELF_HOST = "1"
+$env:NAPUTO_SMOKE = "1"                # 冒烟收发自检
+node packages\loader\dist\native\runtime\self-host.cjs
+```
+
+### 9.5 内存实测（下一步，P2-2 候选 A 验收）
+
+标准 node + stub + wrapper + 登录态 + 协议装配 → 实测内存占用（目标百兆级，对照路线 B 300MB+）。
+
 > **2026-08-06 注**：自建宿主（§3.2.1 架构书）验证后，注入 QQ 主进程降级为备选路线。
 > vehicle.cpp 的激活链知识（FUN_180025d63/FUN_180025d9d/FUN_180028756）在自建宿主里
 > 由 koffi 调用等价函数替代，载具 C++ 注入不再必需。

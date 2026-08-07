@@ -21,7 +21,11 @@
 
 import { kernelError } from "../infra/errors.js";
 import type { NodeIKernelSessionListener, WrapperSessionInitConfig } from "../types/wrapper.js";
-import { DependsAdapter, DispatcherAdapter } from "../wrapper/wrapper-adapters.js";
+import {
+    createLoginListener,
+    DependsAdapter,
+    DispatcherAdapter,
+} from "../wrapper/wrapper-adapters.js";
 import type { WrapperContext } from "../wrapper/wrapper-loader.js";
 
 /** 等待条件满足（轮询，带超时）。 */
@@ -116,6 +120,9 @@ const MSF_STATUS_CONNECTED = 3;
 /** 快速登录网络异常错误码（1006511，P2-1 实测：登录前网络未就绪时报此错）。 */
 const NETWORK_ERROR_CODE = "1006511";
 
+/** 登录连接异常错误提示（自建宿主实测：connect 后未缓冲即 quickLogin 报此错）。 */
+const CONNECTION_ERROR_HINT = "登录系统连接异常";
+
 /** 网络重试最大次数（每次重试前等网络就绪）。 */
 const NETWORK_RETRY_MAX = 3;
 
@@ -163,6 +170,70 @@ export async function listLoginAccounts(ctx: WrapperContext): Promise<LoginAccou
 }
 
 /**
+ * 登录服务连接（自建宿主必需，HANDOVER-V6/V10 p0-kernel-flow 实证顺序）：
+ * connect() → 等 onLoginConnected。不 connect 则快速登录报「登录系统连接异常」。
+ *
+ * 对齐 p0-kernel-flow：initConfig → getLoginList → connect + onLoginConnected →
+ * quickLoginWithUin。QQ 环境（worker/主进程）下可能已连接——connect 幂等，
+ * 监听器超时兜底，不影响原流程。
+ */
+async function ensureLoginConnected(
+    ctx: WrapperContext,
+    opts: { timeoutMs?: number },
+): Promise<void> {
+    const raw = ctx.loginService as unknown as {
+        connect?: () => void;
+        addKernelLoginListener?: (listener: unknown) => number;
+    } | null;
+    if (raw === null || typeof raw.connect !== "function") {
+        return; // 无 connect（老版本 / QQ 主进程自连），跳过
+    }
+    const connect = raw.connect; // 提取局部变量（闭包内属性 narrowing 失效，TS2722）
+    const addListener = raw.addKernelLoginListener;
+    await new Promise<void>((resolve) => {
+        let settled = false;
+        const finish = (): void => {
+            if (!settled) {
+                settled = true;
+                resolve();
+            }
+        };
+        try {
+            // 临时监听等 onLoginConnected；保留不 remove——登录后续回调
+            // （onQRCodeLoginSucceed 等）仍可能触发，且进程内只登录一次，无泄漏风险。
+            const listener = createLoginListener();
+            listener.onLoginConnected = () => {
+                finish();
+            };
+            if (typeof addListener === "function") {
+                addListener(listener);
+            }
+        } catch {
+            // 监听注册失败不阻塞连接
+        }
+        setTimeout(finish, opts.timeoutMs ?? NETWORK_READY_TIMEOUT_MS);
+        try {
+            connect();
+        } catch {
+            finish();
+        }
+    });
+    // onLoginConnected 后网络栈仍在初始化（p0-kernel-flow 实证：connect → onLoginConnected
+    // → 3s 缓冲 → quickLoginWithUin 成功；无缓冲则「登录系统连接异常」）。
+    await sleep(CONNECTION_SETTLE_MS);
+}
+
+/** 连接稳定缓冲（毫秒，p0-kernel-flow 实证值）。 */
+const CONNECTION_SETTLE_MS = 3000;
+
+/** 短延迟。 */
+function sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => {
+        setTimeout(resolve, ms);
+    });
+}
+
+/**
  * 快速登录：遍历历史登录列表尝试。
  * P2-1：失败且错误为网络异常（1006511）时，等网络就绪后重试（最多 NETWORK_RETRY_MAX 次）。
  */
@@ -175,6 +246,10 @@ export async function quickLogin(
         throw kernelError("loginService 无效（缺 getLoginList）", "INVALID_STATE");
     }
     const loginService = raw;
+    // 连接登录服务（自建宿主必需：不 connect 则「登录系统连接异常」）
+    await ensureLoginConnected(ctx, {
+        ...(opts.timeoutMs !== undefined ? { timeoutMs: opts.timeoutMs } : {}),
+    });
     const list = await loginService.getLoginList();
     const items = list.LocalLoginInfoList;
     if (items.length === 0) {
@@ -221,7 +296,8 @@ async function loginWithNetworkRetry(
             };
         }
         lastErrMsg = errMsg;
-        const isNetworkError = errMsg.includes(NETWORK_ERROR_CODE);
+        const isNetworkError =
+            errMsg.includes(NETWORK_ERROR_CODE) || errMsg.includes(CONNECTION_ERROR_HINT);
         if (!isNetworkError || attempt >= NETWORK_RETRY_MAX) {
             break;
         }

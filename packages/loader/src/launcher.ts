@@ -44,6 +44,12 @@ export interface LaunchOptions {
     headless?: boolean;
     /** 路线 B（utilityProcess Worker 模式，2026-08-06 定稿默认开启）。 */
     routeB?: boolean;
+    /** 自建宿主（路线 A，NAPUTO_SELF_HOST）：标准 node + stub QQNT.dll 直接引导，不拉起 QQ（2026-08-07）。 */
+    selfHost?: boolean;
+    /** stub QQNT.dll 目录（自建宿主 PATH 前置，转发 napi_*、uv_* 符号到 node.exe）。 */
+    stubDir?: string;
+    /** 自建宿主入口（默认 dist/native/runtime/self-host.cjs）。 */
+    selfHostEntry?: string;
     /** BootMain.exe 路径（默认 dist/native/NapukettoBootMain.exe）。 */
     bootMain?: string;
 }
@@ -86,6 +92,45 @@ export function launchQqWithLoader(options: LaunchOptions): LaunchResult {
     return { child, bootJsPath, hookDllPath };
 }
 
+/**
+ * 启动自建宿主（路线 A，2026-08-07 产品化）：spawn 标准 node 直接跑 self-host.cjs，
+ * 不拉起 QQ / 不注入。
+ *
+ * 关键（HANDOVER-V7 技术数据）：wrapper.node 从 QQNT.dll 导入 99 符号
+ * （napi_*×40 + uv_*×56 + qq_magic×1 + v8/node mangled×2）——标准 node 无这些宿主
+ * 符号，必须 PATH 前置 stub QQNT.dll 目录（转发到 node.exe）+ QQ resources\app
+ * （wrapper.node 同目录依赖 DLL）才能 dlopen 成功。
+ */
+export function launchSelfHost(options: LaunchOptions): LaunchResult {
+    const nativeDirPath = nativeDir();
+    const selfHostPath = options.selfHostEntry ?? join(nativeDirPath, "runtime", "self-host.cjs");
+    if (!existsSync(selfHostPath)) {
+        throw new Error(
+            `self-host.cjs 缺失: ${selfHostPath}（先运行 pnpm --filter @napuketto/loader build）`,
+        );
+    }
+
+    const env = buildLaunchEnv(options, selfHostPath, "");
+    // PATH 前置 stub 目录（stub QQNT.dll 转发）+ QQ resources\app（wrapper.node 依赖 DLL）
+    const pathEntries = [
+        options.stubDir,
+        dirname(options.qq.wrapperPath),
+        process.env["PATH"] ?? "",
+    ]
+        .filter((p) => p !== undefined && p !== "")
+        .join(";");
+    env["PATH"] = pathEntries;
+
+    // 标准 node 直接跑入口（不拉起 QQ，不注入）
+    const child = spawn(process.execPath, [selfHostPath], {
+        env,
+        stdio: "inherit",
+        windowsHide: false,
+    });
+
+    return { child, bootJsPath: selfHostPath, hookDllPath: "" };
+}
+
 /** 装配注入环境变量（含路线 B / 无头 / vehicle 注入策略）。 */
 function buildLaunchEnv(
     options: LaunchOptions,
@@ -122,7 +167,11 @@ function buildLaunchEnv(
     }
     // 路线 B（默认开启，2026-08-06 定稿）：boot.cjs fork utilityProcess Worker →
     // worker 内 dlopen wrapper.node + kernel 引导（QQ env 原生，P0-B 纯 Node 崩溃点消失）。
-    if (options.routeB !== false) {
+    // 自建宿主（路线 A）优先：不设路线 B——self-host.cjs 直接 dlopen（stub 转发），
+    // 无 QQ 环境也不需要 fork worker。
+    if (options.selfHost === true) {
+        env[ENV.SELF_HOST] = "1";
+    } else if (options.routeB !== false) {
         env[ENV.ROUTE_B] = "1";
     }
     if (options.headless === true) {
@@ -162,6 +211,8 @@ export const ENV = {
     DEEP_HEADLESS: "NAPUTO_DEEP_HEADLESS",
     /** 路线 B：utilityProcess Worker 模式（boot.cjs 分支）。 */
     ROUTE_B: "NAPUTO_ROUTE_B",
+    /** 自建宿主（路线 A）：标准 node + stub QQNT.dll 引导（self-host.cjs 分支）。 */
+    SELF_HOST: "NAPUTO_SELF_HOST",
     /** adapter 包入口（boot.cjs 协议装配用）。 */
     ADAPTER_ENTRY: "NAPUTO_ADAPTER_ENTRY",
     /** network 包入口（boot.cjs 协议装配用）。 */

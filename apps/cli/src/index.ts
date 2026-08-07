@@ -108,25 +108,41 @@ function registerSupervisorCommand(program: Command): void {
 
 /** 单账号启动分支（-q 单值；构造 bootOptions 后走 runSingleAccount）。 */
 async function runSingleAccountBranch(
-    opts: { dataDir?: string; qqPath?: string },
+    opts: { dataDir?: string; qqPath?: string; selfHost?: boolean; stubDir?: string },
     qqs: string[],
 ): Promise<void> {
     const [only] = qqs;
     if (only === undefined) {
         return;
     }
-    const bootOptions: { qq?: string; dataDir?: string; qqPath?: string } = { qq: only };
+    const bootOptions: {
+        qq?: string;
+        dataDir?: string;
+        qqPath?: string;
+        selfHost?: boolean;
+        stubDir?: string;
+    } = { qq: only };
     if (opts.dataDir !== undefined) {
         bootOptions.dataDir = opts.dataDir;
     }
     if (opts.qqPath !== undefined) {
         bootOptions.qqPath = opts.qqPath;
     }
+    if (opts.selfHost === true) {
+        bootOptions.selfHost = true;
+    }
+    if (opts.stubDir !== undefined) {
+        bootOptions.stubDir = opts.stubDir;
+    }
     await runSingleAccount(bootOptions);
 }
 
 /** 无 -q 时：读全局配置 accounts → 有则 supervisor 拉起；无则单账号启动（boot.cjs 自动快速登录/QR）。 */
-async function autoStart(opts: { dataDir?: string }): Promise<void> {
+async function autoStart(opts: {
+    dataDir?: string;
+    selfHost?: boolean;
+    stubDir?: string;
+}): Promise<void> {
     try {
         const dataRoot = resolveDataRoot(opts.dataDir);
         const config = await loadCliConfig(dataRoot);
@@ -137,9 +153,15 @@ async function autoStart(opts: { dataDir?: string }): Promise<void> {
     } catch {
         // 配置读取失败忽略，直接单账号启动
     }
-    const bootOptions: { dataDir?: string } = {};
+    const bootOptions: { dataDir?: string; selfHost?: boolean; stubDir?: string } = {};
     if (opts.dataDir !== undefined) {
         bootOptions.dataDir = opts.dataDir;
+    }
+    if (opts.selfHost === true) {
+        bootOptions.selfHost = true;
+    }
+    if (opts.stubDir !== undefined) {
+        bootOptions.stubDir = opts.stubDir;
     }
     process.stdout.write("[napuketto] 未指定 -q，自动快速登录（无历史账号则二维码登录）\n");
     await runSingleAccount(bootOptions);
@@ -147,27 +169,35 @@ async function autoStart(opts: { dataDir?: string }): Promise<void> {
 
 /** 注册主命令 action（-q 单账号 / 多 -q supervisor / 无 -q 自动读配置或单账号启动）。 */
 function registerMainAction(program: Command): void {
-    program.action(async (opts: { qq?: string[]; dataDir?: string; qqPath?: string }) => {
-        const qqs = opts.qq ?? [];
-        if (qqs.length === 0) {
-            await autoStart(opts);
-            return;
-        }
-        try {
-            if (qqs.length === 1) {
-                await runSingleAccountBranch(opts, qqs);
-            } else {
-                const supOpts: { dataDir?: string; qqs: string[] } = { qqs };
-                if (opts.dataDir !== undefined) {
-                    supOpts.dataDir = opts.dataDir;
-                }
-                await runSupervisor(supOpts);
+    program.action(
+        async (opts: {
+            qq?: string[];
+            dataDir?: string;
+            qqPath?: string;
+            selfHost?: boolean;
+            stubDir?: string;
+        }) => {
+            const qqs = opts.qq ?? [];
+            if (qqs.length === 0) {
+                await autoStart(opts);
+                return;
             }
-        } catch (err) {
-            reportError(err);
-            process.exitCode = 1;
-        }
-    });
+            try {
+                if (qqs.length === 1) {
+                    await runSingleAccountBranch(opts, qqs);
+                } else {
+                    const supOpts: { dataDir?: string; qqs: string[] } = { qqs };
+                    if (opts.dataDir !== undefined) {
+                        supOpts.dataDir = opts.dataDir;
+                    }
+                    await runSupervisor(supOpts);
+                }
+            } catch (err) {
+                reportError(err);
+                process.exitCode = 1;
+            }
+        },
+    );
 }
 
 /** 入口：注册全部子命令与主命令后解析。 */
@@ -188,7 +218,9 @@ function main(): void {
             [],
         )
         .option("-d, --data-dir <dir>", "数据根目录（缺省 ~/.napuketto）")
-        .option("--qq-path <path>", "QQ 安装路径（联调覆盖）");
+        .option("--qq-path <path>", "QQ 安装路径（联调覆盖）")
+        .option("--self-host", "自建宿主（路线 A：标准 node + stub QQNT.dll，不拉起 QQ）")
+        .option("--stub-dir <dir>", "stub QQNT.dll 目录（--self-host 时 PATH 前置）");
 
     registerConfigCommands(program);
     registerSupervisorCommand(program);

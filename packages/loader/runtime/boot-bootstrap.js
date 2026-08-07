@@ -59,7 +59,9 @@ async function pickLoginAccount(kernel, ctx, loginResultRef) {
             loginResultRef.targetUin = target.uin;
             log(`正在快速登录 ${target.uin}`);
         } else {
-            log("没有历史登录账号，将使用二维码登录方式");
+            // boot 阶段尚未 loginService.initConfig（core.login 内部才做），
+            // 此处 getLoginList 必空——账号选择交给登录流程（NAPUTO_QUICK_UIN 可指定）。
+            log("登录列表暂不可用（boot 阶段未 initConfig），由登录流程自动选择账号");
         }
     } catch (listErr) {
         log(`bootstrap: 获取登录列表失败: ${listErr?.message ?? listErr}`);
@@ -262,10 +264,17 @@ async function bootstrap(state) {
                     // 打印可用快速登录账号（启动横幅）
                     const ref = { targetUin: undefined };
                     await pickLoginAccount(kernel, ctx, ref);
+                    // NAPUTO_QUICK_UIN 强制指定快速登录账号（实验/自建宿主验证用，
+                    // 防止自动选中风控账号 3054108135 导致挂起——HANDOVER-V10 环境事实）。
+                    const forcedUin = process.env.NAPUTO_QUICK_UIN;
                     const loginOpts = {
                         appid: APPID,
                         initTimeoutMs: 20000,
-                        ...(ref.targetUin !== undefined ? { quickUin: ref.targetUin } : {}),
+                        ...(forcedUin
+                            ? { quickUin: forcedUin }
+                            : ref.targetUin !== undefined
+                                ? { quickUin: ref.targetUin }
+                                : {}),
                     };
                     loginResult = await doLogin(core, loginOpts);
                     if (loginResult === null) {
@@ -276,8 +285,16 @@ async function bootstrap(state) {
 
                     // ⭐ V2 登录后替换 session：优先 QQ 主 session（渲染进程已 init），
                     // 其次 vehicle 激活的单例表 session。替换 kernel 自建的无效 session。
-                    const candidates = collectCandidateSessions(state, kernel, ctx);
-                    const chosen = pickBestSession(candidates);
+                    // 自建宿主（NAPUTO_SELF_HOST）例外：无 QQ 主进程/vehicle/qqSession 捕获，
+                    // 且 getMainSession 内部会先 startupSession.start()——与「先 init 后
+                    // start」顺序冲突（HANDOVER-V9 实证）；登录前 createSession 创建的
+                    // 配套 session（ctx.session + ctx.startupSession）才是正确激活目标。
+                    const isSelfHost = process.env.NAPUTO_SELF_HOST === "1";
+                    let chosen = null;
+                    if (!isSelfHost) {
+                        const candidates = collectCandidateSessions(state, kernel, ctx);
+                        chosen = pickBestSession(candidates);
+                    }
                     if (chosen && chosen.s !== ctx.session) {
                         core.setSession(chosen.s);
                         log(
@@ -289,21 +306,34 @@ async function bootstrap(state) {
                         log("bootstrap: 无有效候选 session（保留 kernel 自建 session）");
                     }
 
-                    // ⭐ 若替换的 session 未 READY（service 未挂载），走 NapCat 方式：
-                    // **先 session.init 再 startupSession.start()（2026-08-07 V9 决定性修正）**。
-                    // 自建宿主实测（HANDOVER-V9）：必须先 init 后 start——顺序颠倒（先 start
-                    // 后 init）业务 service 不挂载；init 后用 startNT（非 startupSession.start）
-                    // 也失败。之前「先 start 等 READY」路径（P2-0 worker 有效）在自建宿主无效。
-                    if (chosen && !isSessionUsable(chosen.s)) {
-                        log("bootstrap: 激活 session（先 init 后 startupSession.start）...");
+                    // ⭐ 激活目标：优先候选 session，否则 kernel 自建 session。
+                    // 自建宿主（NAPUTO_SELF_HOST，标准 node）无 QQ 主 session / vehicle
+                    // 激活 / qqSession Proxy 捕获——候选可能为空，但 attachWrapper 时
+                    // createSession（SSW.create + getNTWrapperSession("nt_1")）已创建
+                    // ctx.session，直接对它走 NapCat 激活（先 init 后 start）。
+                    const activateTarget = chosen ?? { s: ctx.session, tag: "kernel 自建 session" };
+                    if (activateTarget.s && !isSessionUsable(activateTarget.s)) {
+                        log(`bootstrap: 激活 session（${activateTarget.tag}，先 init 后 startupSession.start）...`);
                         try {
+                            // session 数据目录指向 QQ 真实数据目录（数据根/nt_qq/global，
+                            // HANDOVER-V6 三要素之三）：cfgDir 下 init 的 onOpentelemetryInit
+                            // 不触发（p0-kernel-flow 实证——accountPath 必须是 nt_qq/global）。
+                            const qqDataRoot =
+                                typeof kernel.resolveQqUserDataRoot === "function"
+                                    ? kernel.resolveQqUserDataRoot(state.wrapperExports)
+                                    : null;
+                            const accountPath =
+                                qqDataRoot &&
+                                    typeof kernel.resolveQqGlobalPath === "function"
+                                    ? kernel.resolveQqGlobalPath(qqDataRoot)
+                                    : bootEnv.dataDir || ".";
                             const sessionConfig = kernel.buildSessionConfig({
                                 appid: APPID,
                                 fullVersion: bootEnv.qqVersion || "",
                                 selfUin: loginResult.uin,
                                 selfUid: loginResult.uid,
-                                accountPath: bootEnv.dataDir || ".",
-                                downloadPath: path.join(bootEnv.dataDir || ".", "temp"),
+                                accountPath,
+                                downloadPath: path.join(accountPath, "NapCat", "temp"),
                             });
                             const listener = kernel.createLifecycleSessionListener();
                             // initAndStartSession 已修正：先 session.init 再 startupSession.start()

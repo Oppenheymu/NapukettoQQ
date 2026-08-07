@@ -112,6 +112,8 @@ msgService 299 方法**（addKernelMsgListener/sendMsg/fetchMsgList 全在）。
 | 快速登录重试 | `packages/kernel/src/lifecycle.ts` | waitForNetworkConnection + 1006511 重试×3 |
 | 冒烟自检 | `packages/loader/runtime/boot-smoke.js` | NAPUTO_SMOKE=1 触发收发验证 |
 | cli 默认路线 B | `packages/loader/src/launcher.ts` | LaunchOptions.routeB 默认 true |
+| **自建宿主引导（2026-08-07 落地，实测全通）** | `packages/loader/runtime/self-host.cjs` + `launcher.launchSelfHost` + cli `--self-host` | NAPUTO_SELF_HOST 分支（标准 node + stub 转发 + O3MiscService 激活 + boot-bootstrap 复用）；实测登录 3567141148 → session READY → 冒烟收发 → onebot11 adapter 启动 |
+| **kernel 自建宿主适配（2026-08-07 实测）** | `wrapper-loader` + `core` + `lifecycle` | ① resolveQqGlobalPath（commonPath/desktopGlobalPath=数据根/nt_qq/global）② loginService 优先 get() ③ ensureLoginConnected（connect+缓冲，修复「登录系统连接异常」）④ 自建宿主 session 先建（engine init 前） |
 
 ---
 
@@ -154,9 +156,9 @@ msgService 299 方法**（addKernelMsgListener/sendMsg/fetchMsgList 全在）。
 - [x] **登录链路验证通过（2026-08-07）**：纯 Node + stub QQNT.dll 转发 + O3MiscService 激活事件分发 + 快速登录成功（路线 A 定案）
 - [x] **stub QQNT.dll 等价物完成（2026-08-07 晚）**：llvm-mingw 编译 70KB PE 转发 stub（99 符号），替换 NapCat 闭源 stub 后登录成功（HANDOVER-V7）
 - [ ] **整理正式版 stub**（stub-qqnt.cpp 正式化 + compare-symbols.mjs 重跑机制 + PerfTrace 补足（低优先））
-- [ ] **session READY 验证**：登录成功后 getMsgService() 是否可用（→ kernel/adapter 零改动复用 + 冒烟收发）
+- [x] **session READY 验证（2026-08-07 晚）**：登录成功后 getMsgService() READY（298 方法）——kernel/adapter 零改动复用 + **自建宿主冒烟收发通过**（MsgBridge+MsgApi 真发一条 + 落库核对）
 - [ ] **内存实测**：标准 node + stub + wrapper + 登录态（对照路线 B 300MB+，目标百兆级）
-- [ ] **loader 自建宿主引导**：新增 NAPUTO_SELF_HOST 分支（标准 node + stub + boot.cjs 复用，替代路线 B 注入链路）
+- [x] **loader 自建宿主引导（2026-08-07 晚，实测全通）**：NAPUTO_SELF_HOST 分支（`self-host.cjs` + `launchSelfHost` + cli `--self-host`），标准 node + stub + boot-bootstrap 复用；实测登录→session READY→冒烟→onebot11 adapter 启动全通
 
 ### P2-1 实测（功能最后一块）
 - [ ] 实机跑 `pnpm start`（默认路线 B worker），设 `NAPUTO_SMOKE=1` 看冒烟日志（napuketto-boot.log 中 smoke: 行）验证收发

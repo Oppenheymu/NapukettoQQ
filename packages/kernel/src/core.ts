@@ -22,6 +22,7 @@ import { type PathOptions, PathWrapper } from "./infra/paths.js";
 import { type LoginResult, quickLogin } from "./login/lifecycle.js";
 import { QrLoginSession } from "./login/login.js";
 import type { NodeIQQNTWrapperSession, WrapperNodeApi } from "./types/wrapper.js";
+import { resolveQqGlobalPath } from "./wrapper/qq-data-path.js";
 import { buildLoginConfig } from "./wrapper/wrapper-config.js";
 import {
     type BootEnv,
@@ -125,14 +126,19 @@ export class NapukettoCore {
             initConfig?: (config: unknown) => void;
         } | null;
         if (loginService !== null && typeof loginService.initConfig === "function") {
-            // worker（utilityProcess）模式下 loginService 是 new 的，commonPath 必须
-            // 指向 QQ 真实数据路径（getNTUserDataInfoConfig）才能读到历史账号——
-            // cli 的 `.napuketto\default` 读不到（getLoginList 空，P2-1 实测 2026-08-06）。
-            let qqDataPath: string | null = null;
-            if (electronProcessType() === "utility") {
-                qqDataPath = resolveQqUserDataRoot(wrapper.exports);
+            // worker（utilityProcess）模式 + 自建宿主（标准 node）下 loginService 是
+            // new 的，commonPath 必须指向 QQ 真实数据目录（数据根/nt_qq/global，
+            // HANDOVER-V6 三要素之三）才能读到历史账号——cli 的 `.napuketto\default`
+            // 读不到（getLoginList 空，P2-1 实测 2026-08-06）。
+            // QQ 主进程（V1）模式 QQ 自己 initConfig 过正确路径，无需解析。
+            let qqGlobalPath: string | null = null;
+            if (electronProcessType() !== "browser") {
+                const root = resolveQqUserDataRoot(wrapper.exports);
+                if (root !== null) {
+                    qqGlobalPath = resolveQqGlobalPath(root);
+                }
             }
-            const commonPath = qqDataPath ?? this.ctx.paths.accountDir;
+            const commonPath = qqGlobalPath ?? this.ctx.paths.accountDir;
             const loginCfg = buildLoginConfig(
                 opts.appid,
                 wrapper.versionInfo.fullVersion,
