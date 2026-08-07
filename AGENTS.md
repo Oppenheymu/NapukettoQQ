@@ -10,7 +10,9 @@ NapukettoQQ：基于 QQ NT 客户端原生模块（`wrapper.node`）的机器人
 
 1. **许可证 MIT（2026-08-06 由 GPL-3.0 迁移），零引入 NapCat 代码**。NapCat 是 GPL-2.0-only，与 MIT 不兼容，任何文件（含类型定义）都不得复制或移植。接口签名是外部系统（腾讯 wrapper.node）的事实，可以自研描述，但架构与实现必须原创。
    **闭源例外**：`@napuketto/loader` 的 V2 载具（Native Bypass DLL，`native/`）为私有组件——
-   逆向腾讯 QQ 的产物（RVA/Offset 表）绝不进公共仓库，仅分发编译+混淆后的二进制；公共仓库只含注入框架。
+   逆向腾讯 QQ 的产物（RVA/Offset 表）绝不进公共仓库，仅分发编译后的二进制（**2026-08-07
+   用户拍板：不做混淆**——stub 仅含公开符号表+空函数，无机密可护，混淆徒增误报风险）；
+   公共仓库只含注入框架。
    **2026-08-07 起 `native/` 为 Git Submodule（private 仓库 Oppenheymu/NapukettoQQ-Native）**：
    clone 主仓库后需 `git submodule update --init --recursive`；子仓库内容不进主仓库历史。
 2. **依赖方向**（只允许向下依赖）：

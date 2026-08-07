@@ -78,8 +78,13 @@ sequenceDiagram
 |---|---|---|
 | cli 去 private | `apps/cli/package.json` | `private: true` 删除，允许 npm 发布 |
 | loader 去 private | `packages/loader/package.json` | 同上 |
-| loader files 加 stub | `packages/loader/package.json` | `files` 加 `native/build/stub-test-env`（stub QQNT.dll 二进制，闭源红线内「仅分发编译+混淆后二进制」） |
+| loader files 加 stub | `packages/loader/package.json` | `files` 加 `native/build/stub-test-env`（stub QQNT.dll 二进制，仅分发编译产物） |
 | 根 publish 脚本 | 根 `package.json` | `pnpm -r publish --access public`（pnpm 拓扑序自动先发布依赖） |
+
+> **2026-08-07 用户拍板：stub 不做混淆**。理由：① stub 仅含公开符号表（wrapper.node
+> 导入表元数据，`llvm-objdump` 可 dump）+ 空函数（IsEnvironmentStopping / PerfTrace），
+> 无机密可护；真正机密（RVA 表/逆向结论）在私有子仓库 `native/`，不随 npm 发布；
+> ② 加壳/UPX 改变 PE 结构，徒增杀软误报与腾讯安全组件检测风险。混淆收益为负。
 
 > pnpm 发布时 `workspace:*` 依赖自动替换为实际版本号，无需手动改依赖声明。
 
