@@ -227,7 +227,14 @@ export function initSession(
     session.init(config, new DependsAdapter(), new DispatcherAdapter(), listener);
 }
 
-/** 启动会话（NapCat 同款：有 startupSession 用 start()，否则 startNT(0)）。 */
+/**
+ * 启动会话（有 startupSession 用 start()，否则 startNT(0)）。
+ *
+ * ⚠️ 2026-08-07 V9 修正：单纯 start() 只在「已 init」的 session 上有效。
+ * 自建宿主必须走 initAndStartSession（先 session.init 再 startupSession.start()）——
+ * 先 start 后 init 业务 service 不挂载（HANDOVER-V9 实测）。本函数保留给
+ * 已 init 的 session 补启动用；新路径请用 initAndStartSession。
+ */
 export function startSession(ctx: WrapperContext): void {
     const { session, startupSession } = ctx;
     if (session === null) {

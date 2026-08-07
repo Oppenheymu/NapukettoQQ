@@ -279,16 +279,27 @@ export async function initAndStartSession(
     });
 
     session.init(config, depends, dispatcher, listener);
-    // 启动：wrapper 契约（initializeSession 同款 try/catch 兜底）。
-    // QQ 9.9.31 实测 session 无 startNT 方法——init 内部已启动，startNT 失败不致命，
-    // 靠 onOpentelemetryInit/onSessionInitComplete 完成信号判断。
-    try {
-        session.startNT(0);
-    } catch {
+    // 启动：**先 init 后 start（2026-08-07 V9 决定性修正）**。
+    // 自建宿主实测（HANDOVER-V9，p0-napcat-min）：必须先 session.init 再
+    // startupSession.start()——顺序颠倒（先 start 后 init）业务 service 不挂载
+    // （getMsgService null）；init 后用 startNT（非 startupSession.start）也失败。
+    // NapCat initializeSession 同款：有 startupSession 用 start()，否则 startNT(0)。
+    const { startupSession } = ctx;
+    if (startupSession !== null && typeof startupSession.start === "function") {
         try {
-            session.startNT();
+            startupSession.start();
         } catch {
-            // 无 startNT（9.9.31）：忽略，等 init 完成信号
+            // start 失败不致命，靠 onOpentelemetryInit/onSessionInitComplete 信号判断
+        }
+    } else {
+        try {
+            session.startNT(0);
+        } catch {
+            try {
+                session.startNT();
+            } catch {
+                // 无 startNT（9.9.31）：忽略，等 init 完成信号
+            }
         }
     }
 

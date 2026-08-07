@@ -289,42 +289,32 @@ async function bootstrap(state) {
                         log("bootstrap: 无有效候选 session（保留 kernel 自建 session）");
                     }
 
-                    // ⭐ 若替换的 session 未 READY（service 未挂载），先走 NapCat 方式：
-                    // startupSession.start()（P2-0 实测：start() 后 getMsgService READY 1s）。
-                    // ⚠️ worker 里 JS 侧 session.init 的完成信号（onOpentelemetryInit/
-                    // onSessionInitComplete）依赖渲染进程协作，直接 initAndStartSession
-                    // 会超时（2026-08-06 多次实测）——先 start，等就绪；不行再回退 init。
+                    // ⭐ 若替换的 session 未 READY（service 未挂载），走 NapCat 方式：
+                    // **先 session.init 再 startupSession.start()（2026-08-07 V9 决定性修正）**。
+                    // 自建宿主实测（HANDOVER-V9）：必须先 init 后 start——顺序颠倒（先 start
+                    // 后 init）业务 service 不挂载；init 后用 startNT（非 startupSession.start）
+                    // 也失败。之前「先 start 等 READY」路径（P2-0 worker 有效）在自建宿主无效。
                     if (chosen && !isSessionUsable(chosen.s)) {
-                        log("bootstrap: 激活 session（startupSession.start）...");
+                        log("bootstrap: 激活 session（先 init 后 startupSession.start）...");
                         try {
-                            if (typeof kernel.startSession === "function") {
-                                kernel.startSession(ctx);
-                            }
-                            await kernel.waitSessionReady(ctx, { timeoutMs: 20000 });
-                            log("bootstrap: 激活 session 完成（startupSession.start 后 READY）");
-                        } catch (startErr) {
+                            const sessionConfig = kernel.buildSessionConfig({
+                                appid: APPID,
+                                fullVersion: bootEnv.qqVersion || "",
+                                selfUin: loginResult.uin,
+                                selfUid: loginResult.uid,
+                                accountPath: bootEnv.dataDir || ".",
+                                downloadPath: path.join(bootEnv.dataDir || ".", "temp"),
+                            });
+                            const listener = kernel.createLifecycleSessionListener();
+                            // initAndStartSession 已修正：先 session.init 再 startupSession.start()
+                            await kernel.initAndStartSession(ctx, sessionConfig, listener, {
+                                timeoutMs: 20000,
+                            });
+                            log("bootstrap: 激活 session init + start 完成");
+                        } catch (initErr) {
                             log(
-                                `bootstrap: startupSession.start 路径失败: ${startErr?.message ?? startErr}，回退 initAndStartSession`,
+                                `bootstrap: 激活 session init 失败: ${initErr?.message ?? initErr}`,
                             );
-                            try {
-                                const sessionConfig = kernel.buildSessionConfig({
-                                    appid: APPID,
-                                    fullVersion: bootEnv.qqVersion || "",
-                                    selfUin: loginResult.uin,
-                                    selfUid: loginResult.uid,
-                                    accountPath: bootEnv.dataDir || ".",
-                                    downloadPath: path.join(bootEnv.dataDir || ".", "temp"),
-                                });
-                                const listener = kernel.createLifecycleSessionListener();
-                                await kernel.initAndStartSession(ctx, sessionConfig, listener, {
-                                    timeoutMs: 20000,
-                                });
-                                log("bootstrap: 激活 session init + startNT 完成");
-                            } catch (initErr) {
-                                log(
-                                    `bootstrap: 激活 session init 失败: ${initErr?.message ?? initErr}`,
-                                );
-                            }
                         }
                     }
 
