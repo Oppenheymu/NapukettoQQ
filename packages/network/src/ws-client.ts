@@ -32,8 +32,14 @@ export class WsClient implements TransportAdapter {
         }
     }
 
-    /** 建立连接：成功 resolve，失败 reject（不自动重试，由协议层决定重试策略）。 */
+    /** 建立连接：成功 resolve，失败 reject（不自动重试，由协议层决定重试策略）。
+     * 2026-08-07：幂等防御——已有连接/连接中时直接返回，避免重复 open 泄漏
+     * 旧连接与心跳定时器。 */
     open(): Promise<void> {
+        if (this.ws !== undefined) {
+            // 已连接或连接中：返回已解析 Promise（不重复建立）
+            return Promise.resolve();
+        }
         this.closed = false;
         this.attempt = 0;
         return new Promise<void>((resolve, reject) => {
@@ -45,6 +51,10 @@ export class WsClient implements TransportAdapter {
             };
             const onError = (err: Error): void => {
                 ws.off("open", onOpen);
+                // 连接失败：清掉引用（否则 open() 幂等判断误判为「已连接」）
+                if (this.ws === ws) {
+                    this.ws = undefined;
+                }
                 reject(err);
             };
             ws.on("open", onOpen);

@@ -19,10 +19,18 @@ export class EventBroadcaster {
         this.adapters.delete(adapter);
     }
 
-    /** 广播事件给所有已注册适配器（同步派发，发送失败由适配器自行兜底）。 */
+    /**
+     * 广播事件给所有已注册适配器（同步派发，发送失败由适配器自行兜底）。
+     * 2026-08-07：逐个 try/catch——单个 adapter.send 抛异常（如 JSON.stringify
+     * 循环引用）不中断后续适配器（与 NTEventChannel.emit 同款语义）。
+     */
     emit<T>(event: T): void {
         for (const adapter of this.adapters) {
-            adapter.send(event);
+            try {
+                adapter.send(event);
+            } catch {
+                // 单适配器发送失败不影响其他适配器（事件广播容错）
+            }
         }
     }
 
