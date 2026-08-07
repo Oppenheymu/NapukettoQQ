@@ -23,8 +23,6 @@
 - **OneBot 11 深度兼容** — 60+ 动作覆盖消息/群/好友/系统管理，HTTP / WebSocket / 反向 WebSocket 多实例
 - **多账号 Supervisor** — 单进程编排多账号，崩溃自动重启
 - **单一 TOML 配置** — 项目根 `napuketto.toml`，配置与数据目录解耦
-- **全自研 · MIT** — 零引入 NapCat 代码，许可证纯净
-
 
 
 ## 架构与包结构（Monorepo）
