@@ -9,7 +9,13 @@ import type { ServerType } from "@hono/node-server";
 import { serve } from "@hono/node-server";
 import type { Context } from "hono";
 import { Hono } from "hono";
-import type { HttpServerOptions, RequestContext, TransportAdapter } from "./types.js";
+import type {
+    HttpRouteContext,
+    HttpServerOptions,
+    RequestContext,
+    Respond,
+    TransportAdapter,
+} from "./types.js";
 
 const HTTP_STATUS = {
     badRequest: 400,
@@ -30,8 +36,13 @@ export class HttpServer implements TransportAdapter {
     private readonly opts: HttpServerOptions;
     private server: ServerType | undefined;
 
-    /** 请求分发注入点：协议层实现「请求 → 响应」。 */
-    onRequest?: (req: unknown, respond: (res: unknown) => void) => void;
+    /** 请求分发注入点：协议层实现「请求 → 响应」（整机入口，OB11 用）。 */
+    onRequest?: (req: unknown, respond: Respond) => void;
+    /**
+     * 路径路由注入点（协议无关扩展，Satori RPC 用）：
+     * 按 path/method 分发。设置了 onPathRequest 时优先于 onRequest。
+     */
+    onPathRequest?: (ctx: HttpRouteContext, req: unknown, respond: Respond) => void;
 
     constructor(opts: HttpServerOptions) {
         this.opts = opts;
@@ -41,7 +52,8 @@ export class HttpServer implements TransportAdapter {
 
     /**
      * 处理所有 HTTP 请求：
-     * 鉴权 → 解析 JSON body → 交 `onRequest` → 响应。
+     * 鉴权 → 解析 JSON body → 交 onPathRequest / onRequest → 响应。
+     * respond 可选 status（Satori 404/501 等）；缺省 200。
      */
     private async handle(c: Context): Promise<Response> {
         const { authorize } = this.opts;
@@ -60,9 +72,20 @@ export class HttpServer implements TransportAdapter {
         }
 
         return new Promise<Response>((resolve) => {
-            this.onRequest?.(req, (res) => {
-                resolve(c.json(res));
-            });
+            const respond: Respond = (res, status) => {
+                const statusCode = status ?? 200;
+                resolve(
+                    new Response(JSON.stringify(res), {
+                        status: statusCode,
+                        headers: { "Content-Type": "application/json" },
+                    }),
+                );
+            };
+            if (this.onPathRequest !== undefined) {
+                this.onPathRequest({ path: c.req.path, method: c.req.method }, req, respond);
+            } else {
+                this.onRequest?.(req, respond);
+            }
         });
     }
 

@@ -10,8 +10,10 @@ export { HttpServer } from "./http-server.js";
 export type {
     AuthorizeHook,
     HttpClientOptions,
+    HttpRouteContext,
     HttpServerOptions,
     RequestContext,
+    Respond,
     ServerOptions,
     TransportAdapter,
     WsClientOptions,

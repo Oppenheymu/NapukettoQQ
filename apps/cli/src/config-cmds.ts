@@ -17,6 +17,14 @@
  *   enabled = false
  *   host = "127.0.0.1"
  *   port = 3000
+ *   [satori]                   # 协议段，与 satoriConfigSchema 对应
+ *   token = ""
+ *   [[satori.httpServers]]     # HTTP RPC 服务器
+ *   enabled = false
+ *   port = 5500
+ *   [[satori.wsServers]]       # WS 事件服务（/v1/events）
+ *   enabled = true
+ *   port = 5501
  *
  * 配置文件路径解析见 kernel `resolveConfigPath`（NAPKETTO_CONFIG 显式 > 项目根探测 > cwd > 数据根兜底）；
  * 校验器为手写 parse（适配 kernel ConfigBase 的 ConfigSchema 形状）；
@@ -61,6 +69,8 @@ export interface CliConfig {
     accounts: CliAccountConfig[];
     /** onebot11 协议段（与 ob11ConfigSchema 对应，宽松对象，装配时 zod 校验）。 */
     onebot11?: Record<string, unknown>;
+    /** satori 协议段（与 satoriConfigSchema 对应，宽松对象，装配时 zod 校验）。 */
+    satori?: Record<string, unknown>;
 }
 
 /** 主配置默认值（dataRoot 为当前解析的数据根）。 */
@@ -71,6 +81,7 @@ function defaultCliConfig(dataRoot: string): CliConfig {
         restartDelayMs: DEFAULT_RESTART_DELAY_MS,
         accounts: [],
         onebot11: {},
+        satori: {},
     };
 }
 
@@ -161,6 +172,32 @@ port = 3001
 # maxReconnectAttempts = 10              # 可选：最大重连次数（缺省无限）
 # rejectUnauthorized = true              # 可选：wss:// 是否校验证书（自签证书设 false）
 # heartbeatInterval = 30000              # 可选：WS ping 间隔（毫秒）
+
+# ------------------------------------------------------------
+# Satori 协议段
+# ------------------------------------------------------------
+[satori]
+
+# 鉴权 token（全局默认）：HTTP RPC 走 Authorization: Bearer <token>；
+# WS 事件服务走 IDENTIFY 信令的 token 字段。留空 = 不鉴权。
+# token = ""
+
+# 媒体资源（img/audio/video/file）下载缓存目录（发方向 http(s) src 落盘）
+# cacheDir = ""
+
+# ---- HTTP RPC 服务器（POST /v1/{resource}.{method}），可配置多个 ----
+[[satori.httpServers]]
+enabled = true
+host = "127.0.0.1"       # 监听地址；0.0.0.0 = 监听所有网卡（局域网可连）
+port = 5500
+# token = "abc"          # 可选：覆盖全局 token
+
+# ---- WS 事件服务（/v1/events，Satori SDK/应用连入），可配置多个 ----
+[[satori.wsServers]]
+enabled = true
+host = "127.0.0.1"
+port = 5501
+# token = "abc"          # 可选：覆盖全局 token
 `;
 }
 
@@ -186,9 +223,13 @@ function parseCliConfig(input: unknown): CliConfig {
     const restartDelayMs = parseRestartDelayMs(raw);
     const accounts = parseAccounts(raw);
     const onebot11 = parseOnebot11(raw);
+    const satori = parseSatori(raw);
     const out: CliConfig = { dataDir, autoRestart, restartDelayMs, accounts };
     if (onebot11 !== undefined) {
         out.onebot11 = onebot11;
+    }
+    if (satori !== undefined) {
+        out.satori = satori;
     }
     return out;
 }
@@ -202,6 +243,17 @@ function parseOnebot11(raw: Record<string, unknown>): Record<string, unknown> | 
         throw kernelError("主配置 onebot11 段必须是对象", "INVALID_PARAM");
     }
     return raw["onebot11"] as Record<string, unknown>;
+}
+
+/** 解析 satori 段（宽松对象，装配时由 zod schema 严格校验）。 */
+function parseSatori(raw: Record<string, unknown>): Record<string, unknown> | undefined {
+    if (raw["satori"] === undefined) {
+        return;
+    }
+    if (typeof raw["satori"] !== "object" || raw["satori"] === null) {
+        throw kernelError("主配置 satori 段必须是对象", "INVALID_PARAM");
+    }
+    return raw["satori"] as Record<string, unknown>;
 }
 
 /** 解析 dataDir（缺省用当前解析的数据根）。 */

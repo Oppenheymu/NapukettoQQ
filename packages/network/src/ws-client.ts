@@ -7,7 +7,7 @@
  * - 心跳按间隔 ping
  */
 import { WebSocket } from "ws";
-import type { TransportAdapter, WsClientOptions } from "./types.js";
+import type { Respond, TransportAdapter, WsClientOptions } from "./types.js";
 
 export class WsClient implements TransportAdapter {
     private readonly opts: WsClientOptions;
@@ -17,8 +17,8 @@ export class WsClient implements TransportAdapter {
     private heartbeatTimer: NodeJS.Timeout | undefined;
     private reconnectTimer: NodeJS.Timeout | undefined;
 
-    /** 请求分发注入点：协议层实现「请求 → 响应」。 */
-    onRequest?: (req: unknown, respond: (res: unknown) => void) => void;
+    /** 请求分发注入点：协议层实现「请求 → 响应」（status 参数 WS 下忽略）。 */
+    onRequest?: (req: unknown, respond: Respond) => void;
 
     constructor(opts: WsClientOptions) {
         this.opts = opts;

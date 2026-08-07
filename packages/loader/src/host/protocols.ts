@@ -25,6 +25,16 @@ interface Onebot11ModuleLike {
     };
 }
 
+/** adapter 包 satori 子路径最小面（@napuketto/adapter，动态 import）。 */
+interface SatoriModuleLike {
+    satoriConfigSchema: { parse(input: unknown): unknown };
+    NapukettoSatoriAdapter: new (
+        options: Record<string, unknown>,
+    ) => {
+        start(): Promise<unknown>;
+    };
+}
+
 /** adapter 包 core 子路径最小面（ProtocolConfig 框架）。 */
 interface AdapterCoreModuleLike {
     ProtocolConfig: new (options: Record<string, unknown>) => unknown;
@@ -67,10 +77,14 @@ export async function startProtocols(
         // adapter 子路径导出（ADR-014）：onebot11 面（ob11ConfigSchema/
         // NapukettoOneBot11Adapter）走 ./onebot11，core 框架（ProtocolConfig）走 ./core。
         const onebot11Entry = adapterEntry.replace(/index\.mjs$/, "onebot11/index.mjs");
+        const satoriEntry = adapterEntry.replace(/index\.mjs$/, "satori/index.mjs");
         const coreEntry = adapterEntry.replace(/index\.mjs$/, "core/index.mjs");
         const adapter = (await import(
             `file://${onebot11Entry.replace(/\\/g, "/")}`
         )) as unknown as Onebot11ModuleLike;
+        const satoriAdapter = (await import(
+            `file://${satoriEntry.replace(/\\/g, "/")}`
+        )) as unknown as SatoriModuleLike;
         const adapterCore = (await import(
             `file://${coreEntry.replace(/\\/g, "/")}`
         )) as unknown as AdapterCoreModuleLike;
@@ -187,6 +201,7 @@ export async function startProtocols(
         // 装配链自身探测（kernel.resolveConfigPath）> NAPUTO_CFG_DIR 兜底（旧行为兼容）。
         // （ConfigBase seed 模式：load() 直接用内存值，不再读写独立协议文件）
         let ob11Section: Record<string, unknown> = {};
+        let satoriSection: Record<string, unknown> = {};
         const cfgFile = env.NAPKETTO_CONFIG || join(env.NAPUTO_CFG_DIR || ".", "napuketto.toml");
         try {
             const raw = readFileSync(cfgFile, "utf8");
@@ -194,8 +209,11 @@ export async function startProtocols(
             if (parsed && typeof parsed["onebot11"] === "object" && parsed["onebot11"] !== null) {
                 ob11Section = parsed["onebot11"] as Record<string, unknown>;
             }
+            if (parsed && typeof parsed["satori"] === "object" && parsed["satori"] !== null) {
+                satoriSection = parsed["satori"] as Record<string, unknown>;
+            }
         } catch (e) {
-            log(`bootstrap: 全局配置读取失败（用默认 ob11 配置）: ${errMsg(e)}`);
+            log(`bootstrap: 全局配置读取失败（用默认 ob11/satori 配置）: ${errMsg(e)}`);
         }
         const ob11Config = new adapterCore.ProtocolConfig({
             path: cfgFile,
@@ -245,6 +263,34 @@ export async function startProtocols(
         });
         await ob11.start();
         log("bootstrap: onebot11 adapter started");
+
+        // Satori 协议（可选）：读 [satori] 段，装配 NapukettoSatoriAdapter。
+        // 与 OB11 共用 kernel apis / 消息通道 / 广播器（多协议共存，各协议独立传输）。
+        const satoriCacheDir =
+            typeof satoriSection["cacheDir"] === "string" && satoriSection["cacheDir"] !== ""
+                ? satoriSection["cacheDir"]
+                : join(env.NAPUTO_CFG_DIR || ".", "cache");
+        const satoriConfig = new adapterCore.ProtocolConfig({
+            path: cfgFile,
+            schema: satoriAdapter.satoriConfigSchema,
+            defaults: satoriAdapter.satoriConfigSchema.parse({}),
+            seed: satoriAdapter.satoriConfigSchema.parse(satoriSection),
+        });
+        const satori = new satoriAdapter.NapukettoSatoriAdapter({
+            config: satoriConfig,
+            broadcaster,
+            msgChannel: channel,
+            msgApi,
+            groupApi,
+            groupNotifyApi,
+            friendApi,
+            profileApi,
+            self: { uin: loginResult.uin, nickname: loginResult.nick },
+            cacheDir: satoriCacheDir,
+            groupCache,
+        });
+        await satori.start();
+        log("bootstrap: satori adapter started");
     } catch (e) {
         log(`bootstrap: 协议装配失败: ${errMsg(e)}`);
     }

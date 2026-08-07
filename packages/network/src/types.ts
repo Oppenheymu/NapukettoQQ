@@ -19,6 +19,13 @@ export interface RequestContext {
 export type AuthorizeHook = (ctx: RequestContext) => boolean;
 
 /**
+ * 响应回调：协议层处理后回发。
+ * `status` 为可选 HTTP 状态码（HTTP server 用；WS 传输忽略）。
+ * OB11 不传 status（恒 200）；Satori RPC 用 status 表达 404/501 等。
+ */
+export type Respond = (res: unknown, status?: number) => void;
+
+/**
  * 传输适配器：协议无关（对应 NapCat OB11NetworkAdapter 的泛型化）。
  * - `send`：协议无关推送（HTTP 反向无主动推送，实现为 no-op）
  * - `onRequest`：接收第三方请求 → 协议层处理后经 `respond` 回发
@@ -27,7 +34,16 @@ export interface TransportAdapter {
     send: <T>(payload: T) => void;
     open: () => void | Promise<void>;
     close: () => void | Promise<void>;
-    onRequest?: (req: unknown, respond: (res: unknown) => void) => void;
+    onRequest?: (req: unknown, respond: Respond) => void;
+}
+
+/**
+ * HTTP 路由上下文（协议无关，Satori RPC 等按路径分发的协议用）。
+ * `path` 为请求路径（如 /v1/message.create），`method` 为 HTTP 方法。
+ */
+export interface HttpRouteContext {
+    path: string;
+    method: string;
 }
 
 /** 服务器公共选项。 */

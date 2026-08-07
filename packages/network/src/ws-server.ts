@@ -6,7 +6,7 @@
  */
 import type { IncomingMessage } from "node:http";
 import { WebSocket, WebSocketServer } from "ws";
-import type { RequestContext, TransportAdapter, WsServerOptions } from "./types.js";
+import type { RequestContext, Respond, TransportAdapter, WsServerOptions } from "./types.js";
 
 const WS_CLOSE_CODE = {
     unauthorized: 4401,
@@ -29,8 +29,8 @@ export class WsServer implements TransportAdapter {
     private wss: WebSocketServer | undefined;
     private heartbeatTimer: NodeJS.Timeout | undefined;
 
-    /** 请求分发注入点：协议层实现「请求 → 响应」。 */
-    onRequest?: (req: unknown, respond: (res: unknown) => void) => void;
+    /** 请求分发注入点：协议层实现「请求 → 响应」（status 参数 WS 下忽略）。 */
+    onRequest?: (req: unknown, respond: Respond) => void;
 
     constructor(opts: WsServerOptions) {
         this.opts = opts;
