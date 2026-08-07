@@ -5,11 +5,15 @@
  * → 数组翻译为 OB11 消息信息。
  */
 
-import { ChatType } from "@napuketto/kernel";
+import { ChatType, toCanonicalElements } from "@napuketto/kernel";
 import { z } from "zod";
 import { BaseAction } from "../../../core/index.js";
 import type { OneBotApi } from "../../api/one-bot-api.js";
-import { toOb11MessageInfo } from "../../helper/index.js";
+import {
+    collectReceiveNeeds,
+    type ReceiveTranslateContext,
+    toOb11MessageInfo,
+} from "../../helper/index.js";
 import type { OB11MessageInfo } from "../../types/index.js";
 import { ob11ErrorCodeMap } from "../error-map.js";
 
@@ -29,7 +33,7 @@ const getGroupMsgHistorySchema = z.object({
 type GetGroupMsgHistoryPayload = z.infer<typeof getGroupMsgHistorySchema>;
 
 /** 历史消息依赖（OneBotApi 视图，由装配方注入）。 */
-export type MsgHistoryDeps = Pick<OneBotApi, "msgApi" | "messageUnique">;
+export type MsgHistoryDeps = Pick<OneBotApi, "msgApi" | "messageUnique" | "uidToUin">;
 
 /** 获取群历史消息（P2-10 接 kernel fetchMessages）。 */
 export class GetGroupMsgHistoryAction extends BaseAction<
@@ -69,8 +73,28 @@ export class GetGroupMsgHistoryAction extends BaseAction<
         if (msgs.length === 0) {
             throw new Error(`消息 ${payload.message_seq ?? "0"} 不存在`);
         }
+        // P2-19：收集全部消息 at uid → 一次批量 uidToUin → 上下文注入
+        const atUids = new Set<string>();
+        for (const m of msgs) {
+            const { atUids: uids } = collectReceiveNeeds(toCanonicalElements(m));
+            for (const u of uids) {
+                atUids.add(u);
+            }
+        }
+        let uidToUin: Map<string, string> | undefined;
+        if (atUids.size > 0) {
+            try {
+                uidToUin = await this.deps.uidToUin([...atUids]);
+            } catch {
+                // uid 解析失败：at 原样（uid）
+            }
+        }
+        const ctx: ReceiveTranslateContext = {
+            ...(uidToUin !== undefined ? { uidToUin } : {}),
+            msgIdToOb11Id: (m) => this.deps.messageUnique.getMessageId(m),
+        };
         return {
-            messages: msgs.map((msg) => toOb11MessageInfo(msg, this.deps.messageUnique)),
+            messages: msgs.map((msg) => toOb11MessageInfo(msg, this.deps.messageUnique, ctx)),
         };
     }
 }

@@ -13,21 +13,28 @@ import type {
 } from "../event/index.js";
 import type { GroupSender } from "../event/message.js";
 import type { Sender } from "../types/index.js";
-import { canonicalToCqMessage, canonicalToSegments } from "./data.js";
+import {
+    applyReceiveContext,
+    canonicalToCqMessage,
+    canonicalToSegments,
+    type ReceiveTranslateContext,
+} from "./data.js";
 import type { MessageUnique } from "./message-unique.js";
 
 /** 毫秒 → 秒（Unix 时间戳）。 */
 const MS_TO_SEC = 1000;
 
 /** RawMessage → OB11 消息事件（message_id 经 MessageUnique 映射并记录 peer）。
- * messageFormat 决定 message 字段格式：array = 消息段数组（标准），string = CQ 码字符串。 */
+ * messageFormat 决定 message 字段格式：array = 消息段数组（标准），string = CQ 码字符串。
+ * ctx（可选）：接收方向 ID 转换上下文（at uid→uin、reply NT msgId→OB11 id，P2-19）。 */
 export function toOb11MessageEvent(
     msg: RawMessage,
     selfUin: string,
     unique: MessageUnique,
     messageFormat: "array" | "string" = "array",
+    ctx: ReceiveTranslateContext = {},
 ): OB11MessageEvent {
-    const elements = toCanonicalElements(msg);
+    const elements = applyReceiveContext(toCanonicalElements(msg), ctx);
     const segments = canonicalToSegments(elements);
     const time = Math.floor(Number(msg.msgTime) / MS_TO_SEC);
     const selfId = Number(selfUin);

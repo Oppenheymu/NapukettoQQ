@@ -9,6 +9,7 @@
  */
 
 import type { MsgEventChannel, RawMessage } from "@napuketto/kernel";
+import { toCanonicalElements } from "@napuketto/kernel";
 import type { EventBroadcaster } from "@napuketto/network";
 import {
     type ActionRegistry,
@@ -20,7 +21,11 @@ import { createOb11ActionRegistry } from "./action/index.js";
 import type { OneBotApiOptions } from "./api/one-bot-api.js";
 import { OneBotApi } from "./api/one-bot-api.js";
 import type { OB11Config } from "./helper/index.js";
-import { ob11ConfigSchema } from "./helper/index.js";
+import {
+    collectReceiveNeeds,
+    ob11ConfigSchema,
+    type ReceiveTranslateContext,
+} from "./helper/index.js";
 import { toOb11MessageEvent } from "./helper/message-event.js";
 import { collectGrayTipUids, hasGrayTip, toOb11NoticeEvent } from "./helper/notice.js";
 import type { Ob11TransportSet } from "./transport.js";
@@ -163,16 +168,40 @@ export class NapukettoOneBot11Adapter extends BaseProtocolAdapter<OB11Config> {
                 if (!this.reportSelfMessage && String(msg.senderUin) === this.selfUin) {
                     continue;
                 }
-                this.broadcastEvent(
-                    toOb11MessageEvent(
-                        msg,
-                        this.selfUin,
-                        this.oneBotApi.messageUnique,
-                        this.messageFormat,
-                    ),
-                );
+                void this.broadcastMessageEvent(msg);
             }
         });
+    }
+
+    /**
+     * 广播消息事件（P2-19：接收方向 ID 转换）。
+     * 收集 at uid → 一次批量 uidToUin → 构造上下文 → 翻译广播。
+     * 翻译失败退化为原样（不阻塞上报）。
+     */
+    private async broadcastMessageEvent(msg: RawMessage): Promise<void> {
+        const elements = toCanonicalElements(msg);
+        const { atUids } = collectReceiveNeeds(elements);
+        let uidToUin: Map<string, string> | undefined;
+        if (atUids.length > 0) {
+            try {
+                uidToUin = await this.oneBotApi.uidToUin(atUids);
+            } catch {
+                // uid 解析失败：at 原样（uid），不阻塞事件上报
+            }
+        }
+        const ctx: ReceiveTranslateContext = {
+            ...(uidToUin !== undefined ? { uidToUin } : {}),
+            msgIdToOb11Id: (msgId) => this.oneBotApi.messageUnique.getMessageId(msgId),
+        };
+        this.broadcastEvent(
+            toOb11MessageEvent(
+                msg,
+                this.selfUin,
+                this.oneBotApi.messageUnique,
+                this.messageFormat,
+                ctx,
+            ),
+        );
     }
 
     /** 广播 grayTip → notice 事件（批量 uidToUin 后翻译，纯函数）。 */

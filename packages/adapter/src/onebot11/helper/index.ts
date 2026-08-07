@@ -14,10 +14,15 @@ export {
     unescapeCqText,
 } from "./cqcode.js";
 export {
+    applyReceiveContext,
+    applySendContext,
     canonicalToCqMessage,
     canonicalToSegments,
+    collectReceiveNeeds,
     cqMessageToCanonical,
     cqMessageToSegments,
+    type ReceiveTranslateContext,
+    type SendTranslateContext,
     segmentsToCanonical,
     segmentsToCqMessage,
 } from "./data.js";

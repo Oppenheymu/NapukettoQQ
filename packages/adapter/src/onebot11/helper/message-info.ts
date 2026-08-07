@@ -8,15 +8,25 @@
 import type { RawMessage } from "@napuketto/kernel";
 import { ChatType, toCanonicalElements } from "@napuketto/kernel";
 import type { OB11MessageInfo } from "../types/index.js";
-import { canonicalToCqMessage, canonicalToSegments } from "./data.js";
+import {
+    applyReceiveContext,
+    canonicalToCqMessage,
+    canonicalToSegments,
+    type ReceiveTranslateContext,
+} from "./data.js";
 import type { MessageUnique } from "./message-unique.js";
 
 /** 毫秒 → 秒（Unix 时间戳）。 */
 const MS_TO_SEC = 1000;
 
-/** RawMessage → OB11 消息信息（message_id 经 MessageUnique 映射）。 */
-export function toOb11MessageInfo(msg: RawMessage, unique: MessageUnique): OB11MessageInfo {
-    const elements = toCanonicalElements(msg);
+/** RawMessage → OB11 消息信息（message_id 经 MessageUnique 映射）。
+ * ctx（可选）：接收方向 ID 转换上下文（at uid→uin、reply NT msgId→OB11 id，P2-19）。 */
+export function toOb11MessageInfo(
+    msg: RawMessage,
+    unique: MessageUnique,
+    ctx: ReceiveTranslateContext = {},
+): OB11MessageInfo {
+    const elements = applyReceiveContext(toCanonicalElements(msg), ctx);
     let messageType: "group" | "private" = "private";
     if (msg.chatType === ChatType.GROUP) {
         messageType = "group";

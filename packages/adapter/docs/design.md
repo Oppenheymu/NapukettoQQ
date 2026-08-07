@@ -339,6 +339,18 @@ adapter onStart：装配传输 → 打开 server/client → 广播 lifecycle ena
 
 **boot.cjs 补协议装配**（loader runtime）：登录成功后动态 import adapter/network 入口（launcher 环境变量 NAPUTO_ADAPTER_ENTRY / NAPUTO_NETWORK_ENTRY）→ 创建 MsgChannel + MsgBridge + MsgApi/GroupApi/FriendApi + EventBroadcaster + NapukettoOneBot11Adapter → start。
 
+### 8.19 P2-19 at/reply 段 ID 空间转换（2026-08-07 设计 + 实现）
+
+**背景**：canonical 模型的 ID 空间是 **NT 侧**（`at.target`=uid、`reply.messageId`=NT 雪花 msgId），而 OB11 规范是 **QQ 号空间**（`at.qq`=uin、`reply.id`=OB11 message_id）。此前直接透传——koishi 等客户端渲染 @ 失效、reply 引用断链。**产品化审查待办项，2026-08-07 修复。**
+
+**架构约束**（ADR-008）：翻译核心（`data.ts` canonical↔OB11 映射）保持纯函数，不调 API。方案 = **在协议边界准备 ID 转换上下文，注入翻译函数**：
+- 接收方向（`adapter.ts` 订阅处 / get_msg / 历史消息动作）：收集消息内 at uid + reply NT msgId → **一次**批量 `uidToUin`（异步）→ 构造 `ReceiveTranslateContext`（`uidToUin: Map` + `msgIdToOb11Id` 委托 MessageUnique）→ 传 `toOb11MessageEvent` / `toOb11MessageInfo`。
+- 发送方向（`send_msg`）：收集 at uin → 一次批量 `uinToUid` → `applySendContext`（at uin→uid；reply 经 MessageUnique.getMsgId 反查 OB11 id→NT msgId，**反查不到原样透传**——兼容客户端直接给 NT msgId 的输入）。
+
+**新增（helper/data.ts，纯函数）**：`ReceiveTranslateContext` / `applyReceiveContext` / `collectReceiveNeeds` / `SendTranslateContext` / `applySendContext`。`applyReceiveContext` 对 canonical 数组做后处理（at uid→uin、reply NT msgId→OB11 id），`canonicalToSegments` 与 `canonicalToCqMessage` 共用同一份转换后数组——array/string 两种 message 格式都正确。
+
+**边界**：进程内 MessageUnique 映射（重启清空）→ 历史消息 reply 反查可能失败 → 原样透传不报错；uidToUin 转换失败（用户已退群等）→ at 原样 uid 不阻塞上报。
+
 ### 8.17 P2-17 GroupCache 消费（群信息/群成员动作读缓存，2026-08-05 设计 + 实现）
 
 **目标**：HANDOVER.md §8.1-2 的消费侧。kernel GroupCache（ADR-008，见 kernel design §6.1/§8.18）已实现；本批把群查询动作从「每次直查原生」改为「读缓存 + 缺失回填」。**已实现并 pnpm check 全绿（156 文件）+ 全量构建通过。**

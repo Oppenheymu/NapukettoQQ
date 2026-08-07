@@ -4,10 +4,14 @@
  * user_id → uin→uid → Peer{ C2C } → fetchMessages → 数组翻译。
  */
 
-import { ChatType } from "@napuketto/kernel";
+import { ChatType, toCanonicalElements } from "@napuketto/kernel";
 import { z } from "zod";
 import { BaseAction } from "../../../core/index.js";
-import { toOb11MessageInfo } from "../../helper/index.js";
+import {
+    collectReceiveNeeds,
+    type ReceiveTranslateContext,
+    toOb11MessageInfo,
+} from "../../helper/index.js";
 import type { OB11MessageInfo } from "../../types/index.js";
 import { ob11ErrorCodeMap } from "../error-map.js";
 import type { MsgHistoryDeps } from "./get-group-msg-history.js";
@@ -71,8 +75,28 @@ export class GetFriendMsgHistoryAction extends BaseAction<
         if (msgs.length === 0) {
             throw new Error(`消息 ${payload.message_seq ?? "0"} 不存在`);
         }
+        // P2-19：收集全部消息 at uid → 一次批量 uidToUin → 上下文注入
+        const atUids = new Set<string>();
+        for (const m of msgs) {
+            const { atUids: uids } = collectReceiveNeeds(toCanonicalElements(m));
+            for (const u of uids) {
+                atUids.add(u);
+            }
+        }
+        let uidToUin: Map<string, string> | undefined;
+        if (atUids.size > 0) {
+            try {
+                uidToUin = await this.deps.uidToUin([...atUids]);
+            } catch {
+                // uid 解析失败：at 原样（uid）
+            }
+        }
+        const ctx: ReceiveTranslateContext = {
+            ...(uidToUin !== undefined ? { uidToUin } : {}),
+            msgIdToOb11Id: (m) => this.deps.messageUnique.getMessageId(m),
+        };
         return {
-            messages: msgs.map((msg) => toOb11MessageInfo(msg, this.deps.messageUnique)),
+            messages: msgs.map((msg) => toOb11MessageInfo(msg, this.deps.messageUnique, ctx)),
         };
     }
 }
