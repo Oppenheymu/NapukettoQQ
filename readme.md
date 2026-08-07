@@ -29,6 +29,9 @@
 
 ## 架构与包结构（Monorepo）
 
+<details>
+<summary><b>📐 架构总览（点击展开）</b></summary>
+
 ```mermaid
 flowchart TD
     subgraph APP["应用 / CLI 层"]
@@ -55,7 +58,9 @@ flowchart TD
     style CORE fill:#fce4ec,stroke:#c62828
 ```
 
-> **依赖方向严格单向向下**：上层可依赖下层，下层不得反向依赖上层（kernel 无内部依赖，仅 pino + smol-toml）。
+</details>
+
+> **依赖方向严格单向向下**：上层可依赖下层，下层不得反向依赖上层（kernel 无内部依赖，仅 pino + smol-toml）。完整架构细节见 [`docs/architecture.md`](./docs/architecture.md)。
 
 ### 应用与 CLI
 
