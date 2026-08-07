@@ -5,8 +5,12 @@
         "module": "NodeNext",
         "moduleResolution": "NodeNext",
         "moduleDetection": "force",
-        "lib": ["ES2025"],
-        "types": ["node"],
+        "lib": [
+            "ES2025"
+        ],
+        "types": [
+            "node"
+        ],
         "strict": true,
         "noImplicitAny": true,
         "strictNullChecks": true,

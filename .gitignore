@@ -16,6 +16,8 @@ pnpm-debug.log*
 
 # 全局配置文件（项目根 napuketto.toml，含账号/协议配置，不入库）
 napuketto.toml
+# 例外：create 脚手架的配置模板需入库（git 不跟踪则 clone 后脚手架无法生成用户配置）
+!apps/create-napukettoqq/templates/napuketto.toml
 
 # typescript build info
 **/*.tsbuildinfo
@@ -45,9 +47,6 @@ napuketto.toml
 
 # 临时实验脚本
 scripts-tmp/
-
-# 工作区参考文件（koishi create 源码，仅供阅读，不参与编译/不入库）
-apps/给你看的.ts
 
 # 归档区
 archive/

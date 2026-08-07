@@ -1,42 +1,143 @@
 #!/usr/bin/env node
 
 /**
- * create-napukettoqq 入口（2026-08-07）。
+ * create-napukettoqq 入口（2026-08-07 美化 v3，交互层用 @clack/prompts——
+ * 现代脚手架交互标准，create-vue / create-turbo 同款）。
  *
  * 用法：
- *   create-napukettoqq                # 交互问部署文件夹名（默认 NapukettoQQ）
- *   create-napukettoqq my-bot         # 位置参数指定文件夹名，跳过交互
+ *   create-napukettoqq                # intro + 交互问部署文件夹名（默认 NapukettoQQ）
+ *   create-napukettoqq my-bot         # 位置参数指定文件夹名，跳过命名交互
+ *   create-napukettoqq my-bot -f      # 目标目录非空时强制清空覆盖
+ *   create-napukettoqq -y             # 全默认（命名用默认值、启动询问用默认 Y）
+ *   create-napukettoqq -h             # 打印帮助
  *
- * 流程：生成项目骨架（package.json / napuketto.toml / readme.md / .gitignore）
- *   → 用调用方的包管理器（npm_config_user_agent 检测，支持 pnpm/yarn/npm）
- *   自动 install → 询问是否现在启动（默认 Y），Y 则前台运行（Ctrl+C 停止）。
+ * 流程：intro → 问文件夹名 → 目标目录准备（非空需确认清空）→ spinner 生成骨架
+ *   （package.json / napuketto.toml / readme.md / .gitignore）→ 用调用方包管理器
+ *   自动 install → 询问是否现在启动（默认 Y）→ 前台运行 → outro 收尾。
  */
 
 import { spawn } from "node:child_process";
+import { readFileSync } from "node:fs";
+import { relative } from "node:path";
 import process from "node:process";
-import { createInterface } from "node:readline/promises";
-import { DEFAULT_PROJECT_NAME, detectPackageManager, pmBin, scaffoldProject } from "./scaffold.js";
+import { cancel, confirm, intro, isCancel, log, outro, spinner, text } from "@clack/prompts";
+import {
+    checkDirStatus,
+    DEFAULT_PROJECT_NAME,
+    detectPackageManager,
+    pmBin,
+    resolveTargetDir,
+    scaffoldProject,
+    validateProjectName,
+} from "./scaffold.js";
 
-/** 交互询问部署文件夹名（回车取默认值）。 */
-async function askProjectName(): Promise<string> {
-    const rl = createInterface({ input: process.stdin, output: process.stdout });
+/** CLI 参数解析结果。 */
+interface CliOptions {
+    /** 位置参数：部署文件夹名（可选）。 */
+    name?: string;
+    /** -f/--forced：目标目录非空时强制清空覆盖。 */
+    forced: boolean;
+    /** -y/--yes：跳过所有交互提示（使用默认值）。 */
+    yes: boolean;
+    /** -h/--help：显示帮助。 */
+    help: boolean;
+}
+
+/** 帮助文本（-h/--help）。 */
+const HELP = `  用法: create-napukettoqq [name] [选项]
+
+  选项:
+    -f, --forced   目标目录非空时强制清空并覆盖
+    -y, --yes      跳过所有交互提示（使用默认值）
+    -h, --help     显示本帮助
+`;
+
+/** 解析命令行参数（flag 仅三个，手写保持自包含，不引 yargs-parser）。 */
+function parseArgs(argv: string[]): CliOptions {
+    const opts: CliOptions = { forced: false, yes: false, help: false };
+    for (const arg of argv) {
+        if (arg === "-f" || arg === "--forced") {
+            opts.forced = true;
+        } else if (arg === "-y" || arg === "--yes") {
+            opts.yes = true;
+        } else if (arg === "-h" || arg === "--help") {
+            opts.help = true;
+        } else if (arg.startsWith("-")) {
+            throw new Error(`未知参数：${arg}`);
+        } else if (opts.name === undefined) {
+            opts.name = arg;
+        } else {
+            throw new Error(`多余的位置参数：${arg}`);
+        }
+    }
+    return opts;
+}
+
+/** 读取脚手架自身版本号（intro 显示；dist 场景 import.meta.url 指向包内）。 */
+function readVersion(): string {
     try {
-        const answer = await rl.question(`? 部署文件夹名（默认 ${DEFAULT_PROJECT_NAME}）: `);
-        return answer.trim() || DEFAULT_PROJECT_NAME;
-    } finally {
-        rl.close();
+        const ownPkg = JSON.parse(
+            readFileSync(new URL("../package.json", import.meta.url), "utf8"),
+        ) as { version?: string };
+        return ownPkg.version ?? "0.0.0";
+    } catch {
+        // package.json 缺失（异常环境）→ 兜底
+        return "0.0.0";
     }
 }
 
-/** 交互询问是否现在启动（默认 Y）。 */
-async function askStartNow(): Promise<boolean> {
-    const rl = createInterface({ input: process.stdin, output: process.stdout });
-    try {
-        const answer = (await rl.question("? 是否现在启动？（默认 Y/n）: ")).trim().toLowerCase();
-        return answer !== "n" && answer !== "no";
-    } finally {
-        rl.close();
+/** 交互询问部署文件夹名（回车取默认值；-y 直接返回默认值）。 */
+async function askProjectName(yes: boolean): Promise<string> {
+    if (yes) {
+        return DEFAULT_PROJECT_NAME;
     }
+    const name = await text({
+        message: "部署文件夹名",
+        placeholder: DEFAULT_PROJECT_NAME,
+        initialValue: DEFAULT_PROJECT_NAME,
+        validate: (input: string | undefined) => {
+            try {
+                validateProjectName(input ?? "");
+                return undefined;
+            } catch (err) {
+                return err instanceof Error ? err.message : String(err);
+            }
+        },
+    });
+    if (isCancel(name)) {
+        cancel("操作已取消");
+        process.exit(0);
+    }
+    return validateProjectName(name);
+}
+
+/** 询问是否移除现有文件并继续（目标目录非空时）。 */
+async function confirmRemove(dirName: string): Promise<boolean> {
+    const ok = await confirm({
+        message: `目录 "${dirName}" 已存在且非空，移除现有文件并继续？`,
+        initialValue: false,
+    });
+    if (isCancel(ok)) {
+        cancel("操作已取消");
+        process.exit(0);
+    }
+    return ok;
+}
+
+/** 询问是否现在启动（默认 Y；-y 直接返回 true）。 */
+async function askStartNow(yes: boolean): Promise<boolean> {
+    if (yes) {
+        return true;
+    }
+    const ok = await confirm({
+        message: "是否现在启动？",
+        initialValue: true,
+    });
+    if (isCancel(ok)) {
+        cancel("操作已取消");
+        process.exit(0);
+    }
+    return ok;
 }
 
 /** 前台执行命令（stdio 继承，用户可见进度/交互），返回退出码。 */
@@ -56,46 +157,77 @@ function runInteractive(bin: string, args: string[], cwd: string): Promise<numbe
 }
 
 async function main(): Promise<void> {
-    const dirArg = process.argv[2];
-    const dirName = dirArg ?? (await askProjectName());
-    const result = await scaffoldProject(dirName);
-    const pm = detectPackageManager();
+    const opts = parseArgs(process.argv.slice(2));
+    if (opts.help) {
+        console.log(HELP);
+        return;
+    }
 
-    console.log("\n========================================");
-    console.log("  NapukettoQQ 项目已生成");
-    console.log(`  位置：${result.dir}`);
-    console.log(`  包管理器：${pm}（自动检测）`);
-    console.log("========================================");
-    console.log("前置要求：本机已安装 QQ NT（wrapper.node 来自 QQ 安装目录）。");
+    // intro：顶边框 + 名称 + 版本
+    intro(`create-napukettoqq  v${readVersion()}`);
+
+    const dirName = opts.name ?? (await askProjectName(opts.yes));
+    const targetDir = resolveTargetDir(dirName);
+
+    // 目标目录准备：非空需确认清空（-f 跳过确认；-y 不隐式清空，保持默认安全语义）
+    let overwrite = false;
+    if ((await checkDirStatus(targetDir)) === "nonempty") {
+        if (!opts.forced) {
+            log.warn(`目标目录 "${dirName}" 已存在且非空。`);
+            overwrite = await confirmRemove(dirName);
+            if (!overwrite) {
+                outro("已取消，未做任何修改。");
+                return;
+            }
+        } else {
+            overwrite = true;
+        }
+    }
+
+    // 生成骨架（spinner 进度）
+    const s = spinner();
+    s.start(`正在生成项目骨架 ${dirName} ...`);
+    const result = await scaffoldProject(dirName, overwrite);
+    s.stop(`项目骨架已生成：${dirName}`);
+    log.success(`位置：${result.dir}`);
 
     // 自动安装依赖（用调用方包管理器）
-    console.log(`\n正在安装依赖（${pm} install）...`);
+    const pm = detectPackageManager();
+    log.info(`包管理器：${pm}（自动检测）`);
+    log.info("前置要求：本机已安装 QQ NT（wrapper.node 来自 QQ 安装目录）。");
+    log.info(`正在安装依赖（${pm} install）...`);
     const installCode = await runInteractive(pmBin(pm), ["install"], result.dir);
     if (installCode !== 0) {
-        console.error(`\n依赖安装失败（退出码 ${installCode}）。请手动执行：`);
-        console.error(`  cd ${result.dir}`);
-        console.error(`  ${pm} install`);
+        log.error(`依赖安装失败（退出码 ${installCode}）。请手动执行：`);
+        log.step(`cd ${result.dir}`);
+        log.step(`${pm} install`);
+        outro("创建失败，请手动安装后重试。");
         process.exitCode = 1;
         return;
     }
 
     // 询问是否现在启动（默认 Y → 前台运行）
-    if (await askStartNow()) {
-        console.log(`\n正在启动 NapukettoQQ（Ctrl+C 停止）...\n`);
+    if (await askStartNow(opts.yes)) {
+        log.info("正在启动 NapukettoQQ（Ctrl+C 停止）...\n");
         const startCode = await runInteractive(pmBin(pm), ["start"], result.dir);
         if (startCode !== 0) {
             process.exitCode = startCode;
         }
     } else {
-        console.log("\n启动方式：");
-        console.log(`  cd ${result.dir}`);
-        console.log(`  ${pm} start -q <你的QQ号>`);
-        console.log("详细说明见项目内 readme.md 与 napuketto.toml。");
+        log.message("你可以稍后这样启动：");
+        if (targetDir !== process.cwd()) {
+            const related = relative(process.cwd(), targetDir);
+            log.step(`cd ${related}`);
+        }
+        log.step(`${pm} start -q <你的QQ号>`);
+        log.message("配置说明见项目内 napuketto.toml。");
     }
+
+    outro("完成。");
 }
 
 main().catch((err: unknown) => {
     const message = err instanceof Error ? err.message : String(err);
-    console.error(`创建失败：${message}`);
+    log.error(`创建失败：${message}`);
     process.exitCode = 1;
 });

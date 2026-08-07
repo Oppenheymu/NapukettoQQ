@@ -4,7 +4,8 @@
     "description": "一键生成 NapukettoQQ 机器人项目（yarn/pnpm/npm create napukettoqq）",
     "type": "module",
     "files": [
-        "dist"
+        "dist",
+        "templates"
     ],
     "main": "./dist/index.mjs",
     "bin": {
@@ -15,6 +16,7 @@
         "build": "tsdown"
     },
     "dependencies": {
+        "@clack/prompts": "^1.7.0",
         "@napuketto/cli": "workspace:*"
     },
     "devDependencies": {

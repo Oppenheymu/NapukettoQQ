@@ -1,0 +1,13 @@
+{
+    "name": "{{packageName}}",
+    "version": "0.0.1",
+    "private": true,
+    "type": "module",
+    "description": "NapukettoQQ 机器人项目（OneBot 11）",
+    "scripts": {
+        "start": "napuketto"
+    },
+    "dependencies": {
+        "@napuketto/cli": "{{cliVersion}}"
+    }
+}
