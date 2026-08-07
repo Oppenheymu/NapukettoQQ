@@ -81,9 +81,10 @@ apps/cli/src/
 - `logger.ts` 提供模块级单例（每进程一份，ADR-015 推论）：console pretty、不写文件
   （文件日志由 kernel 装配负责：`<数据根>/logs/napuketto.log`）、`base: { service: "cli" }`
   标注来源、级别经 `NAPKETTO_LOG_LEVEL` 环境变量覆盖（缺省 info）。
-- **console 统一风格由 kernel `formatLogMessage`（pino-pretty messageFormat）实现**，
-  三种格式自动分流：特定系统配置日志（QQ 安装信息/数据目录）多行展开、其他带属性日志
-  压缩单行 `消息 -> k: v | k2: v2`、纯文本日志直出；消息日志（loader 打）单行流防刷屏。
+- **console 渲染（2026-08-07 定稿）**：pino-pretty 原生多行展开（`singleLine: false`），
+  带属性日志（安装信息/数据目录）逐字段上色高亮；高频业务日志由 loader 在调用点直接传
+  纯字符串（`logger.info("[群聊] 晓筱晨 → 晓工坊: 测试")`）→ 天然单行防刷屏。
+  ⚠️ 不手写 `messageFormat` 拼串（丢颜色 + 缩进碰撞，已回退）。
 - 启动信息带元数据：`logger.info({ qqVersion, qqPath }, ...)` / `{ dataDir }`；
   错误统一 `logger.error({ err }, ...)`（err 保留给 prettifyError 显示堆栈）。
 - **例外（功能输出）**：`config init/list/apply` 的 TOML 正文是机器可读的功能输出，

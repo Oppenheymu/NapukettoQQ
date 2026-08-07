@@ -72,7 +72,8 @@ export async function startProtocols(
         bridge.register();
         // 控制台消息日志（NapCat 同款：收到消息打印到控制台）。
         // 独立订阅，不干扰 adapter 的 OB11 翻译广播；解析纯函数无副作用（ADR-008）。
-        // 走结构化日志（时间戳 + 级别 + pid + 元数据），boot 文件日志保留。
+        // 高频业务日志：调用点直接传**纯字符串**（不传对象），pino-pretty 天然单行渲染，
+        // 避免对象属性多行展开刷屏；boot 文件日志保留（引导期诊断）。
         // onRecvMsg 回调参数为消息数组（2026-08-07 运行时实证）——遍历逐条打印。
         channel.on("Msg/onRecvMsg", (msgs) => {
             const list = Array.isArray(msgs) ? msgs : [msgs];
@@ -87,18 +88,16 @@ export async function startProtocols(
                         .map((el) => el.text)
                         .join("");
                     const kind = msg.chatType === kernel.ChatType.GROUP ? "群聊" : "私聊";
-                    const sender = msg.sendNickName || msg.senderUin || "?";
-                    const peer = msg.peerName || msg.peerUin || "?";
+                    const sender = msg.sendNickName || msg.senderUin || "未知";
+                    const peer = msg.peerName || msg.peerUin || "未知";
+                    const content = texts === "" ? "[空消息/媒体]" : texts;
                     const line = `📩 收到${kind}消息 来自=${sender} 会话=${peer}（${msg.peerUin ?? ""}）: ${texts}`;
                     log(line);
-                    logger?.info(
-                        { kind, sender, peer, peerUin: msg.peerUin ?? "", text: texts },
-                        "收到消息",
-                    );
+                    logger?.info(`[${kind}] ${sender} → ${peer}: ${content}`);
                 } catch (e) {
                     const line2 = `收到消息（解析失败: ${errMsg(e)}）`;
                     log(line2);
-                    logger?.warn({ err: errMsg(e) }, "收到消息（解析失败）");
+                    logger?.warn(`收到消息（解析失败: ${errMsg(e)}）`);
                 }
             }
         });

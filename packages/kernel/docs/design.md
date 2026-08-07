@@ -210,14 +210,16 @@ satori:   canonical → 元素（type/attrs，img/audio 等重命名）
 ## 8. 日志与配置
 
 - `logger.ts`：pino，支持 console + file + level，内置 redact（token/票据不打日志）。
-  **console 统一风格（2026-08-07，`formatLogMessage` messageFormat，cli/kernel/loader 全链路一致）**：
-  - 业务消息日志（`收到消息` / 带 `text`）→ 单行流 `(service): [群聊] 发送者: 内容`（防刷屏）
-  - 特定系统配置日志（QQ 安装信息 / 数据目录 / loginService.initConfig OK）→ 多行展开（每字段一行）
-  - 其他带属性日志 → 压缩单行 `(service): 消息 -> k: v | k2: v2`
-  - 纯文本日志 → `(service): 消息`
-  - 消费过的自定义键从 log 删除（防 prettifyObject 二次打印）；`err`/`error` 保留给 prettifyError
-    展示完整堆栈；字符串值还原反斜杠转义（对齐 pino-pretty 原生显示，Windows 路径可读）。
-  - `service` 字段标识来源：cli / kernel / loader，经 `base` 注入。
+  **console 渲染（2026-08-07 定稿：原生 pino-pretty，不手写格式化函数）**：
+  - `singleLine: false`（默认值，显式声明）——带属性的日志（如安装信息/数据目录）**多行展开**，
+    key/value 由 pino-pretty 自带颜色高亮（key 紫 / 字符串青），不丢视觉；
+  - 高频业务日志（收到消息）**调用点直接传纯字符串** `logger.info("[群聊] 晓筱晨 → 晓工坊: 测试")`，
+    不传对象 → 天然单行渲染，防刷屏；
+  - `err`/`error` 键交给 prettifyError 展示完整堆栈；`service` 字段标识来源
+    （cli / kernel / loader，经 `base` 注入），console 显示为属性行，文件 JSON 保留可过滤。
+  - ⚠️ 教训（2026-08-07）：曾用 `messageFormat` 返回带换行的拼串实现多行/单行分流——
+    拼串丢失 pino-pretty 逐字段上色（全变单色），且 `\n` 缩进与下一行前缀碰撞，
+    **已回退**。多行/单行的控制权交还 pino-pretty 原生渲染。
 - `config.ts`：ConfigBase（读 JSON → zod parse → 内存对象 → 变更写回）；napcat 主配置（fileLog/consoleLog/级别）在 kernel，**协议配置 schema 在各自协议包**（ADR-012）。
 
 ### 8.4 P1-1 wrapper 加载实现记录（2026-08-05，真实环境验证）
