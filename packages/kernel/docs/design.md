@@ -216,7 +216,7 @@ satori:   canonical → 元素（type/attrs，img/audio 等重命名）
   - `singleLine: false`（默认值，显式声明）——带属性的日志（如安装信息/数据目录）**多行展开**，
     key/value 由 pino-pretty 自带颜色高亮（key 紫 / 字符串青），不丢视觉；
   - 高频业务日志（接收消息）**调用点直接传纯字符串**，不传对象 → 天然单行渲染防刷屏；
-    消息内部颜色分层（前缀灰/会话青/发送者绿/内容默认）由 loader 用 ANSI Escape Codes
+    消息内部颜色分层（前缀灰/群 ID 青/用户 ID 绿/内容默认）由 loader 用 ANSI Escape Codes
     实现（见 loader design §3.1），boot 文件日志用纯文本版不嵌入。
   - `err`/`error` 键交给 prettifyError 展示完整堆栈；`base.name` 用 pino 保留字段
     （logger name）标识来源（cli / kernel / loader），pino-pretty 渲染为 `(name/pid)`

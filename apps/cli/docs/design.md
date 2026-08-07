@@ -86,7 +86,7 @@ apps/cli/src/
   级别经 `NAPKETTO_LOG_LEVEL` 环境变量覆盖（缺省 info）。
 - **console 渲染（2026-08-07 定稿）**：pino-pretty 原生多行展开（`singleLine: false`），
   带属性日志（安装信息/数据目录）逐字段上色高亮；高频业务日志由 loader 在调用点直接传
-  纯字符串 → 天然单行防刷屏，**消息内部颜色分层**（前缀灰/会话青/发送者绿/内容默认色，
+  纯字符串 → 天然单行防刷屏，**消息内部颜色分层**（前缀灰/群 ID 青/用户 ID 绿/内容默认色，
   ANSI Escape Codes）由 loader 实现（见 loader design §3.1）。
   ⚠️ 不手写 `messageFormat` 拼串（丢颜色 + 缩进碰撞，已回退）。
 - 启动信息带元数据：`logger.info({ qqVersion, qqPath }, ...)` / `{ dataDir }`；
