@@ -6,19 +6,23 @@
 
 ---
 
-## 🏆 关键决策点（2026-08-07 更新：自建宿主验证通过，路线 A 定案）
+## 🏆 关键决策点（2026-08-07 更新：自建宿主验证通过 + 等价物完成，路线 A 定案）
 
-> **✅ 决定性试金石通过（2026-08-07，p0-login3.mjs）**：纯 Node（系统 node v24）+ 9.9.33 官方
+> **✅ 自建宿主验证通过（2026-08-07，p0-login3.mjs）**：纯 Node（系统 node v24）+ 9.9.33 官方
 > wrapper.node + stub QQNT.dll 转发 + `O3MiscService` 激活事件分发 → **完整登录成功**
 > （getLoginList 7 账号 → onLoginConnected → quickLoginWithUin 成功）。**路线 A = 产品路线主攻**，
 > 路线 B（300MB 注入）降级为兜底。详见 `docs/HANDOVER-V6.md`。
+>
+> **✅ stub QQNT.dll 等价物完成（2026-08-07 晚，HANDOVER-V7）**：llvm-mingw 编译 **70KB PE 转发
+> stub**（99 符号：97 转发 node.exe + qq_magic → napi_module_register + IsEnvironmentStopping 内部
+> 实现），替换 NapCat 闭源 stub（481KB）后完整登录成功——**产品化前置解除**。
 >
 > 三要素（勿重复探索）：① 加载 = **stub QQNT.dll 转发**（napi_* → node.exe，无需 IAT 改写；
 > host-helper IAT 方案事件分发不工作已弃用）② **`NodeIO3MiscService.get()` + `addO3MiscListener`**
 > 激活事件分发（否则 getLoginList 永不 resolve）③ commonPath/desktopGlobalPath = `数据根/nt_qq/global`。
 >
-> 下一步：自研 stub QQNT.dll 等价物（NapCat stub 闭源，需自研 PE Export Forwarding 空壳）→
-> session READY 验证 → 内存实测 → 自建宿主落地。
+> 下一步：session READY 验证 → 内存实测 → 自建宿主落地（loader 新增自建宿主引导）。
+> 账号注意：快速登录 3054108135 会挂起（账号风控），测试用 **3567141148**（已验证成功）。
 
 **功能范围（用户拍板）**：**NapCat 全部能力（协议 + API）− WebUI − 插件系统**。
 **逆向边界（用户拍板：非 0 逆向）**：允许必要逆向——环境模拟/反风控（进程名伪装、
@@ -133,20 +137,20 @@ msgService 299 方法**（addKernelMsgListener/sendMsg/fetchMsgList 全在）。
 
 ## 🔥 下一步（按优先级）
 
-### 0️⃣ 自建宿主验证实验（P2-2 第一优先，见顶部决策点）
-- [x] **登录链路验证通过（2026-08-07，p0-login3.mjs）**：纯 Node + stub QQNT.dll 转发 +
-      O3MiscService 激活事件分发 + 快速登录成功（路线 A 定案）
-- [ ] **自研 stub QQNT.dll 等价物**（产品化前置）：PE Export Forwarding 空壳 DLL
-      （napi_* / qq_magic_napi_register → node.exe），替换 NapCat 闭源 stub
-- [ ] session READY 验证：登录成功后 getMsgService() 是否可用
-- [ ] 内存实测：标准 node + stub + wrapper + 登录态（对照路线 B 300MB+，目标百兆级）
+### 0️⃣ 自建宿主落地（P2-2 第一优先，验证已通过）
+- [x] **登录链路验证通过（2026-08-07）**：纯 Node + stub QQNT.dll 转发 + O3MiscService 激活事件分发 + 快速登录成功（路线 A 定案）
+- [x] **stub QQNT.dll 等价物完成（2026-08-07 晚）**：llvm-mingw 编译 70KB PE 转发 stub（99 符号），替换 NapCat 闭源 stub 后登录成功（HANDOVER-V7）
+- [ ] **整理正式版 stub**（stub-qqnt.cpp 正式化 + compare-symbols.mjs 重跑机制 + PerfTrace 补足（低优先））
+- [ ] **session READY 验证**：登录成功后 getMsgService() 是否可用（→ kernel/adapter 零改动复用 + 冒烟收发）
+- [ ] **内存实测**：标准 node + stub + wrapper + 登录态（对照路线 B 300MB+，目标百兆级）
+- [ ] **loader 自建宿主引导**：新增 NAPUTO_SELF_HOST 分支（标准 node + stub + boot.cjs 复用，替代路线 B 注入链路）
 
 ### P2-1 实测（功能最后一块）
 - [ ] 实机跑 `pnpm start`（默认路线 B worker），设 `NAPUTO_SMOKE=1` 看冒烟日志（napuketto-boot.log 中 smoke: 行）验证收发
 - [ ] OneBot 装配（adapter OB11 HTTP/WS + network）端到端验证
 
 ### P2-2 无头/低内存（验收标准 3/4）
-- [ ] 候选 A：**自建宿主落地**（验证已通过：loader 新增自建宿主引导，替代路线 B 注入链路）
+- [ ] 候选 A：**自建宿主落地**（验证已通过，loader 新增引导即完成）
 - [ ] 候选 B：路线 B + main 替换（注入后改 QQ main 阻止 UI，NapCat 注入模式做法，内存应降）
 - [ ] 候选 C：维持路线 B + 事后抑制（当前 600-700MB ❌ 用户已测，不可接受）
 
