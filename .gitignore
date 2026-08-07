@@ -36,23 +36,19 @@ napuketto.toml
 *.njsproj
 *.sln
 
-# probe scripts (研究工具，结论见 kernel/docs/design.md)
-packages/kernel/scripts/probe/
-
-# smoke-test 本地产物
-packages/loader/.smoke-cfg/
-
 # QQ 运行产物（登录态数据库，勿提交）
 *.db
 
-# V2 载具（闭源）：逆向腾讯 QQ 的产物（RVA/Offset 表）绝不进公共仓库
-# 载具 DLL 由私有构建流程编译（源码本地保留或私有仓库），公共仓库只留框架。
 # 2026-08-07 起改为 Git Submodule（Oppenheymu/NapukettoQQ-Native，private，路径 packages/loader/native），
 # 本目录由子仓库指针管理，clone 主仓库后需 git submodule update --init --recursive。
 # packages/loader/native/
 
-# 临时实验脚本（逆向验证 / PE 分析 / host 测试，不留仓库）
+# 临时实验脚本
 scripts-tmp/
 
-# 归档区（废弃文件冷宫：V1 注入框架 / 路线 B 运行时 / 实验垃圾，用户打包后删除）
+# 归档区
 archive/
+
+# AI提示词区域，这些文件实际上不应该被同步
+AGENTS.md
+docs
