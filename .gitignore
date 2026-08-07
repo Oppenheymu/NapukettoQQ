@@ -44,13 +44,7 @@ packages/loader/.smoke-cfg/
 
 # V2 载具（闭源）：逆向腾讯 QQ 的产物（RVA/Offset 表）绝不进公共仓库
 # 载具 DLL 由私有构建流程编译（源码本地保留或私有仓库），公共仓库只留框架。
-packages/loader/native/vehicle.cpp
 packages/loader/native-private/
-packages/loader/native/*.dll
-packages/loader/native/*.node
-
-# 临时观察 DLL（运行时验证 qq_magic_napi_register 调用，实验产物）
-packages/loader/native/magic-observer.cpp
 
 # 临时实验脚本（逆向验证 / PE 分析 / host 测试，不留仓库）
 scripts-tmp/

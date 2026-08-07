@@ -1,7 +1,7 @@
 {
     "name": "@napuketto/loader",
     "version": "0.0.1",
-    "description": "NapukettoQQ 引导组件：拉起 QQ.exe 并注入 hook DLL，把业务代码带进 QQ 定制版 Electron 主进程",
+    "description": "NapukettoQQ 引导组件：自建宿主（标准 Node + stub QQNT.dll）dlopen wrapper.node 并启动 kernel，不拉起 QQ / 不注入",
     "type": "module",
     "private": true,
     "files": [
@@ -18,7 +18,7 @@
     },
     "scripts": {
         "dev": "tsdown --watch",
-        "build": "tsdown && node scripts/build-native.mjs"
+        "build": "tsdown && node scripts/build-runtime.mjs"
     },
     "devDependencies": {
         "@types/node": "^24.0.0",

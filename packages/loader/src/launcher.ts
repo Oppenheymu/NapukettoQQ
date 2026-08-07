@@ -31,7 +31,7 @@ export interface LaunchOptions {
     selfHost?: boolean;
     /** stub QQNT.dll 目录（PATH 前置，转发 napi_*、uv_* 符号到 node.exe）。 */
     stubDir?: string;
-    /** 自建宿主入口（默认 dist/native/runtime/self-host.cjs）。 */
+    /** 自建宿主入口（默认 dist/runtime/self-host.cjs）。 */
     selfHostEntry?: string;
     /**
      * 子进程 stdio（默认 "inherit"）。cli 传 ["inherit","pipe","pipe"] 并接管
@@ -42,12 +42,10 @@ export interface LaunchOptions {
 }
 
 export interface LaunchResult {
-    /** 子进程句柄（QQ.exe）。 */
+    /** 子进程句柄（自建宿主 node 进程）。 */
     child: ReturnType<typeof spawn>;
-    /** boot JS 路径。 */
+    /** 自建宿主入口路径（self-host.cjs）。 */
     bootJsPath: string;
-    /** hook DLL 路径。 */
-    hookDllPath: string;
 }
 
 /**
@@ -61,8 +59,7 @@ export interface LaunchResult {
  */
 export function launchSelfHost(options: LaunchOptions): LaunchResult {
     const selfHostPath =
-        options.selfHostEntry ??
-        join(__dirname, "..", "dist", "native", "runtime", "self-host.cjs");
+        options.selfHostEntry ?? join(__dirname, "..", "dist", "runtime", "self-host.cjs");
     if (!existsSync(selfHostPath)) {
         throw new Error(
             `self-host.cjs 缺失: ${selfHostPath}（先运行 pnpm --filter @napuketto/loader build）`,
@@ -80,7 +77,7 @@ export function launchSelfHost(options: LaunchOptions): LaunchResult {
         );
     }
 
-    const env = buildLaunchEnv(options, selfHostPath);
+    const env = buildLaunchEnv(options);
     // PATH 前置 stub 目录（stub QQNT.dll 转发）+ QQ resources\app（wrapper.node 依赖 DLL）
     const pathEntries = [stub, dirname(options.qq.wrapperPath), process.env["PATH"] ?? ""]
         .filter((p) => p !== undefined && p !== "")
@@ -95,7 +92,7 @@ export function launchSelfHost(options: LaunchOptions): LaunchResult {
         windowsHide: false,
     });
 
-    return { child, bootJsPath: selfHostPath, hookDllPath: "" };
+    return { child, bootJsPath: selfHostPath };
 }
 
 /**
@@ -107,7 +104,7 @@ export function defaultStubDir(): string {
 }
 
 /** 装配自建宿主环境变量。 */
-function buildLaunchEnv(options: LaunchOptions, bootJsPath: string): Record<string, string> {
+function buildLaunchEnv(options: LaunchOptions): Record<string, string> {
     // 配置目录兜底
     const cfg = resolve(options.cfgDir);
     mkdirSync(cfg, { recursive: true });
@@ -115,7 +112,6 @@ function buildLaunchEnv(options: LaunchOptions, bootJsPath: string): Record<stri
     const env: Record<string, string> = {
         ...process.env,
         [ENV.QQ_PATH]: options.qq.qqPath,
-        [ENV.BOOT_JS]: bootJsPath,
         [ENV.KERNEL_ENTRY]: resolve(options.kernelEntry),
         [ENV.CFG_DIR]: cfg,
         [ENV.QQ_VERSION]: options.qq.version,
@@ -136,7 +132,6 @@ function buildLaunchEnv(options: LaunchOptions, bootJsPath: string): Record<stri
 /** 环境变量名（self-host.cjs 与 kernel 引导读取）。 */
 export const ENV = {
     QQ_PATH: "NAPUTO_QQ_PATH",
-    BOOT_JS: "NAPUTO_BOOT_JS",
     KERNEL_ENTRY: "NAPUTO_KERNEL_ENTRY",
     CFG_DIR: "NAPUTO_CFG_DIR",
     QQ_VERSION: "NAPUTO_QQ_VERSION",

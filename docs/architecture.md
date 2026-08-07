@@ -220,7 +220,7 @@ wrapper.node 原生回调
 
 ### 9.2 C++ 载具构建
 
-- LLVM-MinGW g++（`scripts/build-native.mjs`，PATH 前置 g++ 目录防 PowerShell PATH 失效）
+- LLVM-MinGW g++（`scripts/build-runtime.mjs`，PATH 前置 g++ 目录防 PowerShell PATH 失效）
 - 载具源码：`packages/loader/native/`（公共注入框架）+ `packages/loader/native-private/`（闭源）
 
 ### 9.3 环境事实
