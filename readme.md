@@ -1,23 +1,21 @@
 # NapukettoQQ
 
-基于 **QQ NT 客户端原生模块**（`wrapper.node`）的机器人框架，对外提供 **OneBot 11**（当前）与 **Satori**（规划）协议接口（OneBot 12 已放弃）。
+基于 QQ NT 原生模块 `wrapper.node` 的机器人框架，对外提供 **OneBot 11** 协议接口（Satori 规划中，OneBot 12 已放弃）。
 
-- **许可证**：MIT（零引入 NapCat 代码，全自研）
-- **技术栈**：pnpm monorepo · TypeScript · tsdown · biome
-- **状态**：**自建宿主全链路跑通**——标准 node + stub QQNT.dll 转发：登录（快速/扫码）→ session READY → 收发 → OneBot 11 服务（78 个动作）
-- **功能范围**：NapCat 全部能力 − WebUI − 插件系统
+- **MIT** · 全自研 · 零引入 NapCat 代码
+- pnpm monorepo · TypeScript · tsdown · biome
+- **自建宿主**：标准 node + stub QQNT.dll 直接加载 `wrapper.node`，不拉起 QQ、不注入
 
-> **闭源组件**：`@napuketto/loader` 的 V2 载具（Native Bypass DLL，`native/` 子模块）为私有组件——逆向腾讯 QQ 的产物不进公共仓库，公共仓库仅含注入框架。clone 后执行 `git submodule update --init --recursive`。
+## 包结构
 
-## 文档
-
-| 文档 | 内容 |
+| 包 | 职责 |
 |---|---|
-| [`AGENTS.md`](AGENTS.md) | 工程指南（约束 / 命令 / 风格 / 实现模式） |
-| [`docs/STATUS.md`](docs/STATUS.md) | **现状 + 关键决策点（新对话先读）** |
-| [`docs/architecture.md`](docs/architecture.md) | 架构书（分层 / ADR / 路线图 / 红线） |
-| [`docs/DECISIONS.md`](docs/DECISIONS.md) | 决策史（V1→V10 路线演进归档） |
-| `packages/*/docs/design.md` | 各包设计（kernel / network / adapter / media / loader / cli） |
+| `@napuketto/kernel` | 唯一原生交互层：wrapper 引导、登录（快速/扫码）、session 激活、业务 API、事件通道、缓存 |
+| `@napuketto/adapter` | 协议适配器：core 框架 + onebot11（60+ 动作，HTTP/WS 多实例） |
+| `@napuketto/network` | 协议无关传输层（HTTP / WebSocket / 广播） |
+| `@napuketto/media` | 媒体转码（silk / ffmpeg） |
+| `@napuketto/loader` | 自建宿主引导（spawn 标准 node + stub QQNT.dll 转发宿主符号） |
+| `@napuketto/cli` | 启动编排、多账号 supervisor、配置管理 |
 
 ## 快速开始
 
@@ -25,7 +23,17 @@
 pnpm install
 pnpm check
 pnpm build
-pnpm start   # 自建宿主（标准 node + stub QQNT.dll 转发）→ 登录 → OneBot 11 服务
+pnpm start                    # 启动 → 自动登录（快速/扫码）→ OneBot 11 服务
+pnpm start -- -q <QQ号>       # 快速登录指定账号
+pnpm start -- config init     # 生成配置文件
 ```
 
-配置为全局单一 TOML：`<项目根>/napuketto.toml`（主配置段 + `[onebot11]` 协议段），数据（账号/日志/缓存）按数据根组织。
+配置为项目根单一 TOML：`napuketto.toml`（`config init` 或首次启动自动生成，示例见 `napuketto.toml.example`）。数据（账号/日志/缓存）按数据根组织：`--data-dir` > `NAPKETTO_DATA` > `~/.napuketto`。
+
+> **闭源子模块**：自建宿主需要 stub QQNT.dll（`packages/loader/native`，private 仓库）。clone 后执行 `git submodule update --init --recursive`，或启动时用 `--stub-dir` 指定。
+
+## 文档
+
+- `docs/STATUS.md` — 现状与关键决策点
+- `docs/architecture.md` — 架构书
+- `AGENTS.md` — 工程指南
