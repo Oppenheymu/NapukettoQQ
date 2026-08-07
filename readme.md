@@ -102,6 +102,20 @@ dataDir = "C:\\Users\\<用户名>\\.napuketto"
 ```
 数据根解析优先级：`--data-dir <dir>` > 环境变量 `NAPKETTO_DATA` > `~/.napuketto`。
 
+## 版本与发布
+
+版本管理用 **Changesets**（多包 monorepo 自动联动版本号与依赖）：
+
+```bash
+pnpm changeset              # 开发完一批改动后，记录版本 bump（major/minor/patch + 说明）
+pnpm release                # 消费 changeset：自动升版本 + 写 CHANGELOG + 构建 + 按拓扑序发布
+pnpm release:dryrun         # 同上但只演练（dry-run，不发包）
+```
+
+- 版本语义：`0.x.y` 阶段（API 未冻结）；`0.1.x → 0.2.x` = 不兼容改动，`0.0.x` = 修补；API 稳定后升 `1.0.0`
+- `pnpm release` 会自动把有依赖关系的包一起升版本（如 kernel 升 patch，adapter 同步升 patch 并重新依赖新 kernel）
+- 各包 `CHANGELOG.md` 由 changesets 自动生成；发布前确认 `.changeset/*.md` 已提交
+
 ##  许可证
 
 [MIT](LICENSE)

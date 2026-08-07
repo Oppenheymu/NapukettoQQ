@@ -6,13 +6,34 @@
  * 用户 install 后经 cli → loader 自建宿主启动。
  */
 
+import { readFileSync } from "node:fs";
 import { mkdir, readdir, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
 import process from "node:process";
 
-/** 生成的用户项目所依赖的 @napuketto/cli 版本范围（发布新版时统一改）。 */
-export const CLI_VERSION = "^0.0.1";
+/**
+ * 生成的用户项目所依赖的 @napuketto/cli 版本范围。
+ * 运行时从脚手架自身 package.json 读取（dependencies["@napuketto/cli"]）——
+ * 发版时 changesets 升版本 + pnpm publish 把 workspace:* 替换为实际版本，
+ * 模板版本自动跟随，无需手动同步（比硬编码常量可靠）。
+ */
+export function cliVersionRange(): string {
+    try {
+        const ownPkg = JSON.parse(
+            readFileSync(new URL("../package.json", import.meta.url), "utf8"),
+        ) as { dependencies?: Record<string, string> };
+        const range = ownPkg.dependencies?.["@napuketto/cli"];
+        // workspace:* 仅在本地 monorepo 直跑脚手架时出现（发布后 pnpm 替换为实际版本），
+        // 此时兜底默认范围，避免生成的用户项目 install 失败
+        if (range !== undefined && range !== "workspace:*") {
+            return range;
+        }
+    } catch {
+        // package.json 缺失（异常环境）→ 兜底默认范围
+    }
+    return "^0.0.1";
+}
 
 /** 默认部署文件夹名（用户交互回车缺省值）。 */
 export const DEFAULT_PROJECT_NAME = "NapukettoQQ";
@@ -81,7 +102,7 @@ function packageJsonTemplate(packageName: string): string {
             start: "napuketto",
         },
         dependencies: {
-            "@napuketto/cli": CLI_VERSION,
+            "@napuketto/cli": cliVersionRange(),
         },
     };
     return `${JSON.stringify(pkg, null, 4)}\n`;

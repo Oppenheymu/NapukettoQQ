@@ -14,8 +14,9 @@
         "start": "node apps/cli/dist/index.mjs",
         "dev": "node apps/cli/dist/index.mjs",
         "config": "node apps/cli/dist/index.mjs config",
-        "release": "pnpm -r build && pnpm -r publish --access public",
-        "release:dryrun": "pnpm -r build && pnpm -r publish --access public --dry-run",
+        "changeset": "changeset",
+        "release": "pnpm changeset version && pnpm -r build && pnpm -r publish --access public",
+        "release:dryrun": "pnpm changeset version && pnpm -r build && pnpm -r publish --access public --dry-run",
         "test": "echo \"Error: no test specified\" && exit 1"
     },
     "keywords": [],
@@ -32,6 +33,7 @@
     "type": "module",
     "devDependencies": {
         "@biomejs/biome": "^2.5.6",
+        "@changesets/cli": "^2.31.1",
         "@types/node": "^26.1.2",
         "tsdown": "^0.22.14",
         "typescript": "^7.0.2",

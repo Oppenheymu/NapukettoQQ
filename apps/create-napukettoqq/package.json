@@ -14,6 +14,9 @@
         "dev": "tsdown --watch",
         "build": "tsdown"
     },
+    "dependencies": {
+        "@napuketto/cli": "workspace:*"
+    },
     "devDependencies": {
         "tsdown": "^0.22.14"
     },
