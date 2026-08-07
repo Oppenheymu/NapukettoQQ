@@ -9,12 +9,37 @@
 import { mkdir, readdir, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
+import process from "node:process";
 
 /** 生成的用户项目所依赖的 @napuketto/cli 版本范围（发布新版时统一改）。 */
 export const CLI_VERSION = "^0.0.1";
 
 /** 默认部署文件夹名（用户交互回车缺省值）。 */
 export const DEFAULT_PROJECT_NAME = "NapukettoQQ";
+
+/** 用户可用的包管理器（npm_config_user_agent 检测）。 */
+export type PackageManager = "pnpm" | "yarn" | "npm";
+
+/**
+ * 由 npm_config_user_agent 检测调用方包管理器（yarn create / npm create /
+ * pnpm create 都会注入该变量）。兜底 pnpm（项目生态，或直接 node 运行）。
+ */
+export function detectPackageManager(): PackageManager {
+    // noPropertyAccessFromIndexSignature：process.env 是索引签名，必须括号访问
+    const ua = process.env["npm_config_user_agent"] ?? "";
+    if (ua.startsWith("yarn/")) {
+        return "yarn";
+    }
+    if (ua.startsWith("npm/")) {
+        return "npm";
+    }
+    return "pnpm";
+}
+
+/** Windows 下包管理器 bin 需带 .cmd 后缀（CreateProcess 不认无扩展名 shim）。 */
+export function pmBin(pm: PackageManager): string {
+    return process.platform === "win32" ? `${pm}.cmd` : pm;
+}
 
 /** Windows 路径非法字符（项目文件夹名校验用）。 */
 const ILLEGAL_NAME = /[\\/:*?"<>|]/;
@@ -150,7 +175,7 @@ port = 3001
 `;
 }
 
-/** 生成 readme.md（用户项目使用说明）。 */
+/** 生成 readme.md（用户项目使用说明，包管理器无关，以 pnpm 为例）。 */
 function readmeTemplate(dirName: string): string {
     return `# ${dirName}
 
@@ -163,6 +188,9 @@ pnpm install
 pnpm start -q 123456        # 换成你的 QQ 号
 \`\`\`
 
+> 包管理器不限：\`pnpm install\` / \`npm install\` / \`yarn install\`，启动同理
+> （\`pnpm start\` / \`npm start\` / \`yarn start\`）。以下命令均以 pnpm 为例。
+
 启动后按终端提示快速登录或扫码；登录成功后 OneBot 11 接口生效
 （默认 HTTP \`127.0.0.1:3000\` + WS \`127.0.0.1:3001\`，见 \`napuketto.toml\`）。
 
@@ -170,7 +198,7 @@ pnpm start -q 123456        # 换成你的 QQ 号
 
 - 已安装 **QQ NT**（Windows，机器人所需的 \`wrapper.node\` 来自 QQ 安装目录，
   未自动探测到时用 \`pnpm start --qq-path <QQ安装目录>\` 指定）
-- Node.js 20+ 与 pnpm
+- Node.js 20+ 与任一包管理器（pnpm / npm / yarn）
 
 ## 常用命令
 
@@ -180,6 +208,8 @@ pnpm start -q 123456        # 换成你的 QQ 号
 | \`pnpm napuketto config init\` | 重新生成默认配置 |
 | \`pnpm napuketto supervisor\` | 多账号模式（按 \`napuketto.toml\` 的 \`accounts\`） |
 
+> npm 用户把 \`pnpm napuketto\` 换成 \`npx napuketto\`；yarn 用户换成 \`yarn napuketto\`。
+
 ## 目录
 
 - \`napuketto.toml\` — 全局配置（QQ 号、OneBot 端口、token 等，修改后重启生效）
@@ -188,7 +218,7 @@ pnpm start -q 123456        # 换成你的 QQ 号
 ## 升级
 
 \`\`\`bash
-pnpm update @napuketto/cli
+pnpm update @napuketto/cli      # npm: npm update @napuketto/cli；yarn: yarn up @napuketto/cli
 \`\`\`
 `;
 }
