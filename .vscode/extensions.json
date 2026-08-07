@@ -1,6 +1,7 @@
 {
     "recommendations": [
         "biomejs.biome",
-        "editorconfig.editorconfig"
+        "editorconfig.editorconfig",
+        "tamasfe.even-better-toml"
     ]
 }
