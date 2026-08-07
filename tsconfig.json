@@ -33,5 +33,8 @@
         "declaration": true,
         "declarationMap": true,
         "noEmit": true
-    }
+    },
+    "exclude": [
+        "apps/给你看的.ts"
+    ]
 }

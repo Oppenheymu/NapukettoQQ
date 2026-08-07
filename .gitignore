@@ -46,6 +46,9 @@ napuketto.toml
 # 临时实验脚本
 scripts-tmp/
 
+# 工作区参考文件（koishi create 源码，仅供阅读，不参与编译/不入库）
+apps/给你看的.ts
+
 # 归档区
 archive/
 
