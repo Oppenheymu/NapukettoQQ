@@ -88,9 +88,16 @@ export function assembleOb11Transports(opts: AssembleOb11TransportsOptions): Ob1
     assembleHttpPosts(config, transports);
     assembleWsReverses(config, handleRequest, transports);
 
-    // 注册事件上报传输
+    // 注册事件上报传输（正向 client：HTTP 上报 / WS 正向）
     for (const t of transports) {
         broadcaster.register(t);
+    }
+    // 反向 server 也注册（2026-08-07 修复）：反向 WS 客户端（koishi 等）连入后
+    // 必须能收到事件广播（lifecycle/heartbeat/消息事件）。此前只注册正向传输，
+    // 反向 WsServer 未注册 → 客户端连上后收不到任何事件（NapCat 语义：反向连接
+    // 同样收广播）。HttpServer.send 为 no-op（HTTP 无推送），注册无害。
+    for (const s of servers) {
+        broadcaster.register(s);
     }
 
     return {
@@ -98,7 +105,7 @@ export function assembleOb11Transports(opts: AssembleOb11TransportsOptions): Ob1
         transports,
         close: async () => {
             await Promise.all([...servers, ...transports].map((t) => t.close()));
-            for (const t of transports) {
+            for (const t of [...servers, ...transports]) {
                 broadcaster.unregister(t);
             }
         },
