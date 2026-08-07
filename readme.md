@@ -15,7 +15,7 @@
   <img alt="Monorepo" src="https://img.shields.io/badge/Monorepo-pnpm%20workspace-00B4A0">
 </p>
 
-## ✨ 核心特性
+## 核心特性
 
 - **原生 API 直接交互** — 直接调用 `wrapper.node` 官方 NAPI 导出接口（`getMsgService` 等），不经过代理层，稳定高效
 - **高性能自建宿主** — 标准 Node 进程 + stub QQNT.dll 符号转发，直接加载原生模块，内存占用目标百兆级，远低于注入方案
@@ -25,7 +25,7 @@
 - **单一 TOML 配置** — 项目根 `napuketto.toml`，配置与数据目录解耦
 - **全自研 · MIT** — 零引入 NapCat 代码，许可证纯净
 
-## 📦 包结构（Monorepo）
+## 包结构（Monorepo）
 
 pnpm workspace 分层，依赖方向只允许向下：
 
@@ -39,7 +39,7 @@ pnpm workspace 分层，依赖方向只允许向下：
 | `@napuketto/cli` | 启动编排、多账号 supervisor、配置管理 |
 | `create-napukettoqq` | 一键部署包：生成项目骨架并自动安装依赖 |
 
-## 🚀 快速开始
+## 快速开始
 
 ### 1. 一键部署
 
@@ -47,7 +47,7 @@ pnpm workspace 分层，依赖方向只允许向下：
 pnpm create napukettoqq
 ```
 
-按提示输入部署目录名（回车取默认 `NapukettoQQ`），自动生成项目骨架（`package.json` / `napuketto.toml` / `.gitignore`）并安装依赖。
+按提示输入部署目录名（回车取默认 `NapukettoQQ`），自动生成项目骨架并安装依赖。
 
 ### 2. 启动登录
 
@@ -64,14 +64,7 @@ pnpm start
 ```toml
 # 数据根目录：账号/日志/缓存/QQ 数据存放位置
 dataDir = "C:\\Users\\<用户名>\\.napuketto"
-
-[onebot11]
-# 鉴权 token（HTTP/WS 连接必须携带；留空 = 不鉴权）
-token = ""
-# 心跳 meta 事件间隔（毫秒）；0 = 关闭
-heartbeatInterval = 3000
 ```
-
 数据根解析优先级：`--data-dir <dir>` > 环境变量 `NAPKETTO_DATA` > `~/.napuketto`。
 
 ## 📚 文档
