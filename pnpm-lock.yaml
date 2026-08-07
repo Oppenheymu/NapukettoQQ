@@ -254,6 +254,12 @@ importers:
         specifier: ^0.22.14
         version: 0.22.14(typescript@7.0.2)
 
+  apps/create-napukettoqq:
+    devDependencies:
+      tsdown:
+        specifier: ^0.22.14
+        version: 0.22.14(typescript@7.0.2)
+
   packages/adapter:
     dependencies:
       '@napuketto/kernel':

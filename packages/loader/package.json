@@ -3,9 +3,9 @@
     "version": "0.0.1",
     "description": "NapukettoQQ 引导组件：自建宿主（标准 Node + stub QQNT.dll）dlopen wrapper.node 并启动 kernel，不拉起 QQ / 不注入",
     "type": "module",
-    "private": true,
     "files": [
-        "dist"
+        "dist",
+        "native/build/stub-test-env"
     ],
     "main": "./dist/index.mjs",
     "module": "./dist/index.mjs",

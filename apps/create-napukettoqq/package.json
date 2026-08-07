@@ -1,0 +1,21 @@
+{
+    "name": "create-napukettoqq",
+    "version": "0.0.1",
+    "description": "一键生成 NapukettoQQ 机器人项目（yarn/pnpm/npm create napukettoqq）",
+    "type": "module",
+    "files": [
+        "dist"
+    ],
+    "main": "./dist/index.mjs",
+    "bin": {
+        "create-napukettoqq": "./dist/index.mjs"
+    },
+    "scripts": {
+        "dev": "tsdown --watch",
+        "build": "tsdown"
+    },
+    "devDependencies": {
+        "tsdown": "^0.22.14"
+    },
+    "license": "MIT"
+}

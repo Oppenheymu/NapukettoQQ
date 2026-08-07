@@ -14,6 +14,8 @@
         "start": "node apps/cli/dist/index.mjs",
         "dev": "node apps/cli/dist/index.mjs",
         "config": "node apps/cli/dist/index.mjs config",
+        "release": "pnpm -r build && pnpm -r publish --access public",
+        "release:dryrun": "pnpm -r build && pnpm -r publish --access public --dry-run",
         "test": "echo \"Error: no test specified\" && exit 1"
     },
     "keywords": [],
