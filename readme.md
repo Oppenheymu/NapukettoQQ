@@ -60,7 +60,7 @@ flowchart TD
 
 </details>
 
-> **依赖方向严格单向向下**：上层可依赖下层，下层不得反向依赖上层（kernel 无内部依赖，仅 pino + smol-toml）。完整架构细节见 [`docs/architecture.md`](./docs/architecture.md)。
+> **依赖方向严格单向向下**：上层可依赖下层，下层不得反向依赖上层（kernel 无内部依赖，仅 pino + smol-toml）
 
 ### 应用与 CLI
 
