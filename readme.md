@@ -29,25 +29,30 @@
 
 ## 架构与包结构（Monorepo）
 
-```
-┌────────────────────────────────────────────────────────────┐
-│  应用 / CLI 层                                                │
-│   cli ───────────── 启动编排 · 多账号 supervisor · 配置管理    │
-│   create-napukettoqq ─ 一键部署（生成项目骨架 + 安装依赖）      │
-└───────────────────────────┬────────────────────────────────┘
-                            │ 依赖
-┌───────────────────────────▼────────────────────────────────┐
-│  协议 / 传输层                                                │
-│   adapter ────── OneBot 11 协议适配（core 框架 + 60+ 动作）   │
-│   network ────── 协议无关传输（HTTP / WebSocket / 广播）      │
-│   media ──────── 媒体转码（silk / ffmpeg）                    │
-└───────────────────────────┬────────────────────────────────┘
-                            │ 依赖
-┌───────────────────────────▼────────────────────────────────┐
-│  核心 / 宿主层                                                │
-│   kernel ─────── 唯一原生交互层（wrapper · 登录 · API · 缓存）│
-│   loader ─────── 自建宿主引导（stub QQNT.dll 转发宿主符号）    │
-└────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    subgraph APP["应用 / CLI 层"]
+        cli["@napuketto/cli<br/>启动编排 · 多账号 supervisor · 配置管理"]
+        create["create-napukettoqq<br/>一键部署（生成项目骨架 + 安装依赖）"]
+    end
+
+    subgraph PROTO["协议 / 传输层"]
+        adapter["@napuketto/adapter<br/>OneBot 11 协议适配（core 框架 + 60+ 动作）"]
+        network["@napuketto/network<br/>协议无关传输（HTTP / WebSocket / 广播）"]
+        media["@napuketto/media<br/>媒体转码（silk / ffmpeg）"]
+    end
+
+    subgraph CORE["核心 / 宿主层"]
+        kernel["@napuketto/kernel<br/>唯一原生交互层（wrapper · 登录 · API · 缓存）"]
+        loader["@napuketto/loader<br/>自建宿主引导（stub QQNT.dll 转发宿主符号）"]
+    end
+
+    APP -->|依赖| PROTO
+    PROTO -->|依赖| CORE
+
+    style APP fill:#e3f2fd,stroke:#1976d2
+    style PROTO fill:#e8f5e9,stroke:#2e7d32
+    style CORE fill:#fce4ec,stroke:#c62828
 ```
 
 > **依赖方向严格单向向下**：上层可依赖下层，下层不得反向依赖上层（kernel 无内部依赖，仅 pino + smol-toml）。
