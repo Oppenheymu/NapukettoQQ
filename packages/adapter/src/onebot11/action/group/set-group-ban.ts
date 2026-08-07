@@ -4,7 +4,7 @@
  * duration 秒（0 解除禁言）；user_id → uinToUid。
  */
 
-import type { GroupApi } from "@napuketto/kernel";
+import { type GroupApi, kernelError } from "@napuketto/kernel";
 import { z } from "zod";
 import { BaseAction } from "../../../core/index.js";
 import { ob11ErrorCodeMap } from "../error-map.js";
@@ -38,7 +38,7 @@ export class SetGroupBanAction extends BaseAction<SetGroupBanPayload, null> {
         const uidMap = await this.groupApi.uinToUid([String(payload.user_id)]);
         const uid = uidMap.get(String(payload.user_id));
         if (uid === undefined) {
-            throw new Error(`用户 ${payload.user_id} 的 uid 解析失败`);
+            throw kernelError(`用户 ${payload.user_id} 的 uid 解析失败`, "INVALID_PARAM");
         }
         await this.groupApi.setMemberShutUp(String(payload.group_id), [
             { uid, duration: payload.duration },

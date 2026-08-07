@@ -4,7 +4,7 @@
  * user_id → uin→uid → Peer{ C2C } → fetchMessages → 数组翻译。
  */
 
-import { ChatType, toCanonicalElements } from "@napuketto/kernel";
+import { ChatType, kernelError, toCanonicalElements } from "@napuketto/kernel";
 import { z } from "zod";
 import { BaseAction } from "../../../core/index.js";
 import {
@@ -55,7 +55,7 @@ export class GetFriendMsgHistoryAction extends BaseAction<
         const uidMap = await this.deps.uinToUid([String(payload.user_id)]);
         const uid = uidMap.get(String(payload.user_id));
         if (uid === undefined) {
-            throw new Error(`用户 ${payload.user_id} 的 uid 解析失败`);
+            throw kernelError(`用户 ${payload.user_id} 的 uid 解析失败`, "INVALID_PARAM");
         }
         const peer = { chatType: ChatType.C2C, peerUid: uid };
         let startMsgId: string | undefined;
@@ -73,7 +73,7 @@ export class GetFriendMsgHistoryAction extends BaseAction<
         }
         const msgs = await this.deps.msgApi.fetchMessages(peer, opts);
         if (msgs.length === 0) {
-            throw new Error(`消息 ${payload.message_seq ?? "0"} 不存在`);
+            throw kernelError(`消息 ${payload.message_seq ?? "0"} 不存在`, "NOT_FOUND");
         }
         // P2-19：收集全部消息 at uid → 一次批量 uidToUin → 上下文注入
         const atUids = new Set<string>();

@@ -5,7 +5,7 @@
  * → 数组翻译为 OB11 消息信息。
  */
 
-import { ChatType, toCanonicalElements } from "@napuketto/kernel";
+import { ChatType, kernelError, toCanonicalElements } from "@napuketto/kernel";
 import { z } from "zod";
 import { BaseAction } from "../../../core/index.js";
 import type { OneBotApi } from "../../api/one-bot-api.js";
@@ -71,7 +71,7 @@ export class GetGroupMsgHistoryAction extends BaseAction<
         }
         const msgs = await this.deps.msgApi.fetchMessages(peer, opts);
         if (msgs.length === 0) {
-            throw new Error(`消息 ${payload.message_seq ?? "0"} 不存在`);
+            throw kernelError(`消息 ${payload.message_seq ?? "0"} 不存在`, "NOT_FOUND");
         }
         // P2-19：收集全部消息 at uid → 一次批量 uidToUin → 上下文注入
         const atUids = new Set<string>();

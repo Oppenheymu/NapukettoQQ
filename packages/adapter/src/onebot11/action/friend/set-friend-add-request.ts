@@ -5,7 +5,7 @@
  * 匹配 → handleFriendRequest(notify, approve) + optional remark。
  */
 
-import type { FriendApi } from "@napuketto/kernel";
+import { type FriendApi, kernelError } from "@napuketto/kernel";
 import { z } from "zod";
 import { BaseAction } from "../../../core/index.js";
 import { ob11ErrorCodeMap } from "../error-map.js";
@@ -35,7 +35,7 @@ export class SetFriendAddRequestAction extends BaseAction<SetFriendAddRequestPay
         const list = await this.friendApi.getBuddyReqList();
         const notify = list.find((req) => req.reqTime === payload.flag);
         if (notify === undefined) {
-            throw new Error("未找到对应的好友请求（flag 无效或已过期）");
+            throw kernelError("未找到对应的好友请求（flag 无效或已过期）", "NOT_FOUND");
         }
         await this.friendApi.handleFriendRequest(notify, payload.approve !== false);
         if (payload.remark !== undefined) {

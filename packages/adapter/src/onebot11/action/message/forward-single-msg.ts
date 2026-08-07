@@ -5,8 +5,7 @@
  * MsgApi.forwardSingleMessage(srcPeer, [msgId], dstPeer)。
  */
 
-import type { Peer } from "@napuketto/kernel";
-import { ChatType } from "@napuketto/kernel";
+import { ChatType, kernelError, type Peer } from "@napuketto/kernel";
 import { z } from "zod";
 import { BaseAction } from "../../../core/index.js";
 import type { OneBotApi } from "../../api/one-bot-api.js";
@@ -36,11 +35,11 @@ async function resolveTargetPeer(
         const uidMap = await deps.uinToUid([String(payload.user_id)]);
         const uid = uidMap.get(String(payload.user_id));
         if (uid === undefined) {
-            throw new Error(`用户 ${payload.user_id} 的 uid 解析失败`);
+            throw kernelError(`用户 ${payload.user_id} 的 uid 解析失败`, "INVALID_PARAM");
         }
         return { chatType: ChatType.C2C, peerUid: uid };
     }
-    throw new Error("单条转发需要 group_id 或 user_id");
+    throw kernelError("单条转发需要 group_id 或 user_id", "INVALID_PARAM");
 }
 
 /** 单条转发基类（两个动作共用实现）。 */

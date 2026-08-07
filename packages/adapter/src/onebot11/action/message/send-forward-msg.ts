@@ -6,8 +6,7 @@
  * 组装到目标 peer（群直通 / 私聊 uinToUid）→ MsgApi.sendForwardMessage。
  */
 
-import type { Peer } from "@napuketto/kernel";
-import { ChatType } from "@napuketto/kernel";
+import { ChatType, kernelError, type Peer } from "@napuketto/kernel";
 import { z } from "zod";
 import { BaseAction } from "../../../core/index.js";
 import type { OneBotApi } from "../../api/one-bot-api.js";
@@ -84,7 +83,7 @@ export class SendGroupForwardMsgAction extends BaseAction<
         const sources = resolveSourceMessages(payload.messages, this.deps.messageUnique);
         const [firstSource] = sources;
         if (firstSource === undefined) {
-            throw new Error("合并转发需要至少一条可解析的源消息（node.id）");
+            throw kernelError("合并转发需要至少一条可解析的源消息（node.id）", "INVALID_PARAM");
         }
         const target: Peer = { chatType: ChatType.GROUP, peerUid: String(payload.group_id) };
         const { msgId } = await this.deps.msgApi.sendForwardMessage(
@@ -118,12 +117,12 @@ export class SendPrivateForwardMsgAction extends BaseAction<
         const sources = resolveSourceMessages(payload.messages, this.deps.messageUnique);
         const [firstSource] = sources;
         if (firstSource === undefined) {
-            throw new Error("合并转发需要至少一条可解析的源消息（node.id）");
+            throw kernelError("合并转发需要至少一条可解析的源消息（node.id）", "INVALID_PARAM");
         }
         const uidMap = await this.deps.uinToUid([String(payload.user_id)]);
         const uid = uidMap.get(String(payload.user_id));
         if (uid === undefined) {
-            throw new Error(`用户 ${payload.user_id} 的 uid 解析失败`);
+            throw kernelError(`用户 ${payload.user_id} 的 uid 解析失败`, "INVALID_PARAM");
         }
         const target: Peer = { chatType: ChatType.C2C, peerUid: uid };
         const { msgId } = await this.deps.msgApi.sendForwardMessage(

@@ -2,6 +2,7 @@
  * delete_friend 动作：删除好友（P2-11 接 kernel FriendApi.deleteFriend）
  */
 
+import { kernelError } from "@napuketto/kernel";
 import { z } from "zod";
 import { BaseAction } from "../../../core/index.js";
 import type { OneBotApi } from "../../api/one-bot-api.js";
@@ -30,7 +31,7 @@ export class DeleteFriendAction extends BaseAction<DeleteFriendPayload, null> {
         const uidMap = await this.deps.uinToUid([String(payload.user_id)]);
         const uid = uidMap.get(String(payload.user_id));
         if (uid === undefined) {
-            throw new Error(`用户 ${payload.user_id} 的 uid 解析失败`);
+            throw kernelError(`用户 ${payload.user_id} 的 uid 解析失败`, "INVALID_PARAM");
         }
         await this.deps.friendApi.deleteFriend(uid);
         return null;

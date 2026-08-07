@@ -2,6 +2,7 @@
  * set_friend_remark 动作：设置好友备注（P2-11 接 kernel FriendApi.setFriendRemark）
  */
 
+import { kernelError } from "@napuketto/kernel";
 import { z } from "zod";
 import { BaseAction } from "../../../core/index.js";
 import type { OneBotApi } from "../../api/one-bot-api.js";
@@ -38,7 +39,7 @@ export class SetFriendRemarkAction extends BaseAction<SetFriendRemarkPayload, nu
         const uidMap = await this.deps.uinToUid([String(userId)]);
         const uid = uidMap.get(String(userId));
         if (uid === undefined) {
-            throw new Error(`用户 ${userId} 的 uid 解析失败`);
+            throw kernelError(`用户 ${userId} 的 uid 解析失败`, "INVALID_PARAM");
         }
         return uid;
     }

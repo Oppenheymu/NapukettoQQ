@@ -4,7 +4,7 @@
  * message_id → msgId + peer（MessageUnique 反查）→ 拉消息 → OB11 消息信息结构。
  */
 
-import { toCanonicalElements } from "@napuketto/kernel";
+import { kernelError, toCanonicalElements } from "@napuketto/kernel";
 import { z } from "zod";
 import { BaseAction } from "../../../core/index.js";
 import type { OneBotApi } from "../../api/one-bot-api.js";
@@ -44,7 +44,7 @@ export class GetMsgAction extends BaseAction<GetMsgPayload, OB11MessageInfo> {
         const msgs = await this.deps.msgApi.fetchMsgsByMsgId(peer, [msgId]);
         const [msg] = msgs;
         if (msg === undefined) {
-            throw new Error(`消息 ${payload.message_id} 不存在或已被撤回`);
+            throw kernelError(`消息 ${payload.message_id} 不存在或已被撤回`, "NOT_FOUND");
         }
         // P2-19：收集 at uid → 批量 uidToUin → 上下文注入（at uid→uin、reply 映射）
         const elements = toCanonicalElements(msg);

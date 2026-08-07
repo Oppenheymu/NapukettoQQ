@@ -2,7 +2,7 @@
  * delete_essence_msg 动作：取消精华消息（P2-10 接 kernel GroupApi.removeGroupEssence）
  */
 
-import { ChatType } from "@napuketto/kernel";
+import { ChatType, kernelError } from "@napuketto/kernel";
 import { z } from "zod";
 import { BaseAction } from "../../../core/index.js";
 import { resolveMsgIdAndPeer } from "../../helper/message-unique.js";
@@ -31,7 +31,7 @@ export class DeleteEssenceMsgAction extends BaseAction<DeleteEssenceMsgPayload, 
     protected async _handle(payload: DeleteEssenceMsgPayload): Promise<null> {
         const { msgId, peer } = resolveMsgIdAndPeer(payload.message_id, this.deps.messageUnique);
         if (peer.chatType !== ChatType.GROUP) {
-            throw new Error("精华消息仅支持群聊消息");
+            throw kernelError("精华消息仅支持群聊消息", "INVALID_PARAM");
         }
         await this.deps.groupApi.removeGroupEssence(peer.peerUid, msgId);
         return null;

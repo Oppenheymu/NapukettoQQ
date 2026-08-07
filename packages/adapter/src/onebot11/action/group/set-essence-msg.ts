@@ -4,7 +4,7 @@
  * message_id → msgId + peer（MessageUnique 反查，需群消息）→ addGroupEssence。
  */
 
-import { ChatType } from "@napuketto/kernel";
+import { ChatType, kernelError } from "@napuketto/kernel";
 import { z } from "zod";
 import { BaseAction } from "../../../core/index.js";
 import type { OneBotApi } from "../../api/one-bot-api.js";
@@ -36,7 +36,7 @@ export class SetEssenceMsgAction extends BaseAction<SetEssenceMsgPayload, null> 
     protected async _handle(payload: SetEssenceMsgPayload): Promise<null> {
         const { msgId, peer } = resolveMsgIdAndPeer(payload.message_id, this.deps.messageUnique);
         if (peer.chatType !== ChatType.GROUP) {
-            throw new Error("精华消息仅支持群聊消息");
+            throw kernelError("精华消息仅支持群聊消息", "INVALID_PARAM");
         }
         await this.deps.groupApi.addGroupEssence(peer.peerUid, msgId);
         return null;

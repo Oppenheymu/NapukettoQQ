@@ -2,7 +2,7 @@
  */
 import { existsSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
-import type { ProfileApi } from "@napuketto/kernel";
+import { kernelError, type ProfileApi } from "@napuketto/kernel";
 import { z } from "zod";
 import { BaseAction } from "../../../core/index.js";
 import type { OneBotApi } from "../../api/one-bot-api.js";
@@ -95,7 +95,7 @@ export class SetQQAvatarAction extends BaseAction<SetQQAvatarPayload, null> {
             filePath = await this.downloadToCache(filePath);
         }
         if (!existsSync(filePath)) {
-            throw new Error(`头像文件不存在: ${filePath}`);
+            throw kernelError(`头像文件不存在: ${filePath}`, "NOT_FOUND");
         }
         await this.deps.profileApi.setHeader(filePath);
         return null;
@@ -105,7 +105,10 @@ export class SetQQAvatarAction extends BaseAction<SetQQAvatarPayload, null> {
     private async downloadToCache(url: string): Promise<string> {
         const { cacheDir } = this.deps;
         if (cacheDir === undefined || cacheDir === "") {
-            throw new Error("set_qq_avatar 处理 URL 需要缓存目录（装配方未注入）");
+            throw kernelError(
+                "set_qq_avatar 处理 URL 需要缓存目录（装配方未注入）",
+                "INVALID_STATE",
+            );
         }
         const safeName = basename(new URL(url).pathname) || "avatar.bin";
         const filePath = join(cacheDir, `avatar-${Date.now()}-${safeName}`);

@@ -7,6 +7,7 @@
 
 import { mkdirSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
+import { kernelError } from "@napuketto/kernel";
 import { z } from "zod";
 import { BaseAction } from "../../../core/index.js";
 import type { OneBotApi } from "../../api/one-bot-api.js";
@@ -39,7 +40,7 @@ export class DownloadFileAction extends BaseAction<DownloadFilePayload, { file: 
     protected async _handle(payload: DownloadFilePayload): Promise<{ file: string }> {
         const { cacheDir } = this.deps;
         if (cacheDir === undefined || cacheDir === "") {
-            throw new Error("download_file 未配置缓存目录（装配方未注入）");
+            throw kernelError("download_file 未配置缓存目录（装配方未注入）", "INVALID_STATE");
         }
         const safeName = basename(new URL(payload.url).pathname) || "download.bin";
         const filePath = join(cacheDir, `download-${Date.now()}-${safeName}`);

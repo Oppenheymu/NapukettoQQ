@@ -5,8 +5,12 @@
  * 匹配 → handleGroupRequest（approve=true→同意 / false→拒绝，reason 默认空格）。
  */
 
-import type { GroupNotify, GroupNotifyApi } from "@napuketto/kernel";
-import { NTGroupRequestOperateTypes } from "@napuketto/kernel";
+import {
+    type GroupNotify,
+    type GroupNotifyApi,
+    kernelError,
+    NTGroupRequestOperateTypes,
+} from "@napuketto/kernel";
 import { z } from "zod";
 import { BaseAction } from "../../../core/index.js";
 import { ob11ErrorCodeMap } from "../error-map.js";
@@ -40,7 +44,7 @@ export class SetGroupAddRequestAction extends BaseAction<SetGroupAddRequestPaylo
         const count = payload.count ?? DEFAULT_COUNT;
         const notify = await this.findNotify(payload.flag, count);
         if (notify === null) {
-            throw new Error("未找到对应的群请求（flag 无效或已过期）");
+            throw kernelError("未找到对应的群请求（flag 无效或已过期）", "NOT_FOUND");
         }
         let operateType: NTGroupRequestOperateTypes = NTGroupRequestOperateTypes.KREFUSE;
         if (payload.approve !== false) {

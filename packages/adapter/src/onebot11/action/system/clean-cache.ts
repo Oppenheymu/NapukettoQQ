@@ -5,6 +5,7 @@
  * 未配置时明确报错（不静默）。
  */
 
+import { kernelError } from "@napuketto/kernel";
 import { z } from "zod";
 import { BaseAction } from "../../../core/index.js";
 import type { OneBotApi } from "../../api/one-bot-api.js";
@@ -32,7 +33,7 @@ export class CleanCacheAction extends BaseAction<CleanCachePayload, null> {
 
     protected async _handle(_payload: CleanCachePayload): Promise<null> {
         if (this.deps.cleanCache === undefined) {
-            throw new Error("clean_cache 未配置（装配方未注入清理回调）");
+            throw kernelError("clean_cache 未配置（装配方未注入清理回调）", "INVALID_STATE");
         }
         await this.deps.cleanCache();
         return null;

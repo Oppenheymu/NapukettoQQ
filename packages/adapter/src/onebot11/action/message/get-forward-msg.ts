@@ -5,6 +5,7 @@
  * 每条 toOb11MessageInfo → { messages }。
  */
 
+import { kernelError } from "@napuketto/kernel";
 import { z } from "zod";
 import { BaseAction } from "../../../core/index.js";
 import type { OneBotApi } from "../../api/one-bot-api.js";
@@ -41,7 +42,7 @@ export class GetForwardMsgAction extends BaseAction<
     ): Promise<{ messages: OB11MessageInfo[] }> {
         const id = payload.message_id ?? payload.id;
         if (id === undefined) {
-            throw new Error("get_forward_msg 需要 message_id 或 id");
+            throw kernelError("get_forward_msg 需要 message_id 或 id", "INVALID_PARAM");
         }
         const { msgId, peer } = resolveMsgIdAndPeer(id, this.deps.messageUnique);
         const msgs = await this.deps.msgApi.fetchForwardMessage(peer, msgId);

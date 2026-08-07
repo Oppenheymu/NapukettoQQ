@@ -4,7 +4,7 @@
  * message_id 反查 → fetchMsgsByMsgId → 找 PIC/PTT 元素 → 返回元素已有路径与 URL。
  * 不做主动下载/转码（NapCat 走 downloadRichMedia 事件驱动下载，待后续接入）。
  */
-import type { RawElement } from "@napuketto/kernel";
+import { kernelError, type RawElement } from "@napuketto/kernel";
 import { z } from "zod";
 import { BaseAction } from "../../../core/index.js";
 import type { OneBotApi } from "../../api/one-bot-api.js";
@@ -77,13 +77,13 @@ export class GetImageAction extends BaseAction<GetMediaPayload, MediaInfoResult>
     ): Promise<MediaInfoResult> {
         const id = payload.message_id ?? payload.file;
         if (id === undefined) {
-            throw new Error(`${actionName} 需要 message_id 或 file`);
+            throw kernelError(`${actionName} 需要 message_id 或 file`, "INVALID_PARAM");
         }
         const { msgId, peer } = resolveMsgIdAndPeer(id, this.deps.messageUnique);
         const msgs = await this.deps.msgApi.fetchMsgsByMsgId(peer, [msgId]);
         const [first] = msgs;
         if (first === undefined) {
-            throw new Error(`消息 ${id} 不存在或已被撤回`);
+            throw kernelError(`消息 ${id} 不存在或已被撤回`, "NOT_FOUND");
         }
         let found: { path?: string; url?: string } | undefined;
         for (const el of first.elements) {
@@ -94,7 +94,7 @@ export class GetImageAction extends BaseAction<GetMediaPayload, MediaInfoResult>
             }
         }
         if (found === undefined) {
-            throw new Error(`消息 ${id} 不包含${label}`);
+            throw kernelError(`消息 ${id} 不包含${label}`, "NOT_FOUND");
         }
         const result: MediaInfoResult = {};
         if (found.path !== undefined) {
@@ -123,13 +123,13 @@ export class GetRecordAction extends BaseAction<GetMediaPayload, MediaInfoResult
     protected async _handle(payload: GetMediaPayload): Promise<MediaInfoResult> {
         const id = payload.message_id ?? payload.file;
         if (id === undefined) {
-            throw new Error("get_record 需要 message_id 或 file");
+            throw kernelError("get_record 需要 message_id 或 file", "INVALID_PARAM");
         }
         const { msgId, peer } = resolveMsgIdAndPeer(id, this.deps.messageUnique);
         const msgs = await this.deps.msgApi.fetchMsgsByMsgId(peer, [msgId]);
         const [first] = msgs;
         if (first === undefined) {
-            throw new Error(`消息 ${id} 不存在或已被撤回`);
+            throw kernelError(`消息 ${id} 不存在或已被撤回`, "NOT_FOUND");
         }
         for (const el of first.elements) {
             const ptt = el.pttElement;
@@ -137,6 +137,6 @@ export class GetRecordAction extends BaseAction<GetMediaPayload, MediaInfoResult
                 return { file: ptt.filePath };
             }
         }
-        throw new Error(`消息 ${id} 不包含语音`);
+        throw kernelError(`消息 ${id} 不包含语音`, "NOT_FOUND");
     }
 }

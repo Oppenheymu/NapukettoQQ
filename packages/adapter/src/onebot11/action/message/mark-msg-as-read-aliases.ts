@@ -6,7 +6,7 @@
  * - mark_group_msg_as_read：group_id → GROUP markRead
  */
 
-import { ChatType } from "@napuketto/kernel";
+import { ChatType, kernelError } from "@napuketto/kernel";
 import { z } from "zod";
 import { BaseAction } from "../../../core/index.js";
 import type { OneBotApi } from "../../api/one-bot-api.js";
@@ -44,7 +44,7 @@ export class MarkPrivateMsgAsReadAction extends BaseAction<MarkPrivateMsgAsReadP
         const uidMap = await this.deps.uinToUid([String(payload.user_id)]);
         const uid = uidMap.get(String(payload.user_id));
         if (uid === undefined) {
-            throw new Error(`用户 ${payload.user_id} 的 uid 解析失败`);
+            throw kernelError(`用户 ${payload.user_id} 的 uid 解析失败`, "INVALID_PARAM");
         }
         await this.deps.msgApi.markRead({ chatType: ChatType.C2C, peerUid: uid });
         return null;

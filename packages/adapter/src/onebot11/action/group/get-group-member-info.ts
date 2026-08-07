@@ -2,7 +2,7 @@
  * get_group_member_info 动作：获取群成员信息（P2-4 接 kernel GroupApi；P2-17 读缓存）
  */
 
-import type { GroupMember } from "@napuketto/kernel";
+import { type GroupMember, kernelError } from "@napuketto/kernel";
 import { z } from "zod";
 import { BaseAction } from "../../../core/index.js";
 import type { OneBotApi } from "../../api/one-bot-api.js";
@@ -41,11 +41,11 @@ export class GetGroupMemberInfoAction extends BaseAction<
         const uidMap = await this.deps.groupApi.uinToUid([String(payload.user_id)]);
         const uid = uidMap.get(String(payload.user_id));
         if (uid === undefined) {
-            throw new Error(`成员 ${payload.user_id} 不在群 ${payload.group_id}`);
+            throw kernelError(`成员 ${payload.user_id} 不在群 ${payload.group_id}`, "NOT_FOUND");
         }
         const member = await this.resolveMember(groupCode, uid, payload.no_cache === true);
         if (member === undefined) {
-            throw new Error(`成员 ${payload.user_id} 不在群 ${payload.group_id}`);
+            throw kernelError(`成员 ${payload.user_id} 不在群 ${payload.group_id}`, "NOT_FOUND");
         }
         const uinMap = await this.deps.groupApi.uidToUin([uid]);
         return toOb11GroupMemberInfo(groupCode, member, uinMap);

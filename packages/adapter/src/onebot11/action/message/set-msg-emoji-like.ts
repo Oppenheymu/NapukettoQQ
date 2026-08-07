@@ -4,6 +4,7 @@
  * message_id → msgId + peer → 拉消息取 msgSeq → MsgApi.setMsgEmojiLike。
  */
 
+import { kernelError } from "@napuketto/kernel";
 import { z } from "zod";
 import { BaseAction } from "../../../core/index.js";
 import type { OneBotApi } from "../../api/one-bot-api.js";
@@ -44,7 +45,7 @@ export class SetMsgEmojiLikeAction extends BaseAction<SetMsgEmojiLikePayload, nu
         const msgs = await this.deps.msgApi.fetchMsgsByMsgId(peer, [msgId]);
         const [msg] = msgs;
         if (msg === undefined) {
-            throw new Error(`消息 ${payload.message_id} 不存在或已被撤回`);
+            throw kernelError(`消息 ${payload.message_id} 不存在或已被撤回`, "NOT_FOUND");
         }
         await this.deps.msgApi.setMsgEmojiLike(peer, {
             msgSeq: msg.msgSeq,
