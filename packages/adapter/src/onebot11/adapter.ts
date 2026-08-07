@@ -140,17 +140,24 @@ export class NapukettoOneBot11Adapter extends BaseProtocolAdapter<OB11Config> {
         if (this.unsubscribe !== null) {
             return;
         }
-        this.unsubscribe = this.msgChannel.on("Msg/onRecvMsg", (msg) => {
-            // grayTip（系统事件）→ notice；否则 → 消息事件
-            if (hasGrayTip(msg)) {
-                this.broadcastNotice(msg).catch(() => {
-                    // notice 翻译失败静默（grayTip 解析宽容）
-                });
-                return;
+        // onRecvMsg 回调参数为消息数组（2026-08-07 运行时实证）——遍历逐条翻译。
+        this.unsubscribe = this.msgChannel.on("Msg/onRecvMsg", (msgs) => {
+            const list = Array.isArray(msgs) ? msgs : [msgs];
+            for (const msg of list) {
+                if (!msg || typeof msg !== "object") {
+                    continue;
+                }
+                // grayTip（系统事件）→ notice；否则 → 消息事件
+                if (hasGrayTip(msg)) {
+                    this.broadcastNotice(msg).catch(() => {
+                        // notice 翻译失败静默（grayTip 解析宽容）
+                    });
+                    continue;
+                }
+                this.broadcastEvent(
+                    toOb11MessageEvent(msg, this.selfUin, this.oneBotApi.messageUnique),
+                );
             }
-            this.broadcastEvent(
-                toOb11MessageEvent(msg, this.selfUin, this.oneBotApi.messageUnique),
-            );
         });
     }
 

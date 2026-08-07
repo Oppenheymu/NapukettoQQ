@@ -46,8 +46,9 @@ export class MsgBridge {
             return;
         }
         // listener 为普通 JS 对象（NAPI 反射读取方法回调）
+        // onRecvMsg 透传原生回调参数（运行时实证为消息数组，2026-08-07）。
         const listener: MsgListener = {
-            onRecvMsg: (msg) => this.channel.emit("Msg/onRecvMsg", msg),
+            onRecvMsg: (msgs) => this.channel.emit("Msg/onRecvMsg", msgs),
             onRecvMsgReadReport: (reports) => this.channel.emit("Msg/onRecvMsgReadReport", reports),
             onRecvMsgReceipt: (receipts) => this.channel.emit("Msg/onRecvMsgReceipt", receipts),
         };

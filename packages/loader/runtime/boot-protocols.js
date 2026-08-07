@@ -38,6 +38,34 @@ async function startProtocols(kernel, ctx, loginResult) {
         const channel = new kernel.NTEventChannel("Msg");
         const bridge = new kernel.MsgBridge(session, channel);
         bridge.register();
+        // 控制台消息日志（NapCat 同款：收到消息打印到控制台）。
+        // 独立订阅，不干扰 adapter 的 OB11 翻译广播；解析纯函数无副作用（ADR-008）。
+        // onRecvMsg 回调参数为消息数组（2026-08-07 运行时实证）——遍历逐条打印。
+        channel.on("Msg/onRecvMsg", (msgs) => {
+            const list = Array.isArray(msgs) ? msgs : [msgs];
+            for (const msg of list) {
+                if (!msg || typeof msg !== "object") {
+                    continue;
+                }
+                try {
+                    const texts = kernel
+                        .toCanonicalElements(msg)
+                        .filter((el) => el.type === "text")
+                        .map((el) => el.text)
+                        .join("");
+                    const kind = msg.chatType === kernel.ChatType.GROUP ? "群聊" : "私聊";
+                    const sender = msg.sendNickName || msg.senderUin || "?";
+                    const peer = msg.peerName || msg.peerUin || "?";
+                    const line = `📩 收到${kind}消息 来自=${sender} 会话=${peer}（${msg.peerUin ?? ""}）: ${texts}`;
+                    console.log(`[napuketto] ${line}`);
+                    log(line);
+                } catch (e) {
+                    const line2 = `收到消息（解析失败: ${e?.message ?? e}）`;
+                    console.log(`[napuketto] 📩 ${line2}`);
+                    log(line2);
+                }
+            }
+        });
         // kernel APIs
         const groupApi = new kernel.GroupApi(session);
         const msgApi = new kernel.MsgApi(session);

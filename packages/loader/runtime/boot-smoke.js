@@ -74,24 +74,32 @@ async function runSmokeTest(kernel, ctx, loginResult) {
     bridge.register();
     log("smoke: ✅ MsgBridge 注册完成（addKernelMsgListener）");
 
-    // ② 订阅 onRecvMsg（接收方向验证）
+    // ② 订阅 onRecvMsg（接收方向验证；回调参数为消息数组——2026-08-07 运行时实证）
     let received = 0;
     let receivedText = "";
-    channel.on("Msg/onRecvMsg", (msg) => {
-        received += 1;
-        try {
-            const texts = kernel
-                .toCanonicalElements(msg)
-                .filter((el) => el.type === "text")
-                .map((el) => el.text)
-                .join("");
-            if (texts) {
-                receivedText = texts;
+    channel.on("Msg/onRecvMsg", (msgs) => {
+        const list = Array.isArray(msgs) ? msgs : [msgs];
+        for (const msg of list) {
+            if (!msg || typeof msg !== "object") {
+                continue;
             }
-        } catch (e) {
-            log(`smoke: onRecvMsg 解析失败: ${e?.message ?? e}`);
+            received += 1;
+            try {
+                const texts = kernel
+                    .toCanonicalElements(msg)
+                    .filter((el) => el.type === "text")
+                    .map((el) => el.text)
+                    .join("");
+                if (texts) {
+                    receivedText = texts;
+                }
+            } catch (e) {
+                log(`smoke: onRecvMsg 解析失败: ${e?.message ?? e}`);
+            }
+            log(
+                `smoke: 📥 onRecvMsg 收到 #${received}（msgId=${msg.msgId ?? "?"} seq=${msg.msgSeq ?? "?"} text="${receivedText}"）`,
+            );
         }
-        log(`smoke: 📥 onRecvMsg 收到 #${received}（msgId=${msg.msgId ?? "?"} seq=${msg.msgSeq ?? "?"} text="${receivedText}"）`);
     });
 
     // ③ 发送方向：MsgApi.sendMessage
