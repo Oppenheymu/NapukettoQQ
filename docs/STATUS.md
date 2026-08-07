@@ -1,13 +1,20 @@
-# NapukettoQQ 项目现状（2026-08-07 深夜更新：🎉 session READY 突破，路线 A 可救）
+# NapukettoQQ 项目现状（2026-08-07：🎉 业务基本实现，自建宿主全链路跑通）
 
-> **新对话开场指引**：先读本文件（现状 + 关键决策点）→ `AGENTS.md`（工程指南 + 红线）→ `docs/architecture.md`（架构书）→ **`docs/HANDOVER-V10.md`（最终交接）** → 对应包 `docs/design.md`。需要细节时再读 HANDOVER-V6~V9。需要了解路线演进背景时再读 `docs/DECISIONS.md`。
+> **新对话开场指引**：先读本文件（现状 + 关键决策点）→ `AGENTS.md`（工程指南 + 红线）→ `docs/architecture.md`（架构书）→ **`docs/HANDOVER-V11.md`（最终交接）** → 对应包 `docs/design.md`。需要细节时再读 HANDOVER-V6~V10。需要了解路线演进背景时再读 `docs/DECISIONS.md`。
 >
-> **git 状态**：HEAD = `ea07ab4`（kernel 落地提交），工作区干净。`docs/` 已纳入 git 跟踪。
+> **git 状态**：HEAD = `d253bfd`（MsgListener 签名校准），工作区含未跟踪 `guild1.db`（运行产物，勿提交）。`docs/` 已纳入 git 跟踪。
 
 ---
 
-## 🏆 关键决策点（2026-08-07 深夜更新：**🎉 session READY 突破，路线 A 可救**）
+## 🏆 关键决策点（2026-08-07：**🎉 业务基本实现——自建宿主唯一路线全链路跑通**）
 
+> **🎉 业务基本实现（2026-08-07）**：kernel（apis/bridge/cache/login + 自建宿主适配）→ adapter
+> （onebot11 78 动作 + 事件翻译 + onRecvMsg 数组签名校准）→ network/media → loader 自建宿主引导 →
+> cli 唯一启动方式，**全部落地**。实测端到端（`pnpm start`）：自动定位 QQ → 自建宿主登录
+> 3567141148 → session READY → 冒烟收发 → onebot11 adapter 启动 → **群消息真实接收并控制台打印**
+> （群「晓工坊」1071284605，晓筱晨/Oppenheymu 多条消息，`d253bfd`）。业务层无遗留 TODO，
+> 进入「打磨 + 内存实测」阶段。
+>
 > **🎉 决定性突破（2026-08-07 深夜，HANDOVER-V9，推翻 V8「硬墙」结论）**：自建宿主（标准 node +
 > stub QQNT.dll）**session 业务 service 可激活**——关键 = **`session.init(config)` 之后调
 > `startupSession.start()`**（NapCat initializeSession 顺序）。改正顺序后
@@ -31,9 +38,7 @@
 > **session READY 四步（V9 决定性）**：登录成功 → `session.init(config, depends, dispatcher, listener)`
 > → **`startupSession.start()`**（先 init 后 start！）→ 等 `onOpentelemetryInit(is_init=true)`。
 >
-> 下一步：kernel 落地（修正 lifecycle initAndStartSession 顺序）→ 冒烟收发 → 内存实测 → loader
-> 自建宿主引导（NAPUTO_SELF_HOST 分支）。账号注意：快速登录 3054108135 会挂起（账号风控），
-> 测试用 **3567141148**（已验证成功）。
+> 账号注意：快速登录 3054108135 会挂起（账号风控），测试用 **3567141148**（已验证成功）。
 
 **功能范围（用户拍板）**：**NapCat 全部能力（协议 + API）− WebUI − 插件系统**。
 **逆向边界（用户拍板：非 0 逆向）**：允许必要逆向——环境模拟/反风控（进程名伪装、
@@ -68,7 +73,7 @@ napi2native）能跑通**（无 QQ 进程无 UI，双进程仅 ~237MB，且能�
 **产品路线（2026-08-07 深夜最终，用户拍板：只保留自建宿主）**：
 | 路线 | 形态 | 内存 | 状态 |
 |---|---|---|---|
-| **A. 自建宿主（唯一路线）** | 标准 Node + stub QQNT.dll 转发 + O3MiscService 激活 | ~100MB（待实测） | ✅✅ **唯一实现方式**（登录 ✅ + session READY ✅ + 冒烟收发 ✅ + onebot11 装配 ✅，cli 默认） |
+| **A. 自建宿主（唯一路线）** | 标准 Node + stub QQNT.dll 转发 + O3MiscService 激活 | ~100MB（待实测） | ✅✅ **唯一实现方式**（登录 ✅ + session READY ✅ + 冒烟收发 ✅ + 消息接收 ✅ + onebot11 装配 ✅，cli 默认） |
 | B. 注入 utilityProcess Worker（NapCat 同款） | 注入 QQ 主进程 → worker dlopen | 300MB+ | ❌ **已淘汰（2026-08-07 用户拍板：拉起 QQ + 注入该淘汰）**，launchQqWithLoader 仅历史回退 |
 | C. V1/V2 注入（主进程直接引导） | — | 1.01GB | ❌ 已排除 |
 
@@ -116,6 +121,8 @@ msgService 299 方法**（addKernelMsgListener/sendMsg/fetchMsgList 全在）。
 | cli 默认自建宿主（2026-08-07 拍板，路线 B 淘汰） | `packages/loader/src/launcher.ts` + `apps/cli/src/boot.ts` | LaunchOptions.selfHost 默认唯一路径（launchSelfHost）；routeB 显式开启才生效 |
 | **自建宿主引导（2026-08-07 落地，实测全通）** | `packages/loader/runtime/self-host.cjs` + `launcher.launchSelfHost` + cli `--self-host` | NAPUTO_SELF_HOST 分支（标准 node + stub 转发 + O3MiscService 激活 + boot-bootstrap 复用）；实测登录 3567141148 → session READY → 冒烟收发 → onebot11 adapter 启动 |
 | **kernel 自建宿主适配（2026-08-07 实测）** | `wrapper-loader` + `core` + `lifecycle` | ① resolveQqGlobalPath（commonPath/desktopGlobalPath=数据根/nt_qq/global）② loginService 优先 get() ③ ensureLoginConnected（connect+缓冲，修复「登录系统连接异常」）④ 自建宿主 session 先建（engine init 前） |
+| **cli 自建宿主唯一启动（2026-08-07 拍板）** | `apps/cli/src/boot.ts` + `loader/launcher.ts` + `locate-qq.ts` | 路线 B 淘汰；launchSelfHost 默认唯一路径（stub 校验 + `--stub-dir`/`NAPUTO_STUB_DIR`）；locate-qq 自动发现开发机 QQ（免 `--qq-path`） |
+| **MsgListener 签名校准（2026-08-07 实测）** | `types/listeners/msg.ts` + `bridge/msg-bridge.ts` + `adapter.ts` + `boot-smoke.js` + `boot-protocols.js` | onRecvMsg 改为**消息数组**（运行时实证：单条签名导致 msg.msgId/elements 全 undefined）；boot-protocols 新增控制台消息日志（NapCat 同款，独立订阅不干扰 OB11 广播） |
 
 ---
 
@@ -131,9 +138,10 @@ msgService 299 方法**（addKernelMsgListener/sendMsg/fetchMsgList 全在）。
 - **network**：完整（HttpServer/HttpClient/WsServer/WsClient/EventBroadcaster）
 - **media**：完整（image/audio(silk)/video(ffmpeg)）
 - **loader**：注入引导全链路（launcher/locate-qq/boot.cjs 6 模块/native bootmain+hookdll）+ V2 载具
-  （native-private/vehicle.cpp，闭源）+ 路线 B worker 引导
-- **cli**：commander（-q/-d/--qq-path）+ 一键启动（读全局配置 accounts）+ config 子命令
-  （init/list/apply，napuketto.toml 单一 TOML）+ supervisor 多账号编排
+  （native-private/vehicle.cpp，闭源）+ **自建宿主引导（self-host.cjs + launchSelfHost + stub 校验）**
+  + 路线 B worker 引导（历史回退）
+- **cli**：commander（-q/-d/--stub-dir）+ 一键启动（读全局配置 accounts，**默认自建宿主**）+ config
+  子命令（init/list/apply，napuketto.toml 单一 TOML）+ supervisor 多账号编排
 
 **API 来源分层**（回答「onebot11 规范吗」）：标准 OneBot 11 规范 30 个 + go-cqhttp 扩展 + NapCat
 扩展三层；`protocol_version: "v11"` 不变，扩展动作 schema 来自 NapCat/go-cqhttp 而非规范，以
@@ -148,32 +156,31 @@ msgService 299 方法**（addKernelMsgListener/sendMsg/fetchMsgList 全在）。
 | OneBot 11 协议（HTTP/WS/反向） | ✅ 78 动作 | 对齐 ≈70%，缺冷门扩展 |
 | Satori 协议 | 🔶 占位 | 待做（复用 core 框架） |
 | 扫码/快速登录 | ✅ | 无 |
-| 纯 Node 自建宿主 | 🔶 待验证 | **P2-2 第一优先** |
+| 纯 Node 自建宿主 | ✅ 唯一实现方式 | 全链路实测通过（登录→READY→收发→onebot11），待内存实测 |
 | 数据包层（packet 后端） | ❌ | 逆向已解禁，远期对齐 |
 | WebUI / 插件系统 | ❌（红线） | **明确不做** |
 
 ## 🔥 下一步（按优先级）
 
-### 0️⃣ 自建宿主落地（P2-2 第一优先，验证已通过）
-- [x] **登录链路验证通过（2026-08-07）**：纯 Node + stub QQNT.dll 转发 + O3MiscService 激活事件分发 + 快速登录成功（路线 A 定案）
-- [x] **stub QQNT.dll 等价物完成（2026-08-07 晚）**：llvm-mingw 编译 70KB PE 转发 stub（99 符号），替换 NapCat 闭源 stub 后登录成功（HANDOVER-V7）
-- [ ] **整理正式版 stub**（stub-qqnt.cpp 正式化 + compare-symbols.mjs 重跑机制 + PerfTrace 补足（低优先））
-- [x] **session READY 验证（2026-08-07 晚）**：登录成功后 getMsgService() READY（298 方法）——kernel/adapter 零改动复用 + **自建宿主冒烟收发通过**（MsgBridge+MsgApi 真发一条 + 落库核对）
+### 0️⃣ 收尾（业务已实现，剩验证/打磨）
+- [x] 自建宿主登录链路验证（2026-08-07，纯 Node + stub + O3MiscService 激活）✅
+- [x] stub QQNT.dll 等价物 + 正式版整理（stub-qqnt.cpp + PerfTrace 空实现 + compare-symbols.mjs）✅
+- [x] session READY 验证（getMsgService 298 方法 + 各业务 service 全激活）✅
+- [x] loader 自建宿主引导（NAPUTO_SELF_HOST 分支 + launchSelfHost + stub 校验）✅
+- [x] cli 自建宿主唯一启动（路线 B 淘汰）+ 实机 `pnpm start` 端到端（登录→READY→冒烟→onebot11）✅
+- [x] 群消息真实接收 + 控制台消息日志（`d253bfd`）✅
 - [ ] **内存实测**：标准 node + stub + wrapper + 登录态（对照路线 B 300MB+，目标百兆级）
-- [x] **loader 自建宿主引导（2026-08-07 晚，实测全通）**：NAPUTO_SELF_HOST 分支（`self-host.cjs` + `launchSelfHost` + cli `--self-host`），标准 node + stub + boot-bootstrap 复用；实测登录→session READY→冒烟→onebot11 adapter 启动全通
-
-### P2-1 实测（功能最后一块）
-- [x] **实机 `pnpm start`（2026-08-07 晚，自建宿主默认）**：自动定位开发机 QQ（`C:\Dev\QQBot-Dev\QQNT`）+ stub 自动发现（native-private/stub-test-env）→ 登录 3567141148 → session READY → NAPUTO_SMOKE=1 冒烟通过（发送 OK + 落库 true）→ onebot11 adapter 启动
-- [ ] OneBot 装配（adapter OB11 HTTP/WS + network）端到端验证
+- [ ] **OneBot 装配端到端**：adapter OB11 HTTP/WS 上报 + network 广播的完整外部链路验证（内部链路已通）
 
 ### P2-2 无头/低内存（验收标准 3/4）
-- [ ] 候选 A：**自建宿主落地**（验证已通过，loader 新增引导即完成）
-- [ ] 候选 B：路线 B + main 替换（注入后改 QQ main 阻止 UI，NapCat 注入模式做法，内存应降）
-- [ ] 候选 C：维持路线 B + 事后抑制（当前 600-700MB ❌ 用户已测，不可接受）
+- [x] 候选 A：**自建宿主落地**（✅ 唯一实现方式）——剩内存实测
+- [ ] 候选 B：路线 B + main 替换（历史回退选项，仅当 A 内存不达标再议）
+- [x] 候选 C：路线 B + 事后抑制（已随路线 B 淘汰，600-700MB ❌ 不可接受）
 
 ### P3 打磨
 - [ ] 内存实测（无头 + 目标达成）；多账号/进程隔离、supervisor 复用
 - [ ] 版本兼容：wrapper-version.ts 探测 + appid 表维护（QQ 升级重跑 major 解析）
+- [ ] 数据包层（packet 后端，远期，逆向已解禁，对齐 NapCat）
 
 ---
 

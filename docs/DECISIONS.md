@@ -1,4 +1,4 @@
-# NapukettoQQ 决策史（V1 → V5，2026-08-06 归档整理）
+# NapukettoQQ 决策史（V1 → V10，2026-08-07 整理）
 
 > **用途**：路线演进与关键决策的存档，**新对话一般不需要读本文件**——先读 `docs/STATUS.md`（现状）
 > 和 `docs/architecture.md`（架构书）。仅在需要理解「为什么走到今天」时查阅本节。
@@ -17,6 +17,10 @@
 | V4 | 2026-08-06 深夜 | 双层路线（A 自建宿主优先 / B NapCat 同款兜底） | ❌ 路线 A P0-B 判死（9.9.31）→ 转 B | HANDOVER-V4 → 本文件 §4 |
 | V5 | 2026-08-06 | 路线 B 定稿 + 全链路验证 | ✅ P2-0 试金石通过；**深夜发现判死存疑** | HANDOVER-V5 → 本文件 §5 |
 | V6 | 2026-08-06 | 功能范围 + 逆向边界拍板 | ✅ 范围 = NapCat − WebUI − 插件系统；**允许必要逆向**（非 0 逆向） | 本文件 §6 |
+| V7 | 2026-08-07 早 | 自研 stub QQNT.dll 等价物（llvm-mingw 69KB 转发 stub，99 符号） | ✅ 替换 NapCat 闭源 stub，登录链路验证通过 | 本文件 §7 |
+| V8 | 2026-08-07 晚 | 正式版 stub（PerfTrace 空实现）；自建宿主「硬墙」误判 | ⚠️ 误判（V9 推翻） | 本文件 §7 |
+| V9 | 2026-08-07 深夜 | session READY 突破（先 init 后 startupSession.start） | ✅ 业务 service 全激活，推翻 V8 硬墙 | 本文件 §7 |
+| V10 | 2026-08-07 | **业务基本实现 + 自建宿主唯一路线** | ✅ 全链路跑通（登录→READY→收发→onebot11→消息接收），cli 默认自建宿主 | 本文件 §7 |
 
 ---
 
@@ -161,7 +165,51 @@ Base_PowerMessageWindow 窗口类、数据包层 hook）——**不是 env 兼�
 
 ---
 
-## 7. 已清理事项（勿重建）
+## 7. V7~V10：自建宿主全链路定案（2026-08-07）
+
+> 本阶段从「自建宿主验证通过」一路走到「业务基本实现」，详见各 HANDOVER-V6~V11。
+
+### V7：自研 stub QQNT.dll 等价物（2026-08-07 早）
+
+**决策背景**：登录链路验证依赖 NapCat 闭源 stub（481KB）——产品化前置必须自研。
+
+**成果**：llvm-mingw 编译 **69KB PE Export Forwarding stub**，99 符号 = napi_* ×40 + uv_* ×56 +
+qq_magic ×1 + v8/node mangled ×2；node.exe 缺失仅 2 个（`qq_magic_napi_register` →
+`node.exe.napi_module_register`、`?IsEnvironmentStopping@node@@` → stub 内部返回 false）。
+替换 NapCat stub 后登录链路验证通过。
+
+**决策**：不再依赖 NapCat 部署包；正式版 `stub-qqnt.cpp` 放 native-private（闭源）。
+
+### V8：正式版 stub + 自建宿主「硬墙」误判（2026-08-07 晚）
+
+- `stub-qqnt.cpp` 正式化：IsEnvironmentStopping + **PerfTrace 空实现**（官方 QQNT.dll 有导出、
+  NapCat stub 同款空实现实证，消除 GetProcAddress failed 日志）
+- `compare-symbols.mjs` 加 PerfTrace 动态符号自动生成（def 100 条 = 99 静态 + PerfTrace）
+- ⚠️ 深夜误判「自建宿主业务 service 硬墙」——session.init 后 getMsgService 不 READY，记录 V8 交接
+
+### V9：session READY 突破（2026-08-07 深夜，决定性）
+
+**推翻 V8 硬墙**：关键 = **`session.init(config)` 之后调 `startupSession.start()`**（NapCat
+initializeSession 顺序）。此前失败原因：① 先 `ssw.start()` 再 init（顺序颠倒）② init 后用 startNT
+（非 startupSession.start）。改正后 `onOpentelemetryInit(is_init=true)` 触发 → **getMsgService READY
+（298 方法）+ getGroupService/getBuddyService/getTicketService/getProfileService 全部有效**。
+隔离实验：O3 上报 / UUID guid / deviceConfig 均非必要。**kernel 落地**（`ea07ab4`）：
+`lifecycle.initAndStartSession` 改为先 init 后 startupSession.start（有则 start()，否则 startNT 兜底）。
+
+### V10：业务基本实现 + 自建宿主唯一路线（2026-08-07）
+
+- **用户拍板：只保留自建宿主实现方式**，路线 B（拉起 QQ + 注入）淘汰——cli `pnpm start` 默认自建宿主（`0d9b769`）
+- 自建宿主引导落地（`3a48844`）：`self-host.cjs` + `launchSelfHost` + kernel 适配（resolveQqGlobalPath /
+  loginService 优先 get() / ensureLoginConnected / 自建宿主 session 先建）
+- **MsgListener 签名校准**（`d253bfd`）：onRecvMsg 改为**消息数组**（运行时实证：单条签名导致
+  msg.msgId/elements 全 undefined）；boot-protocols 控制台消息日志上线（NapCat 同款，独立订阅）
+- **结论：业务基本实现**——kernel（12 apis + bridge + cache + login）→ adapter（onebot11 78 动作）→
+  network/media → loader 自建宿主引导 → cli 唯一启动方式，全部落地。端到端实测：自动定位 QQ →
+  登录 3567141148 → session READY → 冒烟收发 → onebot11 adapter → **群消息真实接收并打印**（群「晓工坊」）
+
+---
+
+## 8. 已清理事项（勿重建）
 
 - **`scripts-tmp/` 整目录已删**：含 QQ 登录票据（敏感）+ 全部探针/逆向脚本。核心逻辑均已产品化
   （appid 解析 → wrapper-config.ts；session 创建 → wrapper-loader.ts；worker 引导 → route-b-worker.cjs）
@@ -171,7 +219,7 @@ Base_PowerMessageWindow 窗口类、数据包层 hook）——**不是 env 兼�
 
 ---
 
-## 8. 决策史知识点索引
+## 9. 决策史知识点索引
 
 | 想查什么 | 去哪看 |
 |---|---|

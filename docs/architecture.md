@@ -94,16 +94,24 @@ pnpm start（apps/cli）——2026-08-07 起 cli 默认走自建宿主（4.3）�
   └─ 无头：阻断 UI/GPU/Renderer（vehicle.cpp）；主进程保留但无窗口
 ```
 
-### 4.3 自建宿主链路（验证成功后，主攻目标）
+### 4.3 自建宿主链路（✅ 唯一实现方式，2026-08-07 实测全通）
 
 ```
-标准 Node 自建宿主进程（无 QQ 进程，~100MB）
-  ├── LoadLibrary(QQNT.dll)      → 提供 v8/node/napi/qq_magic 全套宿主符号（可独立加载，已实证）
-  ├── LoadLibrary(wrapper.node)  → 常规导入自动绑定，绕过 Node self-register 检查
-  ├── 建 Base_PowerMessageWindow（QQ 窗口类，QQNT.dll 内部依赖窗口消息循环）← 待验证
-  ├── process.dlopen(wrapper.node)（IAT hook GetProcAddress 拦 napi_register_module_v1 查询）
-  └── 已有票据登录 → session → 业务层 NAPI 复用（kernel/adapter 零改动）
+pnpm start（apps/cli）→ launchSelfHost → 标准 Node 自建宿主进程（无 QQ 进程，~100MB 目标）
+  ├── stub QQNT.dll 转发（napi_* → node.exe；自研 llvm-mingw 69KB PE 转发 stub，native-private 闭源）
+  ├── process.dlopen(wrapper.node) → exports 98 个（标准 node 可完整加载，无需 IAT 改写）
+  ├── NodeIO3MiscService.get() + addO3MiscListener 激活事件分发（否则 getLoginList 永不 resolve）
+  ├── commonPath/desktopGlobalPath = 数据根/nt_qq/global（三要素之三）
+  ├── 登录（快速 3567141148 / QR）→ session.init(config) → startupSession.start()（先 init 后 start！）
+  ├── 等 onOpentelemetryInit(is_init=true) → 业务 service 全 READY（getMsgService 298 方法）
+  └── boot-bootstrap 复用 → kernel 装配 → onebot11 协议装配 → 收发/事件监听
 ```
+
+**登录链路三要素（勿重复探索）**：① 加载 = stub QQNT.dll 转发（无需 IAT 改写；host-helper IAT
+方案事件分发不工作已弃用）② `O3MiscService` 激活事件分发 ③ commonPath = 数据根/nt_qq/global。
+**session READY 四步**：登录成功 → `session.init(config)` → `startupSession.start()`（**先 init 后
+start！**）→ 等 `onOpentelemetryInit(is_init=true)`。`Base_PowerMessageWindow` 窗口类已验证**非必要**
+（保留无害）。
 
 **napi2native 真实职责（实证，非 env 兼容层）**：进程名伪装 QQ.exe、隐藏注入模块
 （K32EnumProcessModules/GetModuleHandleW hook）、内存 RWX→RX 伪装、创建 `Base_PowerMessageWindow`
@@ -182,7 +190,7 @@ wrapper.node 原生回调
 | **P4 扩展** | 合并转发、翻译、在线状态、media 接入、api 聚合、GroupCache | ✅ 完成 |
 | **P5 多协议** | satori 协议适配器（adapter 包内新目录，复用 core 框架） | ⏳ 规划（onebot12 已放弃） |
 | **P6 多账号** | cli 子进程编排（supervisor） | ✅ 代码完成（实测待补） |
-| **路线验证** | 自建宿主验证实验（P2-2 第一优先）→ 无头/低内存验收 | 🔥 下一步 |
+| **路线验证** | 自建宿主验证实验（P2-2）→ 无头/低内存验收 | ✅ 自建宿主全链路实测通过（登录→READY→收发→onebot11→消息接收）；剩内存实测 |
 
 > P5 之后 webui 永远不在路线图上。
 
@@ -206,9 +214,9 @@ wrapper.node 原生回调
 - Ghidra 12.1.2（`C:\Dev\Tools\ghidra_12.1.2_PUBLIC\`）+ GhidraMCP 1.4（`C:\Dev\Tools\GhidraMCP-1-4\`）
 - 项目：`C:\Dev\Tools\ghidra-project\NapukettoWrapper.gpr`（wrapper.node 已全量分析）
 - 用法见 `docs/ghidra-mcp-guide.md`（保留）
-- **⚠️ 2026-08-06 更新**：路线 B（worker 继承 QQ env）**不需要**激活 session cpp_impl——vehicle 注入
-  已停用（`5ed694d`：9.9.33 RVA 表过期致崩溃）。Ghidra 主要留给「自建宿主复活」的窗口类/napi2native
-  自研等价物研究。
+- **⚠️ 2026-08-07 更新**：自建宿主（唯一路线）已全链路实测通过，**不需要**激活 session cpp_impl；
+  窗口类（Base_PowerMessageWindow）已验证非必要。Ghidra 现仅用于远期数据包层（packet 后端）与
+  「仅限 loader 载具层」的逆向手段研究。
 
 ### 9.2 C++ 载具构建
 
@@ -217,6 +225,7 @@ wrapper.node 原生回调
 
 ### 9.3 环境事实
 
-- QQ 9.9.33-51802：`C:\Dev\QQBot-Dev\QQNT\`（wrapper.node 114MB，exports 98 个）
-- QQ 登录数据：`C:\Users\xiaoxiaochen\Documents\Tencent Files\`
-- NapCat 参考部署包：`C:\Dev\NapCat.Shell.Windows.Node1`（纯 Node 模式实证 ~237MB）
+- QQ 9.9.33-51802：`C:\Dev\QQBot-Dev\QQNT\`（wrapper.node 114MB，exports 98 个；9.9.27/9.9.31 登录服务已下线勿用）
+- QQ 登录数据：`C:\Users\xiaoxiaochen\Documents\Tencent Files\`（含 7 账号；快速登录用 **3567141148**）
+- 自建宿主 stub：`packages/loader/native-private/stub-test-env/`（默认 stub 目录，llvm-mingw 编译）
+- NapCat 参考部署包：`C:\Dev\NapCat.Shell.Windows.Node1`（仅参考，已不依赖）
