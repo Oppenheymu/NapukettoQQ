@@ -67,15 +67,6 @@ dataDir = "C:\\Users\\<用户名>\\.napuketto"
 ```
 数据根解析优先级：`--data-dir <dir>` > 环境变量 `NAPKETTO_DATA` > `~/.napuketto`。
 
-## 📚 文档
-
-| 文档 | 说明 |
-|---|---|
-| [`docs/STATUS.md`](docs/STATUS.md) | 项目现状与关键决策点 |
-| [`docs/architecture.md`](docs/architecture.md) | 架构书：分层 / ADR / 路线图 / 红线 |
-| [`docs/DECISIONS.md`](docs/DECISIONS.md) | 决策史：V1→V10 路线演进归档 |
-| `packages/*/docs/design.md` | 各包设计文档 |
-
-## 📄 许可证
+##  许可证
 
 [MIT](LICENSE)
