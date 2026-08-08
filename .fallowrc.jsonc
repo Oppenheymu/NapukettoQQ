@@ -81,5 +81,20 @@
         "packages/kernel/src/types/listeners/index.ts",
         "packages/kernel/src/infra/index.ts",
         "packages/kernel/src/apis/index.ts"
-    ]
+    ],
+    // 测试文件豁免大函数检查（fallow 官方推荐）：长 describe/it 块会被误计为
+    // ">60 LOC 大函数"，污染 unit size 扣分（unit size = per_k 大函数数 × 0.5）。
+    // 只提高 maxUnitSize，保留复杂度/认知/CRAP 检查（fallow 文档原文：
+    // "Raising it for a glob removes those functions from the Large functions
+    //  list while keeping complexity, cognitive, and CRAP checks on the same
+    //  files, which is the recommended way to stop test suites from dominating
+    //  the list"）。单元测试本就是多路径覆盖，不应按生产代码标准计大函数。
+    "health": {
+        "thresholdOverrides": [
+            {
+                "files": ["**/*.test.*"],
+                "maxUnitSize": 200
+            }
+        ]
+    }
 }

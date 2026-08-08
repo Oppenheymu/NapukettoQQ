@@ -162,7 +162,7 @@ export class WebApi {
 }
 
 /** 从 honorlist 页面提取 __INITIAL_STATE__ → 荣誉列表（解析失败返回空）。 */
-function parseHonorList(text: string, type: number): HonorListItem[] {
+export function parseHonorList(text: string, type: number): HonorListItem[] {
     const match = /window\.__INITIAL_STATE__=(.*?);/.exec(text);
     if (match === null || match[1] === undefined) {
         return [];
