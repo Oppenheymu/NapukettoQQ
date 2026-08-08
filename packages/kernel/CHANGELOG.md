@@ -1,5 +1,11 @@
 # @napuketto/kernel
 
+## 0.0.3
+
+### Patch Changes
+
+- fix(kernel): 群列表数据源校准（2026-08-08，e27fb55）——原生 getGroupList 返回值无数据（仅 `{ result, errMsg }`），列表实际经 onGroupListUpdate 事件推送；GroupCache 新增 listGroups / listGroupsRefreshed；IPC 动作表与 OB11 / Satori 群列表动作改从缓存读，force / no_cache 触发原生刷新
+
 ## 0.0.2
 
 ### Patch Changes
