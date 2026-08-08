@@ -24,7 +24,6 @@ export {
     type ReceiveTranslateContext,
     type SendTranslateContext,
     segmentsToCanonical,
-    segmentsToCqMessage,
 } from "./data.js";
 export { toOb11MessageInfo } from "./message-info.js";
 export { MessageUnique } from "./message-unique.js";
@@ -34,4 +33,5 @@ export {
     type NoticeTranslateContext,
     toOb11NoticeEvent,
 } from "./notice.js";
+export { segmentsToCqMessage } from "./segment.js";
 export { toOb11GroupInfo, toOb11GroupMemberInfo } from "./translate.js";

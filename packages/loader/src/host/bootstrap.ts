@@ -7,6 +7,7 @@
  *  - 登录流程（选账号 / 快速登录 / QR 回退）→ login.ts
  *  - session 选择 / 探测 / 就绪 → session.ts
  *  - 协议装配 → protocols.ts；冒烟自检 → smoke.ts
+ * 2026-08-08 FTA 优化：NapukettoCore 装配路径 → bootstrap-core.ts（本文件留入口 + fallback）。
  *
  * session 来源（2026-08-07 实测结论；V1 Proxy 捕获与 vehicle 载具已归档 archive/）：
  *  登录成功后按优先级取 session：
@@ -16,21 +17,88 @@
  *  取到后 core.setSession 替换 → waitSessionReady 确认 getMsgService READY。
  */
 import { dirname, join } from "node:path";
+import { type BootstrapEnv, bootstrapWithCore } from "./bootstrap-core.js";
 import { env } from "./env.js";
-import { doLogin, type LoginTargetRef, pickLoginAccount } from "./login.js";
-import { startProtocols } from "./protocols.js";
-import {
-    collectCandidateSessions,
-    isSessionUsable,
-    pickBestSession,
-    probeSessionMethods,
-    type SessionCandidate,
-    startSessionProbe,
-    type WrapperSessionStaticLike,
-} from "./session.js";
-import { runSmokeTest } from "./smoke.js";
-import type { CoreContextLike, CoreLike, KernelLike, LoginResultLike } from "./types.js";
+import type { CoreContextLike, KernelLike } from "./types.js";
 import { errMsg, log, type SharedState } from "./util.js";
+
+/** ⭐ appid 动态解析（2026-08-06 P2-0 实测：硬编码 537237765 在 9.9.33 扫码失败
+ * 「请下载最新版」；major.node 解析的 537376818 成功）。自研，参考 NapCat 思路。 */
+function resolveAppid(kernel: KernelLike, bootEnv: BootstrapEnv): string | number {
+    return (
+        (typeof kernel.parseAppidFromMajor === "function" &&
+            bootEnv.wrapperPath &&
+            kernel.parseAppidFromMajor(join(dirname(bootEnv.wrapperPath), "major.node"))) ||
+        (typeof kernel.resolveAppidQua === "function" &&
+            kernel.resolveAppidQua(bootEnv.qqVersion || "").appid) ||
+        "537237765"
+    );
+}
+
+/** 回退：旧装配路径（startNapuketto + 手工 lifecycle）。 */
+async function bootstrapFallback(
+    kernel: KernelLike,
+    state: SharedState,
+    bootEnv: BootstrapEnv,
+    Appid: string | number,
+): Promise<void> {
+    // 回退：旧装配路径（startNapuketto + 手工 lifecycle）
+    log("bootstrap: kernel has no NapukettoCore, falling back");
+    const ctx: CoreContextLike | undefined = kernel.startNapuketto?.({
+        wrapperExports: state.wrapperExports,
+        env: { ...bootEnv },
+    });
+    if (ctx === undefined) {
+        log("bootstrap: startNapuketto 不可用");
+        return;
+    }
+    log(
+        `bootstrap: startNapuketto OK, engine=${typeof ctx.engine}, session=${ctx.session !== null}`,
+    );
+    if (
+        typeof kernel.quickLogin === "function" &&
+        typeof kernel.initAndStartSession === "function"
+    ) {
+        if (typeof kernel.buildLoginConfig === "function" && ctx.loginService) {
+            const loginCfg = kernel.buildLoginConfig(
+                Appid as number,
+                bootEnv.qqVersion || "",
+                bootEnv.dataDir || ".",
+            );
+            if (typeof ctx.loginService.initConfig === "function") {
+                ctx.loginService.initConfig(loginCfg);
+                log("bootstrap: loginService.initConfig OK");
+            }
+        }
+        const loginResult = await kernel.quickLogin(ctx, {});
+        log(`bootstrap: quickLogin OK, uin=${loginResult.uin}, uid=${loginResult.uid}`);
+        const sessionConfig = kernel.buildSessionConfig({
+            appid: Appid,
+            fullVersion: bootEnv.qqVersion || "",
+            selfUin: loginResult.uin,
+            selfUid: loginResult.uid,
+            accountPath: bootEnv.dataDir || ".",
+            downloadPath: join(bootEnv.dataDir || ".", "temp"),
+        });
+        const listener = kernel.createLifecycleSessionListener();
+        await kernel.initAndStartSession(ctx, sessionConfig, listener, {
+            timeoutMs: 20000,
+        });
+        log("bootstrap: session init + startNT OK!");
+    } else {
+        log("bootstrap: kernel missing lifecycle fns (quickLogin/initAndStartSession)");
+    }
+    if (env.NAPUTO_PROBE === "1" && typeof kernel.probeRuntime === "function") {
+        try {
+            const probe = kernel.probeRuntime(ctx);
+            log(
+                `bootstrap: probe done, session=${probe.session ? "ok" : "null"}, services=${Object.keys(probe.services ?? {}).length}`,
+            );
+        } catch (e) {
+            log(`bootstrap: probe error: ${errMsg(e)}`);
+        }
+    }
+}
 
 /** 核心引导：import kernel → 装配 → 登录 → 替换 session → 等待就绪 → 协议装配。 */
 export async function bootstrap(state: SharedState): Promise<void> {
@@ -51,262 +119,18 @@ export async function bootstrap(state: SharedState): Promise<void> {
             log("bootstrap: kernel 无 startNapuketto/NapukettoCore 导出");
             return;
         }
-        const bootEnv = {
-            qqVersion: env.NAPUTO_QQ_VERSION,
-            dataDir: env.NAPUTO_CFG_DIR,
-            wrapperPath: env.NAPUTO_WRAPPER_PATH,
+        const bootEnv: BootstrapEnv = {
+            qqVersion: env.NAPUTO_QQ_VERSION || "",
+            dataDir: env.NAPUTO_CFG_DIR || "",
+            wrapperPath: env.NAPUTO_WRAPPER_PATH || "",
         };
-
-        // ⭐ appid 动态解析（2026-08-06 P2-0 实测：硬编码 537237765 在 9.9.33 扫码失败
-        // 「请下载最新版」；major.node 解析的 537376818 成功）。自研，参考 NapCat 思路。
-        const Appid =
-            (typeof kernel.parseAppidFromMajor === "function" &&
-                bootEnv.wrapperPath &&
-                kernel.parseAppidFromMajor(join(dirname(bootEnv.wrapperPath), "major.node"))) ||
-            (typeof kernel.resolveAppidQua === "function" &&
-                kernel.resolveAppidQua(bootEnv.qqVersion || "").appid) ||
-            "537237765";
+        const Appid = resolveAppid(kernel, bootEnv);
         log(`bootstrap: appid=${Appid}（wrapper=${bootEnv.wrapperPath}）`);
         try {
             if (kernel.NapukettoCore !== undefined) {
-                // 装配层路径：NapukettoCore.create → attachWrapper → login
-                const core: CoreLike = kernel.NapukettoCore.create({
-                    paths: { dataRoot: bootEnv.dataDir },
-                    logLevel: "info",
-                });
-                // 不传 qqSession/qqLoginService（登录前捕获的旧实例已失效/会干扰；
-                // framework 语义：登录成功后 kernel 自己 create+init）
-                const ctx = core.attachWrapper(state.wrapperExports, bootEnv);
-                log(
-                    `bootstrap: attachWrapper OK, engine=${typeof ctx.engine}, session=${ctx.session !== null}`,
-                );
-
-                // 探测：create() 与捕获的 QQ session 关系（确认 create() 是否干扰 QQ）
-                try {
-                    const S2 = state.wrapperExports?.["NodeIQQNTWrapperSession"] as
-                        | WrapperSessionStaticLike
-                        | undefined;
-                    const created = S2 && typeof S2.create === "function" ? S2.create() : null;
-                    log(
-                        `BOOT: create()===qqSession? ${created === state.qqSession} | create()===ctx.session? ${created === ctx.session} | qqSession===ctx.session? ${state.qqSession === ctx.session}`,
-                    );
-                    const sess = created as { getMsgService?: unknown } | null | undefined;
-                    const svc =
-                        sess && typeof sess.getMsgService === "function"
-                            ? sess.getMsgService()
-                            : null;
-                    const qs = state.qqSession as { getMsgService?: unknown } | null | undefined;
-                    log(
-                        `BOOT: create().getMsgService=${svc !== null && svc !== undefined ? "ready" : "null"} qqSession.getMsgService=${qs && typeof qs.getMsgService === "function" && qs.getMsgService() !== null && qs.getMsgService() !== undefined ? "ready" : "null"}`,
-                    );
-                } catch (e) {
-                    log(`BOOT: create() 探测失败: ${errMsg(e)}`);
-                }
-                // 多源 session 就绪探测（5s 间隔，60s 上限）
-                startSessionProbe(state, ctx);
-
-                // 探测 session 方法面（NAPI 反射，验证 startNT/init 等关键方法）
-                probeSessionMethods(ctx);
-
-                let loginResult: LoginResultLike | null = null;
-                if (typeof core.login === "function") {
-                    // 打印可用快速登录账号（启动横幅）
-                    // NAPUTO_QUICK_UIN 强制指定快速登录账号（cli `-q <uin>` 透传，2026-08-07；
-                    // 也用于实验/自建宿主验证，防止自动选中风控账号 3054108135 导致挂起）。
-                    const forcedUin = env.NAPUTO_QUICK_UIN;
-                    const ref: LoginTargetRef = { targetUin: undefined };
-                    await pickLoginAccount(kernel, ctx, ref, forcedUin);
-                    const loginOpts: Record<string, unknown> = {
-                        appid: Appid,
-                        initTimeoutMs: 20000,
-                        ...(forcedUin
-                            ? { quickUin: forcedUin }
-                            : ref.targetUin !== undefined
-                              ? { quickUin: ref.targetUin }
-                              : {}),
-                    };
-                    loginResult = await doLogin(core, loginOpts);
-                    if (loginResult === null) {
-                        log("bootstrap: 登录失败，引导中止");
-                        return;
-                    }
-                    log(
-                        `bootstrap: 登录成功 uin=${loginResult.uin} uid=${loginResult.uid} nick=${loginResult.nick}`,
-                    );
-
-                    // ⭐ V2 登录后替换 session：优先 QQ 主 session（渲染进程已 init），
-                    // 其次 vehicle 激活的单例表 session。替换 kernel 自建的无效 session。
-                    // 自建宿主（NAPUTO_SELF_HOST）例外：无 QQ 主进程/vehicle/qqSession 捕获，
-                    // 且 getMainSession 内部会先 startupSession.start()——与「先 init 后
-                    // start」顺序冲突（HANDOVER-V9 实证）；登录前 createSession 创建的
-                    // 配套 session（ctx.session + ctx.startupSession）才是正确激活目标。
-                    const isSelfHost = env.NAPUTO_SELF_HOST === "1";
-                    let chosen: SessionCandidate | null = null;
-                    if (!isSelfHost) {
-                        const candidates = collectCandidateSessions(state, kernel, ctx);
-                        chosen = pickBestSession(candidates);
-                    }
-                    if (chosen && chosen.s !== ctx.session) {
-                        core.setSession(chosen.s);
-                        log(
-                            `bootstrap: 已替换 session（来源=${chosen.tag}，msgSvc=${isSessionUsable(chosen.s) ? "READY" : "null"}）`,
-                        );
-                    } else if (chosen) {
-                        log(`bootstrap: 候选 session 与 ctx.session 相同（${chosen.tag}）`);
-                    } else {
-                        log("bootstrap: 无有效候选 session（保留 kernel 自建 session）");
-                    }
-
-                    // ⭐ 激活目标：优先候选 session，否则 kernel 自建 session。
-                    // 自建宿主（NAPUTO_SELF_HOST，标准 node）无 QQ 主 session / vehicle
-                    // 激活 / qqSession Proxy 捕获——候选可能为空，但 attachWrapper 时
-                    // createSession（SSW.create + getNTWrapperSession("nt_1")）已创建
-                    // ctx.session，直接对它走 NapCat 激活（先 init 后 start）。
-                    const activateTarget: SessionCandidate = chosen ?? {
-                        s: ctx.session,
-                        tag: "kernel 自建 session",
-                    };
-                    if (activateTarget.s && !isSessionUsable(activateTarget.s)) {
-                        log(
-                            `bootstrap: 激活 session（${activateTarget.tag}，先 init 后 startupSession.start）...`,
-                        );
-                        try {
-                            // session 数据目录指向 QQ 真实数据目录（数据根/nt_qq/global，
-                            // HANDOVER-V6 三要素之三）：cfgDir 下 init 的 onOpentelemetryInit
-                            // 不触发（p0-kernel-flow 实证——accountPath 必须是 nt_qq/global）。
-                            const qqDataRoot =
-                                typeof kernel.resolveQqUserDataRoot === "function"
-                                    ? kernel.resolveQqUserDataRoot(state.wrapperExports)
-                                    : null;
-                            const accountPath =
-                                qqDataRoot && typeof kernel.resolveQqGlobalPath === "function"
-                                    ? kernel.resolveQqGlobalPath(qqDataRoot)
-                                    : bootEnv.dataDir || ".";
-                            const sessionConfig = kernel.buildSessionConfig({
-                                appid: Appid,
-                                fullVersion: bootEnv.qqVersion || "",
-                                selfUin: loginResult.uin,
-                                selfUid: loginResult.uid,
-                                accountPath,
-                                downloadPath: join(accountPath, "NapCat", "temp"),
-                            });
-                            const listener = kernel.createLifecycleSessionListener();
-                            // initAndStartSession 已修正：先 session.init 再 startupSession.start()
-                            await kernel.initAndStartSession(ctx, sessionConfig, listener, {
-                                timeoutMs: 20000,
-                            });
-                            log("bootstrap: 激活 session init + start 完成");
-                        } catch (initErr) {
-                            log(`bootstrap: 激活 session init 失败: ${errMsg(initErr)}`);
-                        }
-                    }
-
-                    // 等 session 就绪（getMsgService 非 null）——init 完成后才有
-                    try {
-                        await kernel.waitSessionReady(ctx, { timeoutMs: 30000 });
-                        log("bootstrap: QQ session 就绪（getMsgService 可用）");
-                    } catch (readyErr) {
-                        log(`bootstrap: 等待 session 就绪失败: ${errMsg(readyErr)}`);
-                    }
-                    // P2-1 收发消息冒烟自检（NAPUTO_SMOKE=1）：MsgBridge + MsgApi 真发/收一条
-                    if (env.NAPUTO_SMOKE === "1" && loginResult !== null) {
-                        try {
-                            const ok = await runSmokeTest(kernel, ctx, loginResult);
-                            log(
-                                `bootstrap: 冒烟自检${ok ? "通过" : "未完全通过"}（见上文 smoke 日志）`,
-                            );
-                        } catch (smokeErr) {
-                            log(`bootstrap: 冒烟自检异常: ${errMsg(smokeErr)}`);
-                        }
-                    }
-                } else {
-                    log("bootstrap: kernel core missing login fn");
-                }
-                // 协议装配（adapter + network，登录成功后）
-                if (loginResult !== null) {
-                    await startProtocols(kernel, ctx, loginResult);
-                }
-                // 探测模式
-                if (env.NAPUTO_PROBE === "1" && typeof kernel.probeRuntime === "function") {
-                    try {
-                        const probe = kernel.probeRuntime(ctx);
-                        log(
-                            `bootstrap: probe done, session=${probe.session ? "ok" : "null"}, services=${Object.keys(probe.services ?? {}).length}`,
-                        );
-                        setTimeout(() => {
-                            try {
-                                if (typeof kernel.probeRuntime !== "function") {
-                                    return;
-                                }
-                                const late = kernel.probeRuntime(ctx, "napuketto-probe-late.json");
-                                log(
-                                    `bootstrap: probe-late done, session=${late.session ? "ok" : "null"}, services=${Object.keys(late.services ?? {}).length}`,
-                                );
-                            } catch (e2) {
-                                log(`bootstrap: probe-late error: ${errMsg(e2)}`);
-                            }
-                        }, 35000);
-                    } catch (e) {
-                        log(`bootstrap: probe error: ${errMsg(e)}`);
-                    }
-                }
+                await bootstrapWithCore(kernel, state, bootEnv, Appid);
             } else {
-                // 回退：旧装配路径（startNapuketto + 手工 lifecycle）
-                log("bootstrap: kernel has no NapukettoCore, falling back");
-                const ctx: CoreContextLike | undefined = kernel.startNapuketto?.({
-                    wrapperExports: state.wrapperExports,
-                    env: bootEnv,
-                });
-                if (ctx === undefined) {
-                    log("bootstrap: startNapuketto 不可用");
-                    return;
-                }
-                log(
-                    `bootstrap: startNapuketto OK, engine=${typeof ctx.engine}, session=${ctx.session !== null}`,
-                );
-                if (
-                    typeof kernel.quickLogin === "function" &&
-                    typeof kernel.initAndStartSession === "function"
-                ) {
-                    if (typeof kernel.buildLoginConfig === "function" && ctx.loginService) {
-                        const loginCfg = kernel.buildLoginConfig(
-                            Appid as number,
-                            bootEnv.qqVersion || "",
-                            bootEnv.dataDir || ".",
-                        );
-                        if (typeof ctx.loginService.initConfig === "function") {
-                            ctx.loginService.initConfig(loginCfg);
-                            log("bootstrap: loginService.initConfig OK");
-                        }
-                    }
-                    const loginResult = await kernel.quickLogin(ctx, {});
-                    log(`bootstrap: quickLogin OK, uin=${loginResult.uin}, uid=${loginResult.uid}`);
-                    const sessionConfig = kernel.buildSessionConfig({
-                        appid: Appid,
-                        fullVersion: bootEnv.qqVersion || "",
-                        selfUin: loginResult.uin,
-                        selfUid: loginResult.uid,
-                        accountPath: bootEnv.dataDir || ".",
-                        downloadPath: join(bootEnv.dataDir || ".", "temp"),
-                    });
-                    const listener = kernel.createLifecycleSessionListener();
-                    await kernel.initAndStartSession(ctx, sessionConfig, listener, {
-                        timeoutMs: 20000,
-                    });
-                    log("bootstrap: session init + startNT OK!");
-                } else {
-                    log("bootstrap: kernel missing lifecycle fns (quickLogin/initAndStartSession)");
-                }
-                if (env.NAPUTO_PROBE === "1" && typeof kernel.probeRuntime === "function") {
-                    try {
-                        const probe = kernel.probeRuntime(ctx);
-                        log(
-                            `bootstrap: probe done, session=${probe.session ? "ok" : "null"}, services=${Object.keys(probe.services ?? {}).length}`,
-                        );
-                    } catch (e) {
-                        log(`bootstrap: probe error: ${errMsg(e)}`);
-                    }
-                }
+                await bootstrapFallback(kernel, state, bootEnv, Appid);
             }
         } catch (e) {
             log(`bootstrap: lifecycle error: ${errMsg(e)}`);

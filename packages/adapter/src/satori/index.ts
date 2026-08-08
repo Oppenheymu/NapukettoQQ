@@ -11,16 +11,14 @@ export { NapukettoSatoriAdapter } from "./adapter.js";
 export type { SatoriApiOptions } from "./api/satori-api.js";
 export { SatoriApi } from "./api/satori-api.js";
 export type { SatoriEventContent, SatoriEventDeps } from "./event/index.js";
+export type { CanonicalToSatoriDeps } from "./helper/canonical.js";
+export { canonicalToSatoriElements } from "./helper/canonical.js";
 export type { SatoriConfig } from "./helper/config.js";
 export { satoriConfigSchema } from "./helper/config.js";
 export type { SatoriElement } from "./helper/element.js";
-export {
-    canonicalToSatoriElements,
-    parseContentToCanonical,
-    parseElements,
-    renderElements,
-    satoriToCanonicalElements,
-} from "./helper/element.js";
+export { parseElements, renderElements } from "./helper/element.js";
+export type { SatoriToCanonicalDeps } from "./helper/element-convert.js";
+export { parseContentToCanonical, satoriToCanonicalElements } from "./helper/element-convert.js";
 export { HTTP_STATUS, satoriHttpStatusMap } from "./helper/error.js";
 export type { AssembleSatoriTransportsOptions, SatoriTransportSet } from "./transport.js";
 export { assembleSatoriTransports, toEventSignal } from "./transport.js";

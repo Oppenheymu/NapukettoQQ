@@ -11,8 +11,8 @@
 import { type ChildProcess, spawn } from "node:child_process";
 import process from "node:process";
 import { resolveDataRoot } from "@napuketto/kernel";
-import type { CliAccountConfig, CliConfig } from "./config-cmds.js";
 import { loadCliConfig } from "./config-cmds.js";
+import type { CliAccountConfig, CliConfig } from "./config-parse.js";
 import { logger } from "./logger.js";
 
 /** 默认重启延迟（毫秒）。 */

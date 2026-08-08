@@ -1,0 +1,81 @@
+/**
+ * Satori 发方向资源处理（从 element-convert.ts 拆分，2026-08-08 FTA 优化）
+ *
+ * - resolveAsset：internal: 路径 / http(s) 下载 / 本地路径原样
+ * - ensureSilk：非 silk 语音（wav/pcm）转 silk（QQ 语音格式，失败原样返回）
+ */
+import { mkdir, open, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import { kernelError } from "@napuketto/kernel";
+import { encodePcmToSilk } from "@napuketto/media";
+
+/** internal:{platform}/{user.id}/{path} → 本地路径（取 _tmp 之后的路径，回落 cacheDir）。 */
+function resolveInternalPath(src: string): string {
+    const pathPart = src.slice("internal:".length);
+    const slash1 = pathPart.indexOf("/");
+    const slash2 = slash1 === -1 ? -1 : pathPart.indexOf("/", slash1 + 1);
+    if (slash2 === -1) {
+        return pathPart;
+    }
+    const rest = pathPart.slice(slash2 + 1);
+    // 去掉 _tmp/ 前缀段，回落到 cacheDir
+    const tmpIdx = rest.indexOf("_tmp/");
+    return tmpIdx === -1 ? rest : rest.slice(tmpIdx + 5);
+}
+
+/**
+ * 解析资源 src：
+ * - internal:{platform}/{user.id}/{path} → 本地路径（第一版仅支持 _tmp 保留路径）
+ * - http(s):// → 下载到 cacheDir
+ * - 其他 → 视为本地路径原样返回
+ */
+export async function resolveAsset(src: string, cacheDir: string): Promise<string> {
+    if (src.startsWith("internal:")) {
+        return resolveInternalPath(src);
+    }
+    if (/^https?:\/\//i.test(src)) {
+        return downloadAsset(src, cacheDir);
+    }
+    return src;
+}
+
+/** 下载 URL 资源到缓存目录（返回本地路径）。 */
+async function downloadAsset(url: string, cacheDir: string): Promise<string> {
+    await mkdir(cacheDir, { recursive: true });
+    const res = await fetch(url);
+    if (!res.ok) {
+        throw kernelError(`下载资源失败: ${url}`, "SEND_FAILED");
+    }
+    const buf = Buffer.from(await res.arrayBuffer());
+    const rawName = url.split("/").pop() ?? `asset-${Date.now()}`;
+    const safeName = rawName.replace(/[^a-zA-Z0-9._-]/g, "_") || `asset-${Date.now()}`;
+    const filePath = join(cacheDir, safeName);
+    await writeFile(filePath, buf);
+    return filePath;
+}
+
+/** 语音转码：非 silk 输入（wav/pcm）转 silk（QQ 语音格式）。 */
+export async function ensureSilk(path: string): Promise<string> {
+    try {
+        const header = await readFileHead(path);
+        if (header.startsWith("#!SILK")) {
+            return path;
+        }
+        // wav/pcm → silk（转码失败原样返回，由 kernel 发送时兜底）
+        return await encodePcmToSilk(path);
+    } catch {
+        return path;
+    }
+}
+
+/** 读文件头 8 字节（判断格式）。 */
+async function readFileHead(path: string): Promise<string> {
+    const handle = await open(path, "r");
+    try {
+        const buf = Buffer.alloc(8);
+        await handle.read(buf, 0, 8, 0);
+        return buf.toString("utf8");
+    } finally {
+        await handle.close();
+    }
+}
