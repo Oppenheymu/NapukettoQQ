@@ -7,7 +7,7 @@
  * wsReverse 废弃（zod strip 静默忽略，不兼容迁移）。
  */
 import { z } from "zod";
-import { createHttpServerSchema } from "../../core/transport-schema.js";
+import { createHttpServerSchema, createWsServerSchema } from "../../core/transport-schema.js";
 
 /** HTTP 反向服务器默认端口。 */
 const DEFAULT_HTTP_PORT = 3000;
@@ -36,13 +36,8 @@ const httpPostSchema = z.object({
     timeoutMs: z.number().int().optional(),
 });
 
-/** 反向 WS server 实例（第三方 WS 连入）。 */
-const wsServerSchema = z.object({
-    enabled: z.boolean().default(false),
-    host: z.string().default("127.0.0.1"),
-    port: z.number().int().default(DEFAULT_WS_PORT),
-    /** 实例级 token，覆盖全局 token（缺省继承全局）。 */
-    token: z.string().optional(),
+/** 反向 WS server 实例（第三方 WS 连入，带 WS ping 间隔扩展字段）。 */
+const wsServerSchema = createWsServerSchema(DEFAULT_WS_PORT).extend({
     /** WS ping 间隔（毫秒）。 */
     heartbeatInterval: z.number().int().default(DEFAULT_WS_HEARTBEAT_MS),
 });

@@ -107,10 +107,6 @@ abstract class GroupRequestApproveBase extends BaseSatoriAction<
 /** 处理群邀请（message_id = 群通知 seq）。 */
 export class GuildApproveAction extends GroupRequestApproveBase {
     readonly name = "guild.approve";
-
-    constructor(deps: GuildActionDeps) {
-        super(deps);
-    }
 }
 
 /** guild.member.get 参数。 */
@@ -238,10 +234,6 @@ const guildMemberApproveSchema = z.object({
 export class GuildMemberApproveAction extends GroupRequestApproveBase {
     readonly name = "guild.member.approve";
     override readonly schema = guildMemberApproveSchema;
-
-    constructor(deps: GuildActionDeps) {
-        super(deps);
-    }
 }
 
 /** 按 message_id（通知 seq）查找群通知。 */

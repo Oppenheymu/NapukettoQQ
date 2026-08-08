@@ -3,7 +3,7 @@
  */
 
 import { z } from "zod";
-import { EssenceMsgBase, type EssenceMsgDeps } from "./set-essence-msg.js";
+import { EssenceMsgBase } from "./set-essence-msg.js";
 
 const deleteEssenceMsgSchema = z.object({
     message_id: z.union([z.number(), z.string()]),
@@ -13,10 +13,6 @@ const deleteEssenceMsgSchema = z.object({
 export class DeleteEssenceMsgAction extends EssenceMsgBase {
     readonly name = "delete_essence_msg";
     readonly schema = deleteEssenceMsgSchema;
-
-    constructor(deps: EssenceMsgDeps) {
-        super(deps);
-    }
 
     protected async operate(groupCode: string, msgId: string): Promise<void> {
         await this.deps.groupApi.removeGroupEssence(groupCode, msgId);

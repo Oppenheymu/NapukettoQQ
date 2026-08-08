@@ -43,6 +43,15 @@ function parseSmokeTarget(envPeer: string | undefined, selfUin: string): SmokeTa
     return { kind: "c2c", uin: selfUin };
 }
 
+/** 提取消息纯文本（text 元素拼接，onRecvMsg 与落库核对共用）。 */
+function extractTexts(kernel: KernelLike, msg: unknown): string {
+    return kernel
+        .toCanonicalElements(msg)
+        .filter((el) => el.type === "text")
+        .map((el) => el.text)
+        .join("");
+}
+
 /** uin → uid（c2c 目标用；group 直接拿群号作 peerUid）。 */
 async function resolvePeerUid(
     kernel: KernelLike,
@@ -98,11 +107,7 @@ export async function runSmokeTest(
         forEachRawMessage(msgs, (m) => {
             received += 1;
             try {
-                const texts = kernel
-                    .toCanonicalElements(m)
-                    .filter((el) => el.type === "text")
-                    .map((el) => el.text)
-                    .join("");
+                const texts = extractTexts(kernel, m);
                 if (texts) {
                     receivedText = texts;
                 }
@@ -141,12 +146,9 @@ export async function runSmokeTest(
         );
         if (!landed) {
             for (const m of recent.slice(0, 3)) {
-                const texts = kernel
-                    .toCanonicalElements(m)
-                    .filter((el) => el.type === "text")
-                    .map((el) => el.text)
-                    .join("");
-                log(`smoke:   最近消息 msgId=${m.msgId} seq=${m.msgSeq} text="${texts}"`);
+                log(
+                    `smoke:   最近消息 msgId=${m.msgId} seq=${m.msgSeq} text="${extractTexts(kernel, m)}"`,
+                );
             }
         }
     } catch (e) {

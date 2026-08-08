@@ -47,10 +47,6 @@ export class SetEssenceMsgAction extends EssenceMsgBase {
     readonly name = "set_essence_msg";
     readonly schema = setEssenceMsgSchema;
 
-    constructor(deps: EssenceMsgDeps) {
-        super(deps);
-    }
-
     protected async operate(groupCode: string, msgId: string): Promise<void> {
         await this.deps.groupApi.addGroupEssence(groupCode, msgId);
     }
