@@ -92,7 +92,9 @@
     "health": {
         "thresholdOverrides": [
             {
-                "files": ["**/*.test.*"],
+                "files": [
+                    "**/*.test.*"
+                ],
                 "maxUnitSize": 200
             }
         ]
