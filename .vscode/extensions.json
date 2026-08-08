@@ -3,6 +3,7 @@
         "biomejs.biome",
         "editorconfig.editorconfig",
         "tamasfe.even-better-toml",
-        "pkief.material-icon-theme"
+        "pkief.material-icon-theme",
+        "typescriptteam.native-preview"
     ]
 }
