@@ -5,6 +5,7 @@
  * session 替换/激活 → 就绪等待 → 冒烟自检 → 协议装配 → 探测模式。
  */
 import { join } from "node:path";
+import process from "node:process";
 import { env } from "../env.js";
 import { sendLogin, sendQr, sendStatus, startIpcMode } from "../ipc/index.js";
 import type { CoreContextLike, CoreLike, KernelLike, LoginResultLike } from "../types.js";
@@ -59,6 +60,9 @@ function isLoginState(value: string): value is LoginStateLike {
     return (LOGIN_STATES as readonly string[]).includes(value);
 }
 
+/** 非 IPC 模式 QR 透出标记行前缀（cli forwardFiltered 解析后终端渲染）。 */
+const QR_LINE_PREFIX = "NAPUTO_QR ";
+
 /** 登录参数（NAPUTO_QUICK_UIN 强制指定 / ref 目标 / 默认）。 */
 function buildLoginOpts(
     Appid: string | number,
@@ -71,21 +75,32 @@ function buildLoginOpts(
         initTimeoutMs: 20000,
         ...(quickUin !== undefined ? { quickUin } : {}),
     };
-    if (env.NAPUTO_IPC === "1") {
-        // IPC 模式：QR 阶段经 kernel 回调转发登录状态/二维码（快速登录成功由返回值发）
-        opts["onLoginProgress"] = (progress: {
-            state: string;
-            qr?: { pngBase64: string; qrcodeUrl: string };
-            selfInfo?: { uin: string; uid: string; nick: string };
-        }) => {
-            if (progress.qr !== undefined) {
+    const ipcMode = env.NAPUTO_IPC === "1";
+    // 登录进度回调：QR 阶段透出二维码数据（cli 终端渲染 / koishi IPC 转发共用）。
+    //  - IPC 模式：走 JSON 行协议 sendQr/sendLogin（koishi 插件驱动，不变）
+    //  - cli 自建宿主模式：QR 数据以 NAPUTO_QR 标记行输出 stdout，由 cli
+    //    forwardFiltered 解析后用 qrcode 包渲染终端二维码（png 落盘由 kernel 完成）
+    opts["onLoginProgress"] = (progress: {
+        state: string;
+        qr?: { pngBase64: string; qrcodeUrl: string };
+        selfInfo?: { uin: string; uid: string; nick: string };
+    }) => {
+        if (progress.qr !== undefined) {
+            if (ipcMode) {
                 sendQr(progress.qr.pngBase64, progress.qr.qrcodeUrl);
+            } else {
+                process.stdout.write(
+                    `${QR_LINE_PREFIX}${JSON.stringify({
+                        pngBase64: progress.qr.pngBase64,
+                        qrcodeUrl: progress.qr.qrcodeUrl,
+                    })}\n`,
+                );
             }
-            if (isLoginState(progress.state)) {
-                sendLogin(progress.state, progress.selfInfo);
-            }
-        };
-    }
+        }
+        if (ipcMode && isLoginState(progress.state)) {
+            sendLogin(progress.state, progress.selfInfo);
+        }
+    };
     return opts;
 }
 

@@ -19,6 +19,7 @@ import {
     type QqInstallInfo,
     resolveQqInstall,
 } from "@napuketto/loader";
+import QRCode from "qrcode";
 import { logger } from "./logger.js";
 
 /** 单账号启动选项。 */
@@ -51,20 +52,53 @@ async function packageEntry(pkg: string): Promise<string> {
 const NATIVE_NOISE =
     /<MMKV|<MemoryFile_Win32|<MMKV_IO|loadSymbolFromShell|getNodeGetJsListApi|get symbol failed|loaded \[mmkv/i;
 
+/** QR 透出标记行前缀（loader bootstrap-core 非 IPC 模式输出，cli 解析终端渲染）。 */
+const QR_LINE_PREFIX = "NAPUTO_QR ";
+
 /**
  * 逐行转发子进程输出到父进程，过滤原生噪音。
  * readline 按 UTF-8 解码 pipe 字节流，再经 process.stdout（TTY 路径，
  * WriteConsoleW UTF-16）输出——顺带修复 pino 中文在 cmd.exe/管道 936 转码
  * 链路下的乱码（原生 printf 字节流无法从 JS 侧改编码，转 pipe 后统一解码）。
+ *
+ * NAPUTO_QR 标记行（loader bootstrap-core 输出，QR 登录二维码数据）不转发，
+ * 解析后用 qrcode 包渲染终端二维码；png 落盘与 URL 提示由 kernel 日志完成。
  */
 function forwardFiltered(input: NodeJS.ReadableStream, out: NodeJS.WritableStream): void {
     const lines = createInterface({ input });
     lines.on("line", (line) => {
+        if (line.startsWith(QR_LINE_PREFIX)) {
+            renderTerminalQr(line.slice(QR_LINE_PREFIX.length));
+            return;
+        }
         if (NATIVE_NOISE.test(line)) {
             return;
         }
         out.write(`${line}\n`);
     });
+}
+
+/**
+ * 渲染终端二维码（qrcode 包 terminal 模式，half-block 字符）。
+ * 解析失败/无 url 时静默丢弃——标记行是内部协议，坏行不影响登录。
+ */
+function renderTerminalQr(raw: string): void {
+    try {
+        const data = JSON.parse(raw) as { qrcodeUrl?: string };
+        const { qrcodeUrl } = data;
+        if (qrcodeUrl === undefined || qrcodeUrl === "") {
+            return;
+        }
+        void QRCode.toString(qrcodeUrl, { type: "terminal", small: true })
+            .then((str) => {
+                process.stdout.write(`${str}\n`);
+            })
+            .catch(() => {
+                // 渲染失败静默（不影响登录，kernel 日志的 URL/png 路径仍可用）
+            });
+    } catch {
+        // 坏行静默丢弃
+    }
 }
 
 /** 启动单个账号（自建宿主 + 常驻）。 */
