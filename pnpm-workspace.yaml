@@ -1,3 +1,8 @@
 packages:
   - "packages/*"
   - "apps/*"
+settings:
+  # pnpm 11 的 verify-deps-before-run 预检：每次命令前自动 reinstall，在 git
+  # submodule monorepo（koishi-plugin-adapter 子仓库）场景触发失败。关闭预检，
+  # 按需手动 pnpm install（开发工作流不受影响）。
+  verifyDepsBeforeRun: false
