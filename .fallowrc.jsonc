@@ -3,15 +3,16 @@
     // 目标：`pnpm dlx fallow` 输出只报真实问题，噪音清零。
     // 文件为 JSONC（带注释，符合项目风格）；fallow 自动发现本文件。
     "$schema": "https://raw.githubusercontent.com/fallow-rs/fallow/main/schema.json",
-
     // 手动入口：loader/src/host/ 是 tsdown 多入口（dist/host/self-host.cjs CJS bundle），
     // 不在 package.json exports 里，fallow 无法自动发现——声明后 host/ 目录不再报 unused。
-    "entry": ["packages/loader/src/host/self-host.ts"],
-
+    "entry": [
+        "packages/loader/src/host/self-host.ts"
+    ],
     // 完全排除：packages/loader/native/ 是私有 Git Submodule（Native Bypass 载具），
     // 仅分发编译后二进制，源脚本（verify/tools）不进主仓库分析范围。
-    "ignorePatterns": ["packages/loader/native/**"],
-
+    "ignorePatterns": [
+        "packages/loader/native/**"
+    ],
     // 未使用依赖豁免（用户拍板保留，勿删）：
     //  - @napuketto/network / @napuketto/adapter：cli 经 import.meta.resolve 动态解析（boot.ts），
     //    fallow 静态分析看不到
@@ -24,18 +25,31 @@
         "picocolors",
         "qrcode"
     ],
-
     // 框架反射使用的类成员（NAPI 按方法名反射调用，静态分析无引用）：
     //  - name / schema：ActionRegistry 按 action.name 索引、schema 校验（所有 Action 子类契约）
     //  - NodeI*Adapter 接口：engine/session init 的参数，NAPI 反射回调（wrapper-adapters.ts）
     "usedClassMembers": [
         "name",
         "schema",
-        { "implements": "NodeIGlobalAdapter", "members": ["*"] },
-        { "implements": "NodeIDependsAdapter", "members": ["*"] },
-        { "implements": "NodeIDispatcherAdapter", "members": ["*"] }
+        {
+            "implements": "NodeIGlobalAdapter",
+            "members": [
+                "*"
+            ]
+        },
+        {
+            "implements": "NodeIDependsAdapter",
+            "members": [
+                "*"
+            ]
+        },
+        {
+            "implements": "NodeIDispatcherAdapter",
+            "members": [
+                "*"
+            ]
+        }
     ],
-
     // 隐藏抽象骨架与公共 API 面的死代码 finding（保留文件本身，不排除分析）：
     //  - core/BaseAction.ts / BaseProtocolAdapter.ts：抽象骨架（handle/websocketHandle/start/stop/reload 等契约方法）
     //  - core/action-registry.ts：registry 公共方法（has/names）
