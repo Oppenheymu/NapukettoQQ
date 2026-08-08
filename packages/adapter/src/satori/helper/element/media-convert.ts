@@ -4,13 +4,12 @@
  * img / audio / video / file 四个媒体类型：src → 本地路径（internal: 路径 /
  * http 下载 / 本地原样），audio 额外 silk 转码（非 silk 失败原样返回）。
  *
- * deps 类型来自 element-convert.js——type-only 导入，verbatimModuleSyntax
- * 编译期擦除，运行时无循环依赖。
+ * deps 类型来自 deps.js（独立契约文件，避免与 element-convert 循环引用）。
  */
 import type { CanonicalElement } from "@napuketto/kernel";
 import { ensureSilk, resolveAsset } from "./asset.js";
+import type { SatoriToCanonicalDeps } from "./deps.js";
 import type { SatoriElement } from "./element.js";
-import type { SatoriToCanonicalDeps } from "./element-convert.js";
 
 /** 解析元素媒体 src（空 → null 忽略），返回本地路径。 */
 async function resolveMediaSrc(

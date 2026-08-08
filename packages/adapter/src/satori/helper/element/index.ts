@@ -7,9 +7,9 @@
  */
 export type { CanonicalToSatoriDeps } from "./canonical.js";
 export { canonicalToSatoriElements } from "./canonical.js";
+export type { SatoriToCanonicalDeps } from "./deps.js";
 export type { SatoriElement } from "./element.js";
 export { parseElements, renderElements } from "./element.js";
-export type { SatoriToCanonicalDeps } from "./element-convert.js";
 export {
     parseContentToCanonical,
     satoriToCanonicalElements,

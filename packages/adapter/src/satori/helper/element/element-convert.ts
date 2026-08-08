@@ -10,17 +10,12 @@
  * 本文件只做发方向元素映射。
  */
 import type { CanonicalElement } from "@napuketto/kernel";
+import type { SatoriToCanonicalDeps } from "./deps.js";
 import type { SatoriElement } from "./element.js";
 import { parseElements } from "./element.js";
 import { MEDIA_CONVERTERS } from "./media-convert.js";
 
-/** 发方向依赖（at uin 转换 + 资源下载目录）。 */
-export interface SatoriToCanonicalDeps {
-    /** uin → uid（at 目标转换）。 */
-    uinToUid: (uins: string[]) => Promise<Map<string, string>>;
-    /** 资源（img/audio/video/file）下载缓存目录。 */
-    cacheDir: string;
-}
+export type { SatoriToCanonicalDeps } from "./deps.js";
 
 /** 发方向：Satori 元素树 → kernel canonical（at uin→uid + 资源下载/转码）。 */
 export async function satoriToCanonicalElements(
