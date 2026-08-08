@@ -8,8 +8,25 @@
  *  - unwrapResult：result !== 0 → 按 errMsg 内容映射语义错误码（msg 系专用）
  */
 
-import { kernelError } from "../infra/errors.js";
+import { type KernelErrorCode, kernelError } from "../infra/errors.js";
 import type { GeneralCallResult } from "../types/services/msg-service.js";
+
+/** errMsg 关键词 → 错误码规则（顺序即优先级，命中任一组关键词即映射）。 */
+const RESULT_CODE_RULES: ReadonlyArray<{ code: KernelErrorCode; keywords: readonly string[] }> = [
+    { code: "NOT_LOGIN", keywords: ["未登录", "login"] },
+    { code: "PERMISSION_DENIED", keywords: ["无权限", "permission"] },
+    { code: "NOT_FOUND", keywords: ["不存在", "not found"] },
+];
+
+/** 按 errMsg 关键词映射错误码（未命中 → UNKNOWN）。 */
+function mapResultCode(msg: string): KernelErrorCode {
+    for (const rule of RESULT_CODE_RULES) {
+        if (rule.keywords.some((k) => msg.includes(k))) {
+            return rule.code;
+        }
+    }
+    return "UNKNOWN";
+}
 
 /** 原生 result 解包（result 字段非 0 抛 KernelError）。 */
 export function unwrap(label: string, result: number, errMsg?: string): void {
@@ -36,15 +53,9 @@ export function unwrapResult<T extends GeneralCallResult>(label: string, raw: T)
         return;
     }
     const msg = raw.errMsg || "无错误详情";
-    let code: "SEND_FAILED" | "NOT_FOUND" | "NOT_LOGIN" | "PERMISSION_DENIED" | "UNKNOWN" =
-        "UNKNOWN";
-    if (msg.includes("未登录") || msg.includes("login")) {
-        code = "NOT_LOGIN";
-    } else if (msg.includes("无权限") || msg.includes("permission")) {
-        code = "PERMISSION_DENIED";
-    } else if (msg.includes("不存在") || msg.includes("not found")) {
-        code = "NOT_FOUND";
-    } else if (label === "sendMsg") {
+    // 语义码优先（未登录/无权限/不存在），未命中且为 sendMsg 时兜底 SEND_FAILED
+    let code = mapResultCode(msg);
+    if (code === "UNKNOWN" && label === "sendMsg") {
         code = "SEND_FAILED";
     }
     throw kernelError(`${label} 失败: ${msg}`, code);

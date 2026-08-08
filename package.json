@@ -16,7 +16,8 @@
         "changeset": "changeset",
         "release": "pnpm changeset version && pnpm -r build && pnpm -r publish --access public",
         "release:dryrun": "pnpm changeset version && pnpm -r build && pnpm -r publish --access public --dry-run",
-        "test": "echo \"Error: no test specified\" && exit 1"
+        "test": "vitest run",
+        "test:watch": "vitest"
     },
     "keywords": [],
     "author": "睦 <oppenheymu@gmail.com>",

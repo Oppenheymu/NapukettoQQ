@@ -21,37 +21,62 @@ export function serialize(value: unknown, depth = 0): unknown {
     if (typeof value !== "object") return value;
     if (depth > MAX_SERIALIZE_DEPTH) return "[depth-limit]";
     try {
-        if (Array.isArray(value)) {
-            return value.slice(0, MAX_ARRAY_ITEMS).map((v) => serialize(v, depth + 1));
-        }
-        if (value instanceof Map) {
-            const out: Record<string, unknown> = {};
-            let i = 0;
-            for (const [k, v] of value) {
-                if (i >= MAX_OBJECT_KEYS) break;
-                out[String(k)] = serialize(v, depth + 1);
-                i += 1;
-            }
-            return { kind: "Map", size: value.size, entries: out };
-        }
-        if (value instanceof Set) {
-            return {
-                kind: "Set",
-                size: value.size,
-                values: [...value].slice(0, MAX_ARRAY_ITEMS).map((v) => serialize(v, depth + 1)),
-            };
-        }
-        if (typeof (value as Promise<unknown>).then === "function") {
-            return "[Promise]";
-        }
-        const out: Record<string, unknown> = {};
-        for (const key of Object.keys(value as object).slice(0, MAX_OBJECT_KEYS)) {
-            out[key] = serialize((value as Record<string, unknown>)[key], depth + 1);
-        }
-        return out;
+        return serializeContainer(value, depth);
     } catch {
         return "[unserializable]";
     }
+}
+
+/** 序列化容器对象（数组 / Map / Set / Promise / 普通对象）。 */
+function serializeContainer(value: object, depth: number): unknown {
+    if (Array.isArray(value)) {
+        return serializeArray(value, depth);
+    }
+    if (value instanceof Map) {
+        return serializeMap(value, depth);
+    }
+    if (value instanceof Set) {
+        return serializeSet(value, depth);
+    }
+    if (typeof (value as Promise<unknown>).then === "function") {
+        return "[Promise]";
+    }
+    return serializeObject(value, depth);
+}
+
+/** 数组序列化（条数截断）。 */
+function serializeArray(value: unknown[], depth: number): unknown[] {
+    return value.slice(0, MAX_ARRAY_ITEMS).map((v) => serialize(v, depth + 1));
+}
+
+/** Map 序列化（键转字符串，条目截断）。 */
+function serializeMap(value: Map<unknown, unknown>, depth: number): unknown {
+    const out: Record<string, unknown> = {};
+    let i = 0;
+    for (const [k, v] of value) {
+        if (i >= MAX_OBJECT_KEYS) break;
+        out[String(k)] = serialize(v, depth + 1);
+        i += 1;
+    }
+    return { kind: "Map", size: value.size, entries: out };
+}
+
+/** Set 序列化（值截断）。 */
+function serializeSet(value: Set<unknown>, depth: number): unknown {
+    return {
+        kind: "Set",
+        size: value.size,
+        values: [...value].slice(0, MAX_ARRAY_ITEMS).map((v) => serialize(v, depth + 1)),
+    };
+}
+
+/** 普通对象序列化（键截断）。 */
+function serializeObject(value: object, depth: number): unknown {
+    const out: Record<string, unknown> = {};
+    for (const key of Object.keys(value).slice(0, MAX_OBJECT_KEYS)) {
+        out[key] = serialize((value as Record<string, unknown>)[key], depth + 1);
+    }
+    return out;
 }
 
 /** 尝试解析一个 service getter 的返回值形状（深度受限）。 */
