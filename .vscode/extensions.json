@@ -1,9 +1,12 @@
 {
     "recommendations": [
-        "biomejs.biome",
-        "editorconfig.editorconfig",
-        "tamasfe.even-better-toml",
+        // 1. UI & Icons
         "pkief.material-icon-theme",
+        // 2. Editor Styles
+        "editorconfig.editorconfig",
+        "biomejs.biome",
+        // 3. Languages & Formats
+        "tamasfe.even-better-toml",
         "typescriptteam.native-preview"
     ]
 }
