@@ -16,11 +16,11 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import process from "node:process";
+import { getMainSession } from "../session-resolver.js";
+import type { WrapperContext } from "../wrapper-loader.js";
 import { serialize, shapeKeyGetters } from "./probe-serialize.js";
 import { probeEngineCalls, probeExportCtors, probeLoginService } from "./probe-services.js";
 import { listMethods, tryCall } from "./probe-utils.js";
-import { getMainSession } from "./session-resolver.js";
-import type { WrapperContext } from "./wrapper-loader.js";
 
 /** 枚举候选 sessionId（nt_0..nt_9 / gpro_0..gpro_9）找 QQ 已 init 的 session。 */
 function enumerateSessionIds(ctx: WrapperContext): Record<string, unknown> {

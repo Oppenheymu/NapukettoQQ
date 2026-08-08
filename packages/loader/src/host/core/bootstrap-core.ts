@@ -5,7 +5,9 @@
  * session 替换/激活 → 就绪等待 → 冒烟自检 → 协议装配 → 探测模式。
  */
 import { join } from "node:path";
-import { env } from "./env.js";
+import { env } from "../env.js";
+import type { CoreContextLike, CoreLike, KernelLike, LoginResultLike } from "../types.js";
+import { errMsg, log, type SharedState } from "../util.js";
 import { doLogin, type LoginTargetRef, pickLoginAccount } from "./login.js";
 import { startProtocols } from "./protocols.js";
 import {
@@ -18,8 +20,6 @@ import {
     type WrapperSessionStaticLike,
 } from "./session.js";
 import { runSmokeTest } from "./smoke.js";
-import type { CoreContextLike, CoreLike, KernelLike, LoginResultLike } from "./types.js";
-import { errMsg, log, type SharedState } from "./util.js";
 
 /** 引导环境（qqVersion / dataDir / wrapperPath，来自 env）。 */
 export interface BootstrapEnv {

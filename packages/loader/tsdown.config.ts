@@ -20,7 +20,7 @@ export default defineConfig([
     },
     {
         // 自建宿主引导运行时：CJS 单文件（launcher spawn 入口）
-        entry: { "host/self-host": "src/host/self-host.ts" },
+        entry: { "host/self-host": "src/host/core/self-host.ts" },
         format: ["cjs"],
         platform: "node",
         // 避免第二个构建清掉 index 产物（第一个配置已 clean）

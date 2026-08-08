@@ -7,11 +7,11 @@
  * 2026-08-08 FTA 优化：消息日志渲染 → msg-log.ts；TOML 配置段读取 → load-config.ts。
  */
 import { join } from "node:path";
-import { env } from "./env.js";
-import { loadProtocolSections } from "./load-config.js";
-import { setupMsgLogging } from "./msg-log.js";
-import type { CoreContextLike, KernelLike, LoginResultLike } from "./types.js";
-import { errMsg, log } from "./util.js";
+import { env } from "../env.js";
+import { loadProtocolSections } from "../load-config.js";
+import { setupMsgLogging } from "../msg-log.js";
+import type { CoreContextLike, KernelLike, LoginResultLike } from "../types.js";
+import { errMsg, log } from "../util.js";
 
 /** network 包最小面（@napuketto/network，动态 import）。 */
 interface NetworkModuleLike {

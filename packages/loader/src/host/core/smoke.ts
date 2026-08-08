@@ -15,9 +15,9 @@
  * adapter/network，单独验证 kernel 业务链路）。
  */
 
-import { env } from "./env.js";
-import type { CoreContextLike, KernelLike, LoginResultLike } from "./types.js";
-import { errMsg, forEachRawMessage, log } from "./util.js";
+import { env } from "../env.js";
+import type { CoreContextLike, KernelLike, LoginResultLike } from "../types.js";
+import { errMsg, forEachRawMessage, log } from "../util.js";
 
 /** 冒烟测试默认等待（毫秒）。 */
 const SMOKE_SETTLE_MS = 5000;

@@ -7,8 +7,8 @@
  * 由 bootstrap.ts import（纯函数，无状态）。
  */
 
-import type { CoreContextLike, KernelLike } from "./types.js";
-import { errMsg, log, type SharedState } from "./util.js";
+import type { CoreContextLike, KernelLike } from "../types.js";
+import { errMsg, log, type SharedState } from "../util.js";
 
 /** 候选 session 项。 */
 export interface SessionCandidate {

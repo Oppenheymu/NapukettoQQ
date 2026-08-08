@@ -6,8 +6,8 @@
  * 快速登录 → QR 回退（doLogin）。由 bootstrap.ts import。
  */
 
-import type { CoreContextLike, CoreLike, KernelLike, LoginResultLike } from "./types.js";
-import { errMsg, log } from "./util.js";
+import type { CoreContextLike, CoreLike, KernelLike, LoginResultLike } from "../types.js";
+import { errMsg, log } from "../util.js";
 
 /** 登录账号选择的目标引用（bootstrap.ts 构造 { targetUin: undefined }）。 */
 export interface LoginTargetRef {

@@ -22,10 +22,14 @@
  *     → kernel 装配 → 登录（快速/QR）→ session（先 init 后 start）→ 冒烟 → 协议装配
  */
 
-import { acquireInstanceLock, checkInstanceLock, registerLockCleanup } from "../instance-lock.js";
+import {
+    acquireInstanceLock,
+    checkInstanceLock,
+    registerLockCleanup,
+} from "../../instance-lock.js";
+import { env } from "../env.js";
+import { createState, errMsg, log } from "../util.js";
 import { bootstrap } from "./bootstrap.js";
-import { env } from "./env.js";
-import { createState, errMsg, log } from "./util.js";
 
 const state = createState();
 

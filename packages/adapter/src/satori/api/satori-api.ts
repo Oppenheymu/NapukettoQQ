@@ -16,7 +16,7 @@ import type {
     ProfileApi,
 } from "@napuketto/kernel";
 import { ChatType, type Peer } from "@napuketto/kernel";
-import type { SatoriToCanonicalDeps } from "../helper/element-convert.js";
+import type { SatoriToCanonicalDeps } from "../helper/element/index.js";
 
 /** SatoriApi 构造参数。 */
 export interface SatoriApiOptions {

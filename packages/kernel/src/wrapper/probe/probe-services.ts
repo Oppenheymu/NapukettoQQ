@@ -6,9 +6,9 @@
  * - probeLoginService：LoginService 实例（QQ 已登录凭据入口）
  */
 
+import type { WrapperContext } from "../wrapper-loader.js";
 import { serialize, tryShape } from "./probe-serialize.js";
 import { listMethods, tryCall } from "./probe-utils.js";
-import type { WrapperContext } from "./wrapper-loader.js";
 
 /** 探测关键 export 构造器方法（get/create/getNTWrapperSession 等）。 */
 export function probeExportCtors(ctx: WrapperContext): Record<string, unknown> {

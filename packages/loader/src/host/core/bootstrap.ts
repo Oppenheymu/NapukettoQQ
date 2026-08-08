@@ -17,10 +17,10 @@
  *  取到后 core.setSession 替换 → waitSessionReady 确认 getMsgService READY。
  */
 import { dirname, join } from "node:path";
+import { env } from "../env.js";
+import type { CoreContextLike, KernelLike } from "../types.js";
+import { errMsg, log, type SharedState } from "../util.js";
 import { type BootstrapEnv, bootstrapWithCore } from "./bootstrap-core.js";
-import { env } from "./env.js";
-import type { CoreContextLike, KernelLike } from "./types.js";
-import { errMsg, log, type SharedState } from "./util.js";
 
 /** ⭐ appid 动态解析（2026-08-06 P2-0 实测：硬编码 537237765 在 9.9.33 扫码失败
  * 「请下载最新版」；major.node 解析的 537376818 成功）。自研，参考 NapCat 思路。 */

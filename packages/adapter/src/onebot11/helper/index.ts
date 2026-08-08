@@ -2,9 +2,7 @@
  * OneBot 11 helper：配置 schema（ADR-012）+ 翻译层（canonical ↔ OB11，ADR-008）
  */
 
-export type { OB11Config } from "./config.js";
-export { ob11ConfigSchema } from "./config.js";
-export type { CqCode } from "./cqcode.js";
+export type { CqCode } from "./codec/cqcode.js";
 export {
     encodeCqCode,
     escapeCqParam,
@@ -12,7 +10,10 @@ export {
     parseCqMessage,
     serializeCqParts,
     unescapeCqText,
-} from "./cqcode.js";
+} from "./codec/cqcode.js";
+export { segmentsToCqMessage } from "./codec/segment.js";
+export type { OB11Config } from "./config.js";
+export { ob11ConfigSchema } from "./config.js";
 export {
     applyReceiveContext,
     applySendContext,
@@ -33,5 +34,4 @@ export {
     type NoticeTranslateContext,
     toOb11NoticeEvent,
 } from "./notice.js";
-export { segmentsToCqMessage } from "./segment.js";
 export { toOb11GroupInfo, toOb11GroupMemberInfo } from "./translate.js";

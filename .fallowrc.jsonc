@@ -6,7 +6,7 @@
     // 手动入口：loader/src/host/ 是 tsdown 多入口（dist/host/self-host.cjs CJS bundle），
     // 不在 package.json exports 里，fallow 无法自动发现——声明后 host/ 目录不再报 unused。
     "entry": [
-        "packages/loader/src/host/self-host.ts"
+        "packages/loader/src/host/core/self-host.ts"
     ],
     // 完全排除：packages/loader/native/ 是私有 Git Submodule（Native Bypass 载具），
     // 仅分发编译后二进制，源脚本（verify/tools）不进主仓库分析范围。
@@ -55,6 +55,8 @@
     //  - core/action-registry.ts：registry 公共方法（has/names）
     //  - satori/action/base-action.ts：Satori 动作抽象骨架（run 为执行入口）
     //  - onebot11/event/index.ts、onebot11/helper/index.ts：协议公共 barrel（re-export 被外部消费）
+    //  - onebot11/helper/codec/index.ts、satori/helper/element/index.ts：DDD 拆分的子域 barrel
+    //    （re-export 被上级 helper/index.ts / satori/index.ts 消费，fallow 静态分析看不到跨 barrel 链）
     //  - satori/types/**、satori/helper/ids.ts：协议规范类型/常量（P5 开发中，公共协议面）
     "ignoreFindings": [
         "packages/adapter/src/core/BaseAction.ts",
@@ -63,6 +65,8 @@
         "packages/adapter/src/satori/action/base-action.ts",
         "packages/adapter/src/onebot11/event/index.ts",
         "packages/adapter/src/onebot11/helper/index.ts",
+        "packages/adapter/src/onebot11/helper/codec/index.ts",
+        "packages/adapter/src/satori/helper/element/index.ts",
         "packages/adapter/src/satori/types/**",
         "packages/adapter/src/satori/helper/ids.ts"
     ]

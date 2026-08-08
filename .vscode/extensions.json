@@ -2,6 +2,7 @@
     "recommendations": [
         "biomejs.biome",
         "editorconfig.editorconfig",
-        "tamasfe.even-better-toml"
+        "tamasfe.even-better-toml",
+        "pkief.material-icon-theme"
     ]
 }

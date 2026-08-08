@@ -13,13 +13,13 @@
 
 import type { CanonicalElement } from "@napuketto/kernel";
 import type { OB11MessageSegment } from "../types/index.js";
-import { parseCqMessage } from "./cqcode.js";
 import {
     canonicalToSegment,
     cqCodeToSegment,
+    parseCqMessage,
     segmentsToCqMessage,
     segmentToCanonical,
-} from "./segment.js";
+} from "./codec/index.js";
 
 /** canonical 元素数组 → OB11 segment 数组（无法表达的元素静默跳过）。 */
 export function canonicalToSegments(elements: CanonicalElement[]): OB11MessageSegment[] {

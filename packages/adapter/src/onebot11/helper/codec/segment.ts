@@ -5,7 +5,7 @@
  * - CQ_SEGMENT_BUILDERS / cqCodeToSegment：CQ 码 → segment（未知类型保留原文为文本段）
  */
 import type { CanonicalElement } from "@napuketto/kernel";
-import type { OB11MessageSegment } from "../types/index.js";
+import type { OB11MessageSegment } from "../../types/index.js";
 import { type CqCode, encodeCqCode, escapeCqText } from "./cqcode.js";
 
 /** OB11 媒体段 data（image/record/video 共用，url 可选）。 */
