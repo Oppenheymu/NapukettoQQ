@@ -1,0 +1,136 @@
+/**
+ * ipc-actions.ts：IPC 动作表（koishi 动作 → kernel API）。
+ *
+ * 协议契约：动作名点分域（`msg.sendMessage` 等），params 宽松透传。
+ * 本轮实现 koishi Bot 核心动作（发消息/撤回/历史/已读/列表/self）；
+ * 其余动作随 koishi 插件 actions.ts 轮次按需扩充。
+ *
+ * ⚠️ 不自研 kernel 依赖（loader 运行时 file:// 动态 import kernel，编译期不建
+ * workspace 依赖——见 types.ts 注释）。错误码提取用宽松结构判断。
+ */
+
+/** 宽松 Peer 最小面（kernel Peer：chatType + peerUid）。 */
+export interface IpcPeer {
+    chatType: number;
+    peerUid: string;
+}
+
+/** kernel apis 最小面（仅本表用到的成员；真实实例由引导装配提供）。 */
+export interface IpcApiContext {
+    msgApi: {
+        sendMessage(target: IpcPeer, elements: unknown[]): Promise<{ msgId: string }>;
+        recallMessage(target: IpcPeer, msgIds: string[]): Promise<void>;
+        fetchMessages(target: IpcPeer, opts: { count: number; msgId?: string }): Promise<unknown[]>;
+        markRead(target: IpcPeer): Promise<void>;
+    };
+    groupApi: {
+        getGroupList(force?: boolean): Promise<unknown[]>;
+    };
+    friendApi: {
+        getFriendList(): Promise<unknown[]>;
+    };
+    /** 登录账号自身信息。 */
+    self: { uin: string; nickname: string };
+    /** uin → uid 转换（Peer 目标解析；注入 groupApi.uinToUid）。 */
+    uinToUid?: (uins: string[]) => Promise<Map<string, string>>;
+}
+
+/** 动作处理函数：params 宽松透传，返回值原样序列化（JSON 可序列化）。 */
+export type IpcActionHandler = (params: Record<string, unknown>) => Promise<unknown>;
+
+/**
+ * 从宽松 params 构造 Peer（缺省 chatType=1 群聊）。
+ * 优先 peerUid（uid 直通）；缺省时 peerUin（QQ 号）经 uinToUid 转换。
+ */
+async function toPeer(
+    params: Record<string, unknown>,
+    uinToUid: IpcApiContext["uinToUid"],
+): Promise<IpcPeer> {
+    const chatType = typeof params["chatType"] === "number" ? params["chatType"] : 1;
+    const uidParam = params["peerUid"];
+    if (typeof uidParam === "string" && uidParam !== "") {
+        return { chatType, peerUid: uidParam };
+    }
+    const uinParam = params["peerUin"];
+    if (typeof uinParam === "string" && uinParam !== "" && uinToUid !== undefined) {
+        const map = await uinToUid([uinParam]);
+        const uid = map.get(uinParam);
+        if (uid !== undefined && uid !== "") {
+            return { chatType, peerUid: uid };
+        }
+        throw new Error(`uin 转 uid 失败: ${uinParam}`);
+    }
+    throw new Error("缺 peerUid（或 peerUin 且未注入 uinToUid）");
+}
+
+/** 构造动作表（map 顺序即注册顺序，重复动作名后注册覆盖）。 */
+export function createIpcActions(ctx: IpcApiContext): Map<string, IpcActionHandler> {
+    const actions = new Map<string, IpcActionHandler>();
+
+    actions.set("login.getSelf", async () => ctx.self);
+
+    actions.set("msg.sendMessage", async (params) => {
+        const peer = await toPeer(params, ctx.uinToUid);
+        const elements = Array.isArray(params["elements"]) ? params["elements"] : [];
+        return ctx.msgApi.sendMessage(peer, elements);
+    });
+
+    actions.set("msg.recallMessage", async (params) => {
+        const peer = await toPeer(params, ctx.uinToUid);
+        const msgIds = Array.isArray(params["msgIds"]) ? params["msgIds"].map(String) : [];
+        await ctx.msgApi.recallMessage(peer, msgIds);
+    });
+
+    actions.set("msg.fetchMessages", async (params) => {
+        const peer = await toPeer(params, ctx.uinToUid);
+        const count = typeof params["count"] === "number" ? params["count"] : 20;
+        const msgId = typeof params["msgId"] === "string" ? params["msgId"] : undefined;
+        return ctx.msgApi.fetchMessages(peer, { count, ...(msgId !== undefined ? { msgId } : {}) });
+    });
+
+    actions.set("msg.markRead", async (params) => {
+        const peer = await toPeer(params, ctx.uinToUid);
+        await ctx.msgApi.markRead(peer);
+    });
+
+    actions.set("group.getGroupList", async (params) => {
+        const force = params["force"] === true;
+        return ctx.groupApi.getGroupList(force);
+    });
+
+    actions.set("friend.getFriendList", async () => ctx.friendApi.getFriendList());
+
+    return actions;
+}
+
+/** 统一动作调用：查找动作表 → 执行 → 返回结果或错误（不抛，调用方转 result）。 */
+export async function callIpcAction(
+    actions: Map<string, IpcActionHandler>,
+    action: string,
+    params: Record<string, unknown> | undefined,
+): Promise<
+    { ok: true; value?: unknown } | { ok: false; error: { code: string; message: string } }
+> {
+    const handler = actions.get(action);
+    if (handler === undefined) {
+        return { ok: false, error: { code: "NOT_FOUND", message: `未知动作: ${action}` } };
+    }
+    try {
+        const value = await handler(params ?? {});
+        return { ok: true, value };
+    } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        return { ok: false, error: { code: errorCodeOf(err), message } };
+    }
+}
+
+/** 宽松提取错误码（KernelError 有 string code 字段；其他错误 UNKNOWN）。 */
+function errorCodeOf(err: unknown): string {
+    if (typeof err === "object" && err !== null) {
+        const code = (err as { code?: unknown }).code;
+        if (typeof code === "string" && code !== "") {
+            return code;
+        }
+    }
+    return "UNKNOWN";
+}

@@ -9,6 +9,8 @@
 /** 消息事件通道（NTEventChannel 的最小面）。 */
 export interface EventChannelLike {
     on(event: string, handler: (payload: unknown) => void): unknown;
+    /** 全事件订阅（IPC 子进程模式整通道转发用；kernel 2026-08-08 新增）。 */
+    onAny?(handler: (event: string, ...args: unknown[]) => void): unknown;
 }
 
 /** 事件桥（MsgBridge 最小面）。 */

@@ -35,6 +35,8 @@ export interface LaunchOptions {
     stubDir?: string;
     /** 强制指定快速登录账号（注入 NAPUTO_QUICK_UIN；cli `-q <uin>` 透传，2026-08-07）。 */
     quickUin?: string;
+    /** IPC 子进程模式（=1：stdout 走 JSON 行协议 + stdin 收 action/control，koishi 插件驱动）。 */
+    ipc?: boolean;
     /** 自建宿主入口（默认 dist/host/self-host.cjs）。 */
     selfHostEntry?: string;
     /**
@@ -151,6 +153,9 @@ function buildLaunchEnv(options: LaunchOptions): Record<string, string> {
     if (options.quickUin !== undefined) {
         env[ENV.QUICK_UIN] = options.quickUin;
     }
+    if (options.ipc === true) {
+        env[ENV.IPC] = "1";
+    }
     return env;
 }
 
@@ -173,4 +178,6 @@ export const ENV = {
     CONFIG_PATH: "NAPKETTO_CONFIG",
     /** 强制指定快速登录账号（cli `-q <uin>` 透传，bootstrap 登录用）。 */
     QUICK_UIN: "NAPUTO_QUICK_UIN",
+    /** IPC 子进程模式（koishi 插件驱动：stdout JSON 行 + stdin action/control）。 */
+    IPC: "NAPUTO_IPC",
 } as const;

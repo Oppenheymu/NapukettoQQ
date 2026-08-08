@@ -28,10 +28,18 @@ import {
     registerLockCleanup,
 } from "../../instance-lock.js";
 import { env } from "../env.js";
+import { enableIpc, sendStatus } from "../ipc/index.js";
 import { createState, errMsg, log } from "../util.js";
 import { bootstrap } from "./bootstrap.js";
 
 const state = createState();
+
+// IPC 子进程模式（NAPUTO_IPC=1，koishi 插件驱动）：stdout 专用于 JSON 行协议
+const ipcMode = env.NAPUTO_IPC === "1";
+if (ipcMode) {
+    enableIpc();
+    sendStatus("booting");
+}
 
 log(
     `[self-host] 启动 @ ${new Date().toISOString()} pid=${process.pid} node=${process.version} type=${(process as { type?: string }).type ?? "(标准 node)"}`,
@@ -50,6 +58,12 @@ if (lockDataDir) {
             `[self-host] ❌ 数据目录已被其他实例占用（pid=${holderPid ?? "?"}），退出；` +
                 "同一账号数据目录仅允许一个实例，请先停止已有实例",
         );
+        if (ipcMode) {
+            sendStatus("failed", "数据目录被占用", {
+                code: "INVALID_STATE",
+                message: `数据目录已被其他实例占用（pid=${holderPid ?? "?"}）`,
+            });
+        }
         process.exit(1);
     }
     registerLockCleanup(lockDataDir);
@@ -61,11 +75,20 @@ if (lockDataDir) {
 const wrapperPath = env.NAPUTO_WRAPPER_PATH;
 if (!wrapperPath) {
     log("[self-host] NAPUTO_WRAPPER_PATH 未设置，退出");
+    if (ipcMode) {
+        sendStatus("failed", "NAPUTO_WRAPPER_PATH 未设置", {
+            code: "INVALID_STATE",
+            message: "NAPUTO_WRAPPER_PATH 未设置，退出",
+        });
+    }
     process.exit(1);
 }
 
 // 1. dlopen wrapper.node（stub QQNT.dll 转发 napi_*/uv_* → node.exe，标准 node 可注册）
 log(`[self-host] dlopen wrapper.node: ${wrapperPath}`);
+if (ipcMode) {
+    sendStatus("dlopening");
+}
 try {
     // { exports: {} } 是 process.dlopen 的最小载体（wrapper 向其中填充 NAPI exports）
     const m: { exports: Record<string, unknown> } = { exports: {} };
@@ -74,11 +97,20 @@ try {
     log(`[self-host] ✅ dlopen 成功，exports ${keys.length} 个`);
     if (!keys.includes("NodeIKernelLoginService")) {
         log("[self-host] ❌ exports 无 NodeIKernelLoginService（stub 环境异常？）");
+        if (ipcMode) {
+            sendStatus("failed", "exports 无 NodeIKernelLoginService", {
+                code: "INVALID_STATE",
+                message: "exports 无 NodeIKernelLoginService（stub 环境异常？）",
+            });
+        }
         process.exit(1);
     }
     state.wrapperExports = m.exports;
 } catch (e) {
     log(`[self-host] ❌ dlopen 失败: ${errMsg(e)}`);
+    if (ipcMode) {
+        sendStatus("failed", "dlopen 失败", { code: "UNKNOWN", message: errMsg(e) });
+    }
     process.exit(1);
 }
 
@@ -106,9 +138,15 @@ void (async () => {
     try {
         await bootstrap(state);
         log("[self-host] bootstrap 完成");
+        if (ipcMode) {
+            sendStatus("ready");
+        }
         // 常驻：协议服务在事件循环上；不 process.exit（业务运行中）
     } catch (e) {
         log(`[self-host] bootstrap 失败: ${errMsg(e)}`);
+        if (ipcMode) {
+            sendStatus("failed", "bootstrap 失败", { code: "UNKNOWN", message: errMsg(e) });
+        }
         process.exit(1);
     }
 })();

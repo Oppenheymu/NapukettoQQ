@@ -23,7 +23,14 @@ import {
     type PathOptions,
     PathWrapper,
 } from "./infra/index.js";
-import { type LoginResult, QrLoginSession, quickLogin } from "./login/index.js";
+import {
+    type LoginResult,
+    type LoginState,
+    type QrCodeData,
+    QrLoginSession,
+    quickLogin,
+    type SelfInfo,
+} from "./login/index.js";
 import type { NodeIQQNTWrapperSession, WrapperNodeApi } from "./types/index.js";
 import { resolveQqGlobalPath } from "./wrapper/qq-data-path.js";
 import { buildLoginConfig } from "./wrapper/wrapper-config.js";
@@ -46,6 +53,16 @@ export interface NapukettoCoreOptions {
     consoleLog?: boolean;
 }
 
+/** 登录进度（IPC 子进程模式经 onLoginProgress 转发；koishi 插件展示二维码/状态用）。 */
+export interface LoginProgress {
+    /** 登录状态（QR 状态机）。 */
+    state: LoginState;
+    /** 二维码数据（state=waiting_scan 时有）。 */
+    qr?: QrCodeData;
+    /** 登录成功 selfInfo（state=logged_in 时有）。 */
+    selfInfo?: SelfInfo;
+}
+
 /** login 参数。 */
 export interface CoreLoginOptions {
     /** appid（登录握手，兜底 537237765）。 */
@@ -58,6 +75,8 @@ export interface CoreLoginOptions {
     qrFallback?: boolean;
     /** QR 二维码图片保存路径（默认缓存目录 qrcode.png）。 */
     qrCodePath?: string;
+    /** 登录进度回调（QR 阶段：二维码数据 + 状态变化）。子进程 IPC 模式转发用。 */
+    onLoginProgress?: (progress: LoginProgress) => void;
 }
 
 /**
@@ -203,9 +222,11 @@ export class NapukettoCore {
             if (qr.pngBase64 !== "") {
                 writeQrCodePng(qrPath, qr.pngBase64);
             }
+            opts.onLoginProgress?.({ state: "waiting_scan", qr });
         });
         session.onStateChange((state) => {
             this.ctx.logger.info({ state }, "QR 登录状态");
+            opts.onLoginProgress?.({ state });
         });
 
         // 启动 QR 登录（注册监听 → connect → getQRCodePicture）

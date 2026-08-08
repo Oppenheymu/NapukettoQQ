@@ -34,7 +34,7 @@ export type { GroupCacheOptions } from "./cache/index.js";
 export { GroupCache } from "./cache/index.js";
 export type { CoreContext, CoreContextOptions } from "./context.js";
 export { createCoreContext } from "./context.js";
-export type { CoreLoginOptions, NapukettoCoreOptions } from "./core.js";
+export type { CoreLoginOptions, LoginProgress, NapukettoCoreOptions } from "./core.js";
 export { NapukettoCore } from "./core.js";
 export type { ListenerEvents } from "./event-channel.js";
 export { NTEventChannel } from "./event-channel.js";

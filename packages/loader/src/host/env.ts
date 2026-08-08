@@ -28,6 +28,8 @@ const env = {
     NAPUTO_QUICK_UIN: process.env["NAPUTO_QUICK_UIN"],
     /** 收发消息冒烟自检开关（=1 触发）。 */
     NAPUTO_SMOKE: process.env["NAPUTO_SMOKE"],
+    /** IPC 子进程模式（=1：koishi 插件驱动——stdout 走 JSON 行协议，stdin 收 action/control）。 */
+    NAPUTO_IPC: process.env["NAPUTO_IPC"],
     /** 冒烟目标 peer（c2c:<uin> / group:<uin>，缺省发给自己）。 */
     NAPUTO_SMOKE_PEER: process.env["NAPUTO_SMOKE_PEER"],
     /** 运行时探测开关（=1 触发 probeRuntime）。 */

@@ -69,6 +69,7 @@ export class NTEventChannel<L extends ListenerShape, Name extends string> {
 
     private readonly emitter = new EventEmitter();
     private readonly errorHandlers = new Set<(err: unknown) => void>();
+    private readonly anyHandlers = new Set<(event: string, ...args: unknown[]) => void>();
 
     constructor(serviceName: Name) {
         this.serviceName = serviceName;
@@ -128,7 +129,28 @@ export class NTEventChannel<L extends ListenerShape, Name extends string> {
      * listener 派发（Node 语义）——改为快照数组逐个 try/catch，保证「单个订阅者
      * 异常不打断派发」（协议翻译层异常不饿死缓存维护等其他订阅者）。
      */
+    /**
+     * 订阅所有事件（IPC 子进程模式整通道转发用：事件名 `"${service}/${method}"`
+     * 经 handler 首参透出，args 原样透传）。返回退订函数。
+     */
+    onAny(handler: (event: string, ...args: unknown[]) => void): () => void {
+        this.anyHandlers.add(handler);
+        return () => {
+            this.anyHandlers.delete(handler);
+        };
+    }
+
     emit<E extends EventName<L, Name>>(event: E, ...args: EventArgs<L, Name, E>): void {
+        // 全事件订阅（IPC 转发）：单个订阅者异常不打断派发，统一走 error 兜底
+        for (const anyHandler of this.anyHandlers) {
+            try {
+                anyHandler(event as string, ...args);
+            } catch (err) {
+                for (const errorHandler of this.errorHandlers) {
+                    errorHandler(err);
+                }
+            }
+        }
         const listeners = this.emitter.listeners(event as string);
         for (const listener of listeners) {
             try {

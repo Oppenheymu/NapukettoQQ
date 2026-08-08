@@ -6,6 +6,7 @@
  */
 import { join } from "node:path";
 import { env } from "../env.js";
+import { sendLogin, sendQr, sendStatus, startIpcMode } from "../ipc/index.js";
 import type { CoreContextLike, CoreLike, KernelLike, LoginResultLike } from "../types.js";
 import { errMsg, log, type SharedState } from "../util.js";
 import { doLogin, type LoginTargetRef, pickLoginAccount } from "./login.js";
@@ -49,6 +50,15 @@ function probeCreatedSession(state: SharedState, ctx: CoreContextLike): void {
     }
 }
 
+/** 登录状态字面量（IPC login 消息，与 kernel LoginState 对齐）。 */
+const LOGIN_STATES = ["idle", "waiting_scan", "scanned", "logged_in", "failed"] as const;
+type LoginStateLike = (typeof LOGIN_STATES)[number];
+
+/** 宽松收窄（kernel onLoginProgress.state 是 string）。 */
+function isLoginState(value: string): value is LoginStateLike {
+    return (LOGIN_STATES as readonly string[]).includes(value);
+}
+
 /** 登录参数（NAPUTO_QUICK_UIN 强制指定 / ref 目标 / 默认）。 */
 function buildLoginOpts(
     Appid: string | number,
@@ -56,11 +66,27 @@ function buildLoginOpts(
     ref: LoginTargetRef,
 ): Record<string, unknown> {
     const quickUin = forcedUin ?? ref.targetUin;
-    return {
+    const opts: Record<string, unknown> = {
         appid: Appid,
         initTimeoutMs: 20000,
         ...(quickUin !== undefined ? { quickUin } : {}),
     };
+    if (env.NAPUTO_IPC === "1") {
+        // IPC 模式：QR 阶段经 kernel 回调转发登录状态/二维码（快速登录成功由返回值发）
+        opts["onLoginProgress"] = (progress: {
+            state: string;
+            qr?: { pngBase64: string; qrcodeUrl: string };
+            selfInfo?: { uin: string; uid: string; nick: string };
+        }) => {
+            if (progress.qr !== undefined) {
+                sendQr(progress.qr.pngBase64, progress.qr.qrcodeUrl);
+            }
+            if (isLoginState(progress.state)) {
+                sendLogin(progress.state, progress.selfInfo);
+            }
+        };
+    }
+    return opts;
 }
 
 /** V2 登录后替换 session：优先 QQ 主 session，其次 vehicle 单例表；自建宿主例外。 */
@@ -238,14 +264,27 @@ export async function bootstrapWithCore(
     const forcedUin = env.NAPUTO_QUICK_UIN;
     const ref: LoginTargetRef = { targetUin: undefined };
     await pickLoginAccount(kernel, ctx, ref, forcedUin);
+    if (env.NAPUTO_IPC === "1") {
+        sendStatus("logging");
+    }
     const loginResult = await doLogin(core, buildLoginOpts(Appid, forcedUin, ref));
     if (loginResult === null) {
         log("bootstrap: 登录失败，引导中止");
+        if (env.NAPUTO_IPC === "1") {
+            sendStatus("failed", "登录失败", { code: "NOT_LOGIN", message: "登录失败" });
+        }
         return;
     }
     log(
         `bootstrap: 登录成功 uin=${loginResult.uin} uid=${loginResult.uid} nick=${loginResult.nick}`,
     );
+    if (env.NAPUTO_IPC === "1") {
+        sendLogin("logged_in", {
+            uin: loginResult.uin,
+            uid: loginResult.uid,
+            nick: loginResult.nick ?? "",
+        });
+    }
 
     // ⭐ V2 登录后替换 session：优先 QQ 主 session（渲染进程已 init），
     // 其次 vehicle 激活的单例表 session。替换 kernel 自建的无效 session。
@@ -254,11 +293,17 @@ export async function bootstrapWithCore(
     await activateSession(kernel, state, ctx, chosen, loginResult, Appid, bootEnv);
     // 等 session 就绪（getMsgService 非 null）——init 完成后才有
     await waitSessionReady(kernel, ctx);
+    if (env.NAPUTO_IPC === "1") {
+        sendStatus("sessioning");
+    }
     // P2-1 收发消息冒烟自检（NAPUTO_SMOKE=1）：MsgBridge + MsgApi 真发/收一条
     await runSmokeIfEnabled(kernel, ctx, loginResult);
 
-    // 协议装配（adapter + network，登录成功后）
-    await startProtocols(kernel, ctx, loginResult);
+    // 协议装配：IPC 模式返回 kernel 服务（bootstrap 装配 ipc-server），非 IPC 装配 OB11/Satori
+    const services = await startProtocols(kernel, ctx, loginResult);
+    if (env.NAPUTO_IPC === "1" && services !== null) {
+        startIpcMode(services);
+    }
     // 探测模式
     runProbePhase(kernel, ctx);
 }
