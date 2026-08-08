@@ -41,6 +41,14 @@ user-invocable: true
 3. **bump 类型（0.x 阶段）**：API 破坏 → minor，修复 → patch；依赖联动自动处理（kernel 升 → adapter / loader / cli 自动升 patch）。
 4. **不需要 changeset**：纯 chore——koishi 子模块指针、pnpm-lock 更新、删除脚本、文档、无行为变化的目录重命名。
 
+## 发包流程（用户要求发版时执行）
+
+1. **前置检查**：`.changeset/` 有 pending 条目（`Get-ChildItem .changeset -Filter *.md` 至少一个非 config）；工作区干净（`git status` 无改动，pnpm publish 有 git-checks）。
+2. **发版**：跑 `pnpm release`（= `changeset version && build && publish`），自动升版本 + 写各包 CHANGELOG + 按拓扑序发布；npm 凭据已配置（勿读取、勿打印 token）。
+3. **发布产物**：`changeset version` 会把版本号、CHANGELOG、依赖联动一次性改好——先 `git add -A` 提交这次版本变更（`chore(release): ...`），再发布；或按用户指示的顺序操作。
+4. **发不出包排查**：先看 `.changeset/` 是否有 pending 条目；再看 npm 登录态（`npm whoami`）；最后看报错输出。
+5. **汇报**：发版完成后说明各包新版本号与发布结果。
+
 ## git 提交流程（写完代码后必须执行）
 
 1. **验证**：先跑 `pnpm check`（必要时先 `pnpm fix`），确保全部通过再提交。
