@@ -1,6 +1,6 @@
-# @napuketto/adapter
+# @napuketto/kernel
 
-## 0.0.3
+## 0.0.2
 
 ### Patch Changes
 
@@ -36,14 +36,16 @@
 
   全部为行为等价重构（59 测试回归通过，无 API 变化）。
 
-- Updated dependencies [564e383]
-- Updated dependencies [b9f06ca]
-- Updated dependencies [8e64508]
-- Updated dependencies [9005c43]
-  - @napuketto/kernel@0.0.2
+- 9005c43: koishi 适配器 IPC 子进程模式前置（§7 loader 去脚本化，2026-08-08）：
 
-## 0.0.2
+  - **kernel**：`NTEventChannel` 新增 `onAny`（全事件订阅，IPC 整通道转发用）；
+    `CoreLoginOptions` 新增 `onLoginProgress` 回调（QR 阶段二维码/状态机转发）；
+    `LoginProgress` 类型导出
+  - **loader**：新增 `src/host/ipc/`（NAPUTO_IPC=1 开启）——协议类型/编解码/发送封装/
+    动作表（msg/group/friend 核心动作，peerUin 自动转 uid）/stdin 服务端（action/control/
+    心跳）；`self-host.ts` IPC 分支发 status（booting→dlopening→logging→sessioning→ready/
+    failed）；`protocols.ts` 重构拆出 `kernel-services.ts`（服务创建，IPC/协议共用）+
+    `assemble-protocols.ts`（OB11/Satori 装配，非 IPC 零回归）；`launcher.ts` 新增
+    `LaunchOptions.ipc`（注入 NAPUTO_IPC=1）
 
-### Patch Changes
-
-- 007e1ac: fallow 静态分析优化（克隆清零）：提取 `createWsServerSchema` 传输工厂（OB11/Satori 共用骨架，消除 config schema 克隆）；清理 4 处纯透传无用构造器（delete/set-essence-msg、satori guild.approve/member.approve）；loader smoke.ts 收敛重复文本提取逻辑为 `extractTexts` helper。
+  非 IPC 路径（cli pnpm start）行为零变化；`pnpm check` / 198 测试全绿。
