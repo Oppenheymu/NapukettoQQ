@@ -63,7 +63,12 @@ export class GuildListAction extends BaseSatoriAction<
     }
 
     protected async _handle(_payload: z.infer<typeof guildListSchema>): Promise<List<Guild>> {
-        const groups = await this.deps.groupApi.getGroupList(true);
+        // 实测校准（2026-08-08）：原生 getGroupList 返回值无数据，列表经
+        // onGroupListUpdate 事件推送 → GroupCache 维护；缓存为空时主动刷新回填。
+        const groups =
+            this.deps.groupCache === undefined
+                ? await this.deps.groupApi.getGroupList(true)
+                : await this.deps.groupCache.listGroupsRefreshed();
         const data: Guild[] = groups.map((g) => toGuild(g.groupCode, g.groupName));
         return { data };
     }

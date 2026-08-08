@@ -24,7 +24,12 @@ export interface IpcApiContext {
         markRead(target: IpcPeer): Promise<void>;
     };
     groupApi: {
+        /** 触发原生群列表刷新（数据经 onGroupListUpdate 事件推送，返回值无数据）。 */
         getGroupList(force?: boolean): Promise<unknown[]>;
+    };
+    /** 群缓存（事件维护群列表；listGroupsRefreshed 空缓存时主动刷新等待回填）。 */
+    groupCache: {
+        listGroupsRefreshed(): Promise<Array<{ groupCode: string; groupName: string }>>;
     };
     friendApi: {
         getFriendList(): Promise<unknown[]>;
@@ -93,9 +98,10 @@ export function createIpcActions(ctx: IpcApiContext): Map<string, IpcActionHandl
         await ctx.msgApi.markRead(peer);
     });
 
-    actions.set("group.getGroupList", async (params) => {
-        const force = params["force"] === true;
-        return ctx.groupApi.getGroupList(force);
+    actions.set("group.getGroupList", async () => {
+        // 群列表数据唯一来源：GroupCache（实测原生 getGroupList 返回值无数据，
+        // 列表经 onGroupListUpdate 事件推送；缓存为空时内部触发刷新等待回填）
+        return ctx.groupCache.listGroupsRefreshed();
     });
 
     actions.set("friend.getFriendList", async () => ctx.friendApi.getFriendList());

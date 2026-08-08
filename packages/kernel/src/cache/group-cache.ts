@@ -10,6 +10,7 @@
 
 import type { GroupApi } from "../apis/index.js";
 import type { GroupEventChannel } from "../bridge/index.js";
+import { waitFor } from "../login/wait.js";
 import type {
     Group,
     GroupDetailInfo,
@@ -131,6 +132,32 @@ export class GroupCache {
     /** 群列表是否已有缓存（同步判断）。 */
     hasGroup(groupCode: string): boolean {
         return this.groupList.has(groupCode) || this.groupDetails.has(groupCode);
+    }
+
+    /**
+     * 群列表快照（只读，缓存由 onGroupListUpdate 事件主动维护）。
+     * 群列表数据不走原生 getGroupList 返回值（实测仅 { result, errMsg }，
+     * 列表经事件推送）——协议/IPC 层消费列表一律经此方法。
+     */
+    listGroups(): Group[] {
+        return [...this.groupList.values()];
+    }
+
+    /**
+     * 群列表快照（缓存为空时主动触发原生刷新，等待事件回填后返回）。
+     *
+     * 实测（2026-08-08 端到端联调）：onGroupListUpdate 仅在登录后首轮同步
+     * 推送（MMKV 已有缓存后不再重复推送）——进程内缓存为空时列表读不到。
+     * 触发 getGroupList(true) 会重新拉取并推送事件回填缓存。
+     * 返回空数组 = 刷新后仍无数据（超时 5s）。
+     */
+    async listGroupsRefreshed(): Promise<Group[]> {
+        if (this.groupList.size > 0) {
+            return [...this.groupList.values()];
+        }
+        await this.groupApi.getGroupList(true);
+        await waitFor(() => this.groupList.size > 0, 5_000, 200);
+        return [...this.groupList.values()];
     }
 
     /**

@@ -14,7 +14,10 @@ function mockCtx(): IpcApiContext {
             markRead: vi.fn(async () => undefined),
         },
         groupApi: {
-            getGroupList: vi.fn(async () => [{ groupCode: "10001" }]),
+            getGroupList: vi.fn(async () => []),
+        },
+        groupCache: {
+            listGroupsRefreshed: vi.fn(async () => [{ groupCode: "10001", groupName: "测试群" }]),
         },
         friendApi: {
             getFriendList: vi.fn(async () => [{ uid: "u1" }]),
@@ -131,5 +134,16 @@ describe("createIpcActions", () => {
             { chatType: 1, peerUid: "u_12345" },
             { count: 20 },
         );
+    });
+
+    it("group.getGroupList 经 listGroupsRefreshed 取（空缓存自动刷新回填）", async () => {
+        const ctx = mockCtx();
+        const actions = createIpcActions(ctx);
+        const result = await callIpcAction(actions, "group.getGroupList", {});
+        expect(result).toEqual({
+            ok: true,
+            value: [{ groupCode: "10001", groupName: "测试群" }],
+        });
+        expect(ctx.groupCache.listGroupsRefreshed).toHaveBeenCalled();
     });
 });

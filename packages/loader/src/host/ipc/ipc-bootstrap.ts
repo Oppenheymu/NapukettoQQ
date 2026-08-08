@@ -37,6 +37,7 @@ export function startIpcMode(services: KernelServices): () => void {
     const actions = createIpcActions({
         msgApi: services.msgApi as IpcApiContext["msgApi"],
         groupApi: services.groupApi as IpcApiContext["groupApi"],
+        groupCache: services.groupCache as IpcApiContext["groupCache"],
         friendApi: services.friendApi as IpcApiContext["friendApi"],
         self: services.self,
         ...(groupApi.uinToUid !== undefined ? { uinToUid: groupApi.uinToUid } : {}),

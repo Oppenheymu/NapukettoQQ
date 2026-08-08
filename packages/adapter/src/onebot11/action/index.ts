@@ -207,7 +207,7 @@ function registerMsgActions(registry: ActionRegistry, deps: Ob11ActionDeps): voi
 function registerQueryActions(registry: ActionRegistry, deps: Ob11ActionDeps): void {
     registry.register(new GetLoginInfoAction(deps.api.self));
     registry.register(new GetGroupInfoAction(deps.api));
-    registry.register(new GetGroupListAction(deps.api.groupApi));
+    registry.register(new GetGroupListAction(deps.api));
     registry.register(new GetGroupMemberInfoAction(deps.api));
     registry.register(new GetGroupMemberListAction(deps.api));
     registry.register(new GetFriendListAction(deps.api.friendApi));

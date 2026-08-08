@@ -37,16 +37,18 @@ export class GroupApi {
         this.msgService = msgService;
     }
 
-    /** 群列表（force=true 强制刷新，默认缓存）。 */
+    /**
+     * 群列表（force=true 触发原生刷新）。
+     *
+     * ⚠️ 实测校准（2026-08-08 端到端联调）：原生 getGroupList 返回仅
+     * `{ result, errMsg }`——**列表数据经 onGroupListUpdate 事件推送**，
+     * 不走返回值。消费群列表一律从 `GroupCache.listGroups()` 读（缓存由
+     * 事件主动维护）；本方法仅作「触发刷新」用，返回值恒为 []。
+     */
     async getGroupList(force = false): Promise<Group[]> {
         const raw = await this.service.getGroupList(force);
         if (raw.result !== 0) {
             unwrap("getGroupList", raw.result, raw.errMsg);
-        }
-        // 返回形状待探测校准：优先兼容数组与 { groupList }
-        const list = (raw as unknown as { groupList?: Group[] }).groupList;
-        if (Array.isArray(list)) {
-            return list;
         }
         return [];
     }
