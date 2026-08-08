@@ -39,6 +39,6 @@
         "noEmit": true
     },
     "exclude": [
-        "apps/给你看的.ts"
+        "apps/koishi-plugin-adapter-napuketto"
     ]
 }

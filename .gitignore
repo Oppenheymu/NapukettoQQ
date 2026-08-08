@@ -5,6 +5,9 @@
 # local / temp
 external/
 
+# koishi 适配器 submodule（独立仓库，自带工具链；主仓库 biome/tsc 均跳过）
+apps/koishi-plugin-adapter-napuketto/
+
 # dependencies
 node_modules/
 
