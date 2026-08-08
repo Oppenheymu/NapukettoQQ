@@ -25,6 +25,22 @@ user-invocable: true
 - **提交文本一律使用简体中文**：所有回复、代码注释、提交说明、生成的文档均使用简体中文，不要输出英文内容。
 - 除以上两点外，不要过度解读本提示词——其余行为遵循默认 Agent 规则。
 
+## changeset 工作流（用户可见改动必须执行）
+
+1. **时机**：完成一批用户可见改动（feat / fix / refactor 涉及发布内容）后，**与代码一起提交 `.changeset/*.md`**，不要攒到发版前——攒必漏，漏写则 `changeset version` 无条目直接退出，版本与 CHANGELOG 不更新、无法发包。
+2. **写法**：`pnpm changeset` 交互式选择，或直接手写：
+
+   ```md
+   ---
+   "@napuketto/kernel": patch
+   ---
+
+   修复说明（简体中文）
+   ```
+
+3. **bump 类型（0.x 阶段）**：API 破坏 → minor，修复 → patch；依赖联动自动处理（kernel 升 → adapter / loader / cli 自动升 patch）。
+4. **不需要 changeset**：纯 chore——koishi 子模块指针、pnpm-lock 更新、删除脚本、文档、无行为变化的目录重命名。
+
 ## git 提交流程（写完代码后必须执行）
 
 1. **验证**：先跑 `pnpm check`（必要时先 `pnpm fix`），确保全部通过再提交。
