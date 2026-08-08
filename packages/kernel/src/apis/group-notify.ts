@@ -71,7 +71,7 @@ export class GroupNotifyApi {
 }
 
 /** 从 getSingleScreenNotifies 返回提取通知数组（兼容 result 数组 / notifies 字段）。 */
-function extractNotifyList(result: unknown): GroupNotify[] {
+export function extractNotifyList(result: unknown): GroupNotify[] {
     if (Array.isArray(result)) {
         return result as GroupNotify[];
     }
@@ -88,7 +88,7 @@ function extractNotifyList(result: unknown): GroupNotify[] {
 }
 
 /** 从 getGroupShutUpMemberList 返回提取成员数组（兼容 result 数组 / memberList 字段）。 */
-function extractMemberList(result: unknown): GroupMember[] {
+export function extractMemberList(result: unknown): GroupMember[] {
     if (Array.isArray(result)) {
         return result as unknown as GroupMember[];
     }
