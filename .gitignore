@@ -25,6 +25,9 @@ napuketto.toml
 # tool caches
 .eslintcache
 
+# test coverage
+coverage/
+
 # OS / IDE
 .DS_Store
 .idea/

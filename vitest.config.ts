@@ -13,5 +13,12 @@ export default defineConfig({
     test: {
         include: ["packages/*/src/**/*.test.ts", "apps/*/src/**/*.test.ts"],
         environment: "node",
+        coverage: {
+            provider: "v8",
+            reporter: ["json", "text-summary"],
+            // fallow health --coverage 读 istanbul 格式 json（json 报告默认即此格式）
+            // 只统计生产代码（排除测试文件自身）
+            exclude: ["**/*.test.ts", "**/*.test-d.ts"],
+        },
     },
 });
