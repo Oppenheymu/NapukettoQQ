@@ -50,13 +50,6 @@ coverage/
 # QQ 运行产物（登录态数据库，勿提交）
 *.db
 
-# 2026-08-07 起改为 Git Submodule（Oppenheymu/NapukettoQQ-Native，private，路径 packages/loader/native），
-# 本目录由子仓库指针管理，clone 主仓库后需 git submodule update --init --recursive。
-# packages/loader/native/
-
-# 临时实验脚本
-scripts-tmp/
-
 # 归档区
 archive/
 
@@ -64,5 +57,8 @@ archive/
 AGENTS.md
 docs/
 
-# 内部设计文档（只服务开发，不对外同步；对外文档另行编写）
+# 设计文档
 **/docs/design.md
+
+# token
+.npmrc
