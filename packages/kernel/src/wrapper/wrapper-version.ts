@@ -12,7 +12,7 @@
 
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { kernelError } from "../infra/errors.js";
+import { kernelError } from "../infra/index.js";
 
 /** 从 versions 目录读取版本 package.json（拿 name/version/buildVersion）。 */
 function readVersionPackage(

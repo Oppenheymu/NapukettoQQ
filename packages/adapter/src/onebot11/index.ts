@@ -3,14 +3,12 @@
  * 公共面：类型 + 动作注册表 + 配置 schema + 翻译层（adapter.ts 于 P2 打通 kernel 事件后接入）。
  */
 
-export { ob11ErrorCodeMap } from "./action/error-map.js";
-export type { AtAllRemainInfo } from "./action/group/get-group-at-all-remain.js";
-export type { Ob11ActionDeps } from "./action/index.js";
-export { createOb11ActionRegistry } from "./action/index.js";
+export type { AtAllRemainInfo, Ob11ActionDeps } from "./action/index.js";
+export { createOb11ActionRegistry, ob11ErrorCodeMap } from "./action/index.js";
 export type { OneBot11AdapterOptions } from "./adapter.js";
 export { NapukettoOneBot11Adapter } from "./adapter.js";
-export type { OneBotApiOptions, OneBotSystemOptions } from "./api/one-bot-api.js";
-export { OneBotApi } from "./api/one-bot-api.js";
+export type { OneBotApiOptions, OneBotSystemOptions } from "./api/index.js";
+export { OneBotApi } from "./api/index.js";
 export type {
     OB11BaseEvent,
     OB11Event,

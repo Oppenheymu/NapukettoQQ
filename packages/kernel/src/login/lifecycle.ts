@@ -20,8 +20,8 @@
  *  - 本文件只保留 session 流程编排：就绪等待（waitSessionReady）+ session 初始化（initAndStartSession）。
  */
 
-import { kernelError } from "../infra/errors.js";
-import type { NodeIKernelSessionListener, WrapperSessionInitConfig } from "../types/wrapper.js";
+import { kernelError } from "../infra/index.js";
+import type { NodeIKernelSessionListener, WrapperSessionInitConfig } from "../types/index.js";
 import { DependsAdapter, DispatcherAdapter } from "../wrapper/wrapper-adapters.js";
 import type { WrapperContext } from "../wrapper/wrapper-loader.js";
 import { waitFor } from "./wait.js";

@@ -20,7 +20,7 @@ import {
     WsClient,
     WsServer,
 } from "@napuketto/network";
-import type { OB11Config } from "./helper/config.js";
+import type { OB11Config } from "./helper/index.js";
 
 /** Authorization 头前缀。 */
 const BEARER_PREFIX = "Bearer ";

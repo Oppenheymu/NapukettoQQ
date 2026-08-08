@@ -2,9 +2,8 @@
  * Satori 用户动作：user.get / user.channel.create
  */
 import { z } from "zod";
-import type { SatoriApi } from "../api/satori-api.js";
-import { toUser } from "../helper/ids.js";
-import { toChannelById } from "../helper/translate.js";
+import type { SatoriApi } from "../api/index.js";
+import { toChannelById, toUser } from "../helper/index.js";
 import type { Channel, User } from "../types/index.js";
 import { BaseSatoriAction } from "./base-action.js";
 

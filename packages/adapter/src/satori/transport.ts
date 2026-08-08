@@ -19,8 +19,7 @@ import type {
 import { HttpServer, WsServer } from "@napuketto/network";
 import { SatoriActionError } from "./action/base-action.js";
 import type { SatoriActionRegistry } from "./action/registry.js";
-import type { SatoriConfig } from "./helper/config.js";
-import { HTTP_STATUS } from "./helper/error.js";
+import { HTTP_STATUS, type SatoriConfig } from "./helper/index.js";
 import { type Event, type IdentifyBody, type Login, Opcode } from "./types/index.js";
 
 /** WS 事件服务路径（规范固定）。 */

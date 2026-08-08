@@ -13,8 +13,8 @@ import type { EventBroadcaster } from "@napuketto/network";
 import { BaseProtocolAdapter, type ProtocolConfig } from "../core/index.js";
 import { forEachRawMessage } from "../core/raw-message.js";
 import { createSatoriActionRegistry } from "./action/index.js";
-import type { SatoriApiOptions } from "./api/satori-api.js";
-import { SatoriApi } from "./api/satori-api.js";
+import type { SatoriApiOptions } from "./api/index.js";
+import { SatoriApi } from "./api/index.js";
 import {
     collectSatoriGrayTipUids,
     hasSatoriGrayTip,
@@ -22,9 +22,8 @@ import {
     toSatoriGrayTipEvent,
     toSatoriMessageEvent,
 } from "./event/index.js";
-import type { SatoriConfig } from "./helper/config.js";
-import { satoriConfigSchema } from "./helper/config.js";
-import { toLogin, toMinimalLogin } from "./helper/ids.js";
+import type { SatoriConfig } from "./helper/index.js";
+import { satoriConfigSchema, toLogin, toMinimalLogin } from "./helper/index.js";
 import type { SatoriTransportSet } from "./transport.js";
 import { assembleSatoriTransports, toEventSignal } from "./transport.js";
 import type { Event, Login } from "./types/index.js";

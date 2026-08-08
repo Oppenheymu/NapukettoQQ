@@ -6,12 +6,12 @@
  *   （fetch 会吞掉 Set-Cookie 头，故用 node:https 手动请求）
  */
 import { get as httpsGet } from "node:https";
-import { kernelError } from "../infra/errors.js";
+import { kernelError } from "../infra/index.js";
 import type {
     ForceFetchClientKeyRetType,
     NodeIKernelTicketService,
-} from "../types/services/ticket-service.js";
-import type { NodeIQQNTWrapperSession } from "../types/wrapper.js";
+    NodeIQQNTWrapperSession,
+} from "../types/index.js";
 
 /** 跳转请求超时（毫秒）。 */
 const JUMP_TIMEOUT_MS = 10_000;

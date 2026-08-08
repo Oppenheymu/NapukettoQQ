@@ -6,7 +6,7 @@
  * - quickLogin：历史账号快速登录（网络异常 1006511 等就绪后重试）
  */
 
-import { kernelError } from "../infra/errors.js";
+import { kernelError } from "../infra/index.js";
 import { createLoginListener } from "../wrapper/wrapper-adapters.js";
 import type { WrapperContext } from "../wrapper/wrapper-loader.js";
 import { sleep, waitFor } from "./wait.js";

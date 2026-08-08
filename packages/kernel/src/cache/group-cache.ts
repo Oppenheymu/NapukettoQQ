@@ -8,11 +8,16 @@
  * 无全局单例（ADR-015 推论）——每进程每 session 实例化一份，由装配层持有。
  */
 
-import type { GroupApi } from "../apis/group.js";
-import type { GroupEventChannel } from "../bridge/group-bridge.js";
-import type { GroupMemberDataSource, GroupMemberListChange } from "../types/listeners/group.js";
-import { GroupListUpdateType } from "../types/listeners/group.js";
-import type { Group, GroupDetailInfo, GroupMember } from "../types/services/group-service.js";
+import type { GroupApi } from "../apis/index.js";
+import type { GroupEventChannel } from "../bridge/index.js";
+import type {
+    Group,
+    GroupDetailInfo,
+    GroupMember,
+    GroupMemberDataSource,
+    GroupMemberListChange,
+} from "../types/index.js";
+import { GroupListUpdateType } from "../types/index.js";
 
 /** GroupCache 构造参数。 */
 export interface GroupCacheOptions {

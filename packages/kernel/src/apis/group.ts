@@ -5,18 +5,17 @@
  * 方法面（P2-4 + P2-10）：群列表 / 群详情 / 成员列表 / 成员详情 / uin↔uid +
  * 群管操作（踢人 / 禁言 / 管理员 / 名片 / 群名 / 退群 / 精华消息 / @all 剩余）。
  */
-import { kernelError } from "../infra/errors.js";
-import { ChatType } from "../types/entities.js";
-import type { NodeIKernelGroupService } from "../types/services/group-service.js";
-import {
-    type Group,
-    type GroupDetailInfo,
-    type GroupMember,
-    type KickMemberV2Req,
-    NTGroupMemberRole,
-} from "../types/services/group-service.js";
-import type { NodeIKernelMsgService } from "../types/services/msg-service.js";
-import type { NodeIQQNTWrapperSession } from "../types/wrapper.js";
+import { kernelError } from "../infra/index.js";
+import type {
+    Group,
+    GroupDetailInfo,
+    GroupMember,
+    KickMemberV2Req,
+    NodeIKernelGroupService,
+    NodeIKernelMsgService,
+    NodeIQQNTWrapperSession,
+} from "../types/index.js";
+import { ChatType, NTGroupMemberRole } from "../types/index.js";
 import { checkLooseResult, unwrap } from "./result.js";
 
 /** 群 API：从 session 拿 group service，包装成语义化方法。 */

@@ -6,12 +6,12 @@
  * - setHeader：set_qq_avatar
  * - getStrangerInfo：get_stranger_info（uin → uid → 详情扁平化）
  */
-import { kernelError } from "../infra/errors.js";
+import { kernelError } from "../infra/index.js";
 import type {
     NodeIKernelProfileService,
+    NodeIQQNTWrapperSession,
     UserDetailInfoByUin,
-} from "../types/services/profile-service.js";
-import type { NodeIQQNTWrapperSession } from "../types/wrapper.js";
+} from "../types/index.js";
 import { checkLooseResult } from "./result.js";
 
 /** 陌生人信息（get_stranger_info 返回）。 */

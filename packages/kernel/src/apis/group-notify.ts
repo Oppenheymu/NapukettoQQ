@@ -5,14 +5,14 @@
  * getSingleScreenNotifies / getGroupShutUpMemberList 的列表可能走 listener 回调，
  * 直接调用返回形状待探测校准：兼容 result 数组 / 字段 / 直接数组。
  */
-import { kernelError } from "../infra/errors.js";
+import { kernelError } from "../infra/index.js";
 import type {
     GroupMember,
     GroupNotify,
     NodeIKernelGroupService,
+    NodeIQQNTWrapperSession,
     NTGroupRequestOperateTypes,
-} from "../types/services/group-service.js";
-import type { NodeIQQNTWrapperSession } from "../types/wrapper.js";
+} from "../types/index.js";
 import { unwrap } from "./result.js";
 
 /** 群通知 API：从 session 拿 group service，包装成语义化方法。 */

@@ -2,9 +2,17 @@
  * OneBot 11 动作注册表（ADR-013 延伸）
  * 各协议维护自己的 ActionRegistry，由协议 adapter 挂到请求分发。
  * P2-16：deps 收敛为 { api: OneBotApi } 单聚合对象（基础设施第一项）。
+ *
+ * 同时是 action 域 barrel：re-export 全部动作类 + error-map + resolve-uid，
+ * 协议外部只从本入口消费动作面。
  */
 import { ActionRegistry } from "../../core/index.js";
-import type { OneBotApi } from "../api/one-bot-api.js";
+import type { OneBotApi } from "../api/index.js";
+
+export { ob11ErrorCodeMap } from "./error-map.js";
+export type { AtAllRemainInfo } from "./group/get-group-at-all-remain.js";
+export { resolveUid } from "./resolve-uid.js";
+
 import { DeleteFriendAction } from "./friend/delete-friend.js";
 import { GetDoubtFriendsAddRequestAction } from "./friend/get-doubt-friends-add-request.js";
 import { GetFriendListAction } from "./friend/get-friend-list.js";
@@ -241,3 +249,85 @@ function registerSystemActions(registry: ActionRegistry, deps: Ob11ActionDeps): 
     registry.register(new BotExitAction(deps.api));
     registry.register(new SetRestartAction(deps.api));
 }
+
+/** action 域公共面（barrel re-export，协议外部从本入口消费动作类）。 */
+export {
+    BotExitAction,
+    CanSendImageAction,
+    CanSendRecordAction,
+    CleanCacheAction,
+    CreateGroupFileFolderAction,
+    DeleteEssenceMsgAction,
+    DeleteFriendAction,
+    DeleteGroupFileAction,
+    DeleteGroupFolderAction,
+    DeleteMsgAction,
+    DownloadFileAction,
+    FetchPttTextAction,
+    ForwardFriendSingleMsgAction,
+    ForwardGroupSingleMsgAction,
+    GetClientkeyAction,
+    GetCookiesAction,
+    GetCredentialsAction,
+    GetCsrfTokenAction,
+    GetDoubtFriendsAddRequestAction,
+    GetEssenceMsgListAction,
+    GetForwardMsgAction,
+    GetFriendListAction,
+    GetFriendMsgHistoryAction,
+    GetFriendsWithCategoryAction,
+    GetGroupAddRequestAction,
+    GetGroupAtAllRemainAction,
+    GetGroupFileSystemInfoAction,
+    GetGroupFilesByFolderAction,
+    GetGroupHonorInfoAction,
+    GetGroupIgnoredNotifiesAction,
+    GetGroupInfoAction,
+    GetGroupListAction,
+    GetGroupMemberInfoAction,
+    GetGroupMemberListAction,
+    GetGroupMsgHistoryAction,
+    GetGroupRootFilesAction,
+    GetGroupShutListAction,
+    GetGroupSystemMsgAction,
+    GetImageAction,
+    GetLoginInfoAction,
+    GetRecordAction,
+    GetRobotUinRangeAction,
+    GetStatusAction,
+    GetStrangerInfoAction,
+    GetVersionInfoAction,
+    MarkGroupMsgAsReadAction,
+    MarkMsgAsReadAction,
+    MarkPrivateMsgAsReadAction,
+    MoveGroupFileAction,
+    RenameGroupFileAction,
+    SendGroupForwardMsgAction,
+    SendGroupMsgAction,
+    SendLikeAction,
+    SendMsgAction,
+    SendPrivateForwardMsgAction,
+    SendPrivateMsgAction,
+    SetDiyOnlineStatusAction,
+    SetDoubtFriendsAddRequestAction,
+    SetEssenceMsgAction,
+    SetFriendAddRequestAction,
+    SetFriendRemarkAction,
+    SetGroupAddRequestAction,
+    SetGroupAdminAction,
+    SetGroupBanAction,
+    SetGroupCardAction,
+    SetGroupKickAction,
+    SetGroupLeaveAction,
+    SetGroupNameAction,
+    SetGroupWholeBanAction,
+    SetInputStatusAction,
+    SetMsgEmojiLikeAction,
+    SetOnlineStatusAction,
+    SetQQAvatarAction,
+    SetQQProfileAction,
+    SetRestartAction,
+    SetSelfLongnickAction,
+    TransGroupFileAction,
+    TranslateEn2ZhAction,
+};

@@ -8,8 +8,8 @@
  *  - unwrapResult：result !== 0 → 按 errMsg 内容映射语义错误码（msg 系专用）
  */
 
-import { type KernelErrorCode, kernelError } from "../infra/errors.js";
-import type { GeneralCallResult } from "../types/services/msg-service.js";
+import { type KernelErrorCode, kernelError } from "../infra/index.js";
+import type { GeneralCallResult } from "../types/index.js";
 
 /** errMsg 关键词 → 错误码规则（顺序即优先级，命中任一组关键词即映射）。 */
 const RESULT_CODE_RULES: ReadonlyArray<{ code: KernelErrorCode; keywords: readonly string[] }> = [

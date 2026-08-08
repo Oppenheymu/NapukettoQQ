@@ -16,12 +16,15 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { type CoreContext, createCoreContext } from "./context.js";
-import { kernelError } from "./infra/errors.js";
-import { createLogger, type LogLevel } from "./infra/logger.js";
-import { type PathOptions, PathWrapper } from "./infra/paths.js";
-import { type LoginResult, quickLogin } from "./login/lifecycle.js";
-import { QrLoginSession } from "./login/login.js";
-import type { NodeIQQNTWrapperSession, WrapperNodeApi } from "./types/wrapper.js";
+import {
+    createLogger,
+    kernelError,
+    type LogLevel,
+    type PathOptions,
+    PathWrapper,
+} from "./infra/index.js";
+import { type LoginResult, QrLoginSession, quickLogin } from "./login/index.js";
+import type { NodeIQQNTWrapperSession, WrapperNodeApi } from "./types/index.js";
 import { resolveQqGlobalPath } from "./wrapper/qq-data-path.js";
 import { buildLoginConfig } from "./wrapper/wrapper-config.js";
 import {

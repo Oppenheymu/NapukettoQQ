@@ -3,9 +3,9 @@
  * （message.update：QQ 不支持编辑 → 501，见 registry）
  */
 import { z } from "zod";
-import type { SatoriApi } from "../api/satori-api.js";
+import type { SatoriApi } from "../api/index.js";
 import { parseContentToCanonical } from "../helper/element/index.js";
-import { toChannelById, toSatoriMessage } from "../helper/translate.js";
+import { toChannelById, toSatoriMessage } from "../helper/index.js";
 import type { BidiList, Message } from "../types/index.js";
 import { BaseSatoriAction } from "./base-action.js";
 

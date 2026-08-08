@@ -7,7 +7,7 @@
  */
 import { isKernelError } from "@napuketto/kernel";
 import type { ZodType } from "zod";
-import { satoriHttpStatusMap } from "../helper/error.js";
+import { satoriHttpStatusMap } from "../helper/index.js";
 
 /** 动作错误（带 HTTP 状态码；由 transport 层透传）。 */
 export class SatoriActionError extends Error {

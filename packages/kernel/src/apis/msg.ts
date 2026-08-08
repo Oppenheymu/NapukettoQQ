@@ -6,12 +6,15 @@
  *
  * 方法面（P2-1）：发送 / 撤回 / 拉历史 / 标记已读。group/friend 等后续 apis 同构。
  */
-import { kernelError } from "../infra/errors.js";
-import type { Peer, RawMessage } from "../types/entities.js";
-import type { CanonicalElement } from "../types/message-element.js";
-import { toSendElements } from "../types/message-element.js";
-import type { NodeIKernelMsgService } from "../types/services/msg-service.js";
-import type { NodeIQQNTWrapperSession } from "../types/wrapper.js";
+import { kernelError } from "../infra/index.js";
+import type {
+    CanonicalElement,
+    NodeIKernelMsgService,
+    NodeIQQNTWrapperSession,
+    Peer,
+    RawMessage,
+} from "../types/index.js";
+import { toSendElements } from "../types/index.js";
 import { unwrapResult } from "./result.js";
 
 /** 消息 API：从 session 拿 msg service，包装成语义化方法。 */

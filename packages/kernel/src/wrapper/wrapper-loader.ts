@@ -12,7 +12,7 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
 import process from "node:process";
-import { kernelError } from "../infra/errors.js";
+import { kernelError } from "../infra/index.js";
 import type {
     EnginInitDesktopConfig,
     NodeIKernelSessionListener,
@@ -21,8 +21,8 @@ import type {
     NodeIQQNTWrapperSession,
     WrapperNodeApi,
     WrapperSessionInitConfig,
-} from "../types/wrapper.js";
-import { PlatformType } from "../types/wrapper.js";
+} from "../types/index.js";
+import { PlatformType } from "../types/index.js";
 import { extractDataRoot, resolveQqGlobalPath } from "./qq-data-path.js";
 import {
     createSessionListener,

@@ -6,7 +6,7 @@
  * 零 NapCat 代码：接口契约（URL/参数/返回形状）是 qun.qq.com 外部系统的事实，
  * 自研描述。
  */
-import { kernelError } from "../infra/errors.js";
+import { kernelError } from "../infra/index.js";
 import { TicketApi } from "./ticket.js";
 
 /** 群空间域名（Cookie 归属）。 */

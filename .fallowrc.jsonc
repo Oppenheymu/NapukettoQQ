@@ -58,6 +58,11 @@
     //  - onebot11/helper/codec/index.ts、satori/helper/element/index.ts：DDD 拆分的子域 barrel
     //    （re-export 被上级 helper/index.ts / satori/index.ts 消费，fallow 静态分析看不到跨 barrel 链）
     //  - satori/types/**、satori/helper/ids.ts：协议规范类型/常量（P5 开发中，公共协议面）
+    //  - onebot11/action/index.ts：协议动作公共面（79 动作类 + error-map + resolve-uid re-export，
+    //    注册表与 barrel 双职责，外部经 onebot11/index.ts 只转发注册表部分，动作类为公共协议面）
+    //  - satori/helper/index.ts：协议 helper 公共 barrel（ids 常量/频道构造器域内消费，fallow 看不到跨 barrel 链）
+    //  - kernel types/apis/infra barrel（2026-08-08 规范化新增）：目录公共面 re-export
+    //    （探测产物实体类型 / service 类型 / 构造选项类型，包门面 kernel/index.ts 只转发被消费部分）
     "ignoreFindings": [
         "packages/adapter/src/core/BaseAction.ts",
         "packages/adapter/src/core/BaseProtocolAdapter.ts",
@@ -68,6 +73,13 @@
         "packages/adapter/src/onebot11/helper/codec/index.ts",
         "packages/adapter/src/satori/helper/element/index.ts",
         "packages/adapter/src/satori/types/**",
-        "packages/adapter/src/satori/helper/ids.ts"
+        "packages/adapter/src/satori/helper/ids.ts",
+        "packages/adapter/src/onebot11/action/index.ts",
+        "packages/adapter/src/satori/helper/index.ts",
+        "packages/kernel/src/types/index.ts",
+        "packages/kernel/src/types/services/index.ts",
+        "packages/kernel/src/types/listeners/index.ts",
+        "packages/kernel/src/infra/index.ts",
+        "packages/kernel/src/apis/index.ts"
     ]
 }

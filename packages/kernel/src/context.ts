@@ -8,8 +8,8 @@
  * - 只读消费：字段由装配层填充，消费方只读，不直接修改。
  */
 import type pino from "pino";
-import type { PathWrapper } from "./infra/paths.js";
-import type { LoginResult } from "./login/lifecycle.js";
+import type { PathWrapper } from "./infra/index.js";
+import type { LoginResult } from "./login/index.js";
 import type { WrapperContext } from "./wrapper/wrapper-loader.js";
 
 export interface CoreContextOptions {

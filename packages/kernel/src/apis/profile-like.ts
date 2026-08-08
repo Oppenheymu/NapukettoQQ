@@ -3,9 +3,8 @@
  *
  * sendLike：send_like（sourceId=71 赞来源，doLikeCount 次数）。
  */
-import { kernelError } from "../infra/errors.js";
-import type { NodeIKernelProfileLikeService } from "../types/services/profile-like-service.js";
-import type { NodeIQQNTWrapperSession } from "../types/wrapper.js";
+import { kernelError } from "../infra/index.js";
+import type { NodeIKernelProfileLikeService, NodeIQQNTWrapperSession } from "../types/index.js";
 
 /** 点赞 API：从 session 拿 profile like service，包装成语义化方法。 */
 export class ProfileLikeApi {

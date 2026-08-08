@@ -7,26 +7,29 @@
  * 后续模块（apis / cache / login）按 docs/design.md §9 依次接入。
  */
 
-export type { DoubtFriendRequestInfo, Friend, FriendCategory } from "./apis/friend.js";
-export { FriendApi } from "./apis/friend.js";
-export { GroupApi } from "./apis/group.js";
-export { GroupNotifyApi } from "./apis/group-notify.js";
-export { MsgApi } from "./apis/msg.js";
-export type { StrangerInfo } from "./apis/profile.js";
-export { ProfileApi } from "./apis/profile.js";
-export { ProfileLikeApi } from "./apis/profile-like.js";
-export { RichMediaApi } from "./apis/richmedia.js";
-export { TicketApi } from "./apis/ticket.js";
 export type {
+    DoubtFriendRequestInfo,
     EssenceMsgItem,
+    Friend,
+    FriendCategory,
     GroupHonorWebInfo,
     HonorListItem,
-} from "./apis/webapi.js";
-export { WebApi, WebHonorType } from "./apis/webapi.js";
-export type { GroupEventChannel } from "./bridge/group-bridge.js";
-export { GroupBridge } from "./bridge/group-bridge.js";
-export type { MsgEventChannel } from "./bridge/msg-bridge.js";
-export { MsgBridge } from "./bridge/msg-bridge.js";
+    StrangerInfo,
+} from "./apis/index.js";
+export {
+    FriendApi,
+    GroupApi,
+    GroupNotifyApi,
+    MsgApi,
+    ProfileApi,
+    ProfileLikeApi,
+    RichMediaApi,
+    TicketApi,
+    WebApi,
+    WebHonorType,
+} from "./apis/index.js";
+export type { GroupEventChannel, MsgEventChannel } from "./bridge/index.js";
+export { GroupBridge, MsgBridge } from "./bridge/index.js";
 export type { GroupCacheOptions } from "./cache/index.js";
 export { GroupCache } from "./cache/index.js";
 export type { CoreContext, CoreContextOptions } from "./context.js";
@@ -35,110 +38,113 @@ export type { CoreLoginOptions, NapukettoCoreOptions } from "./core.js";
 export { NapukettoCore } from "./core.js";
 export type { ListenerEvents } from "./event-channel.js";
 export { NTEventChannel } from "./event-channel.js";
-export type { ConfigFormat, ConfigOptions, ConfigSchema } from "./infra/config.js";
-export { ConfigBase, parseToml, stringifyToml } from "./infra/config.js";
-export type { KernelErrorCode } from "./infra/errors.js";
-export { isKernelError, KERNEL_ERROR_CODES, KernelError, kernelError } from "./infra/errors.js";
-export type { LoggerOptions, LogLevel } from "./infra/logger.js";
-export { createLogger } from "./infra/logger.js";
-export type { PathOptions } from "./infra/paths.js";
+export type {
+    ConfigFormat,
+    ConfigOptions,
+    ConfigSchema,
+    KernelErrorCode,
+    LoggerOptions,
+    LogLevel,
+    PathOptions,
+} from "./infra/index.js";
 export {
+    ConfigBase,
+    createLogger,
     DEFAULT_DATA_ROOT_NAME,
+    isKernelError,
+    KERNEL_ERROR_CODES,
+    KernelError,
+    kernelError,
     MAIN_CONFIG_FILE,
     PathWrapper,
+    parseToml,
     resolveConfigPath,
     resolveDataRoot,
-} from "./infra/paths.js";
-export type { LoginAccountInfo, LoginResult } from "./login/lifecycle.js";
+    stringifyToml,
+} from "./infra/index.js";
+export type {
+    LoginAccountInfo,
+    LoginListItem,
+    LoginResult,
+    LoginState,
+    QrCodeData,
+    SelfInfo,
+} from "./login/index.js";
 export {
     initAndStartSession,
     listLoginAccounts,
+    QrLoginSession,
     quickLogin,
     waitForNetworkConnection,
     waitSessionReady,
-} from "./login/lifecycle.js";
-export type { LoginListItem, LoginState, QrCodeData, SelfInfo } from "./login/login.js";
-export { QrLoginSession } from "./login/login.js";
-export type {
-    GrayTipElement,
-    GrayTipRevokeElement,
-    Peer,
-    RawElement,
-    RawMessage,
-    TipAioOpGrayTipElement,
-    TipGroupElement,
-} from "./types/entities.js";
-export { ChatType, GrayTipSubType, TipGroupElementType } from "./types/entities.js";
-export type {
-    GroupListener,
-    GroupMemberDataSource,
-    GroupMemberListChange,
-} from "./types/listeners/group.js";
-export { GroupListUpdateType } from "./types/listeners/group.js";
-export type { MsgListener } from "./types/listeners/msg.js";
-export type { CanonicalElement } from "./types/message-element.js";
-export { toCanonicalElements, toSendElements } from "./types/message-element.js";
+} from "./login/index.js";
 export type {
     BuddyCategory,
     BuddyReq,
-    DoubtBuddyReq,
-    NodeIKernelBuddyService,
-} from "./types/services/buddy-service.js";
-export type {
-    Group,
-    GroupDetailInfo,
-    GroupMember,
-    GroupNotify,
-    NodeIKernelGroupService,
-    ShutUpGroupMember,
-} from "./types/services/group-service.js";
-export {
-    GroupNotifyMsgStatus,
-    GroupNotifyMsgType,
-    NTGroupMemberRole,
-    NTGroupRequestOperateTypes,
-} from "./types/services/group-service.js";
-export type {
-    GeneralCallResult,
-    NodeIKernelMsgService,
-    SendMessageElement,
-} from "./types/services/msg-service.js";
-export { ElementType } from "./types/services/msg-service.js";
-export type { NodeIKernelProfileLikeService } from "./types/services/profile-like-service.js";
-export type {
-    NodeIKernelProfileService,
-    UserDetailInfoByUin,
-} from "./types/services/profile-service.js";
-export type {
-    GetFileListParam,
-    GroupFileItemInfo,
-    GroupFolderInfo,
-    GroupSpaceInfo,
-    NodeIKernelRichMediaService,
-} from "./types/services/richmedia-service.js";
-export type {
-    ForceFetchClientKeyRetType,
-    NodeIKernelTicketService,
-} from "./types/services/ticket-service.js";
-export type {
+    CanonicalElement,
     DesktopPathConfig,
     DeviceInfo,
+    DoubtBuddyReq,
     EnginInitDesktopConfig,
+    ForceFetchClientKeyRetType,
+    GeneralCallResult,
+    GetFileListParam,
+    GrayTipElement,
+    GrayTipRevokeElement,
+    Group,
+    GroupDetailInfo,
+    GroupFileItemInfo,
+    GroupFolderInfo,
+    GroupListener,
+    GroupMember,
+    GroupMemberDataSource,
+    GroupMemberListChange,
+    GroupNotify,
+    GroupSpaceInfo,
+    MsgListener,
     NodeIDependsAdapter,
     NodeIDispatcherAdapter,
     NodeIGlobalAdapter,
+    NodeIKernelBuddyService,
+    NodeIKernelGroupService,
     NodeIKernelLoginService,
+    NodeIKernelMsgService,
+    NodeIKernelProfileLikeService,
+    NodeIKernelProfileService,
+    NodeIKernelRichMediaService,
     NodeIKernelSessionListener,
+    NodeIKernelTicketService,
     NodeIQQNTStartupSessionWrapper,
     NodeIQQNTWrapperEngine,
     NodeIQQNTWrapperSession,
     NodeQQNTWrapperUtil,
+    Peer,
     PlatformType,
+    RawElement,
+    RawMessage,
     RDeliveryConfig,
+    SendMessageElement,
+    ShutUpGroupMember,
+    TipAioOpGrayTipElement,
+    TipGroupElement,
+    UserDetailInfoByUin,
     VendorType,
     WrapperNodeApi,
     WrapperSessionInitConfig,
-} from "./types/wrapper.js";
+} from "./types/index.js";
+export {
+    ChatType,
+    ElementType,
+    GrayTipSubType,
+    GroupListUpdateType,
+    GroupNotifyMsgStatus,
+    GroupNotifyMsgType,
+    NTGroupMemberRole,
+    NTGroupRequestOperateTypes,
+    TipGroupElementType,
+    toCanonicalElements,
+    toSendElements,
+} from "./types/index.js";
 export { probeRuntime } from "./wrapper/probe/index.js";
 export { resolveQqGlobalPath } from "./wrapper/qq-data-path.js";
 export { getExistingSession, getMainSession } from "./wrapper/session-resolver.js";

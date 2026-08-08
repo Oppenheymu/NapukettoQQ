@@ -6,7 +6,7 @@
  * 各协议（onebot11/satori）只写薄映射 canonical ↔ 协议格式。
  */
 
-import { kernelError } from "../infra/errors.js";
+import { kernelError } from "../infra/index.js";
 import type {
     FaceElement,
     FileElement,

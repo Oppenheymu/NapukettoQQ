@@ -21,7 +21,7 @@ import type {
     NodeIDispatcherAdapter,
     NodeIGlobalAdapter,
     NodeIKernelSessionListener,
-} from "../types/wrapper.js";
+} from "../types/index.js";
 
 /** NAPI 回调占位（方法存在即可被反射调用，无副作用）。 */
 const noop = (): void => undefined;

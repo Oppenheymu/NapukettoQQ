@@ -6,8 +6,8 @@
 import type { GroupMember, GroupNotify } from "@napuketto/kernel";
 import { NTGroupRequestOperateTypes } from "@napuketto/kernel";
 import { z } from "zod";
-import type { SatoriApi } from "../api/satori-api.js";
-import { toGuild, toUser } from "../helper/ids.js";
+import type { SatoriApi } from "../api/index.js";
+import { toGuild, toUser } from "../helper/index.js";
 import type { Guild, GuildMember, List } from "../types/index.js";
 import { BaseSatoriAction } from "./base-action.js";
 

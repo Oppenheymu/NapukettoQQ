@@ -3,8 +3,8 @@
  */
 import type { BuddyReq } from "@napuketto/kernel";
 import { z } from "zod";
-import type { SatoriApi } from "../api/satori-api.js";
-import { toUser } from "../helper/ids.js";
+import type { SatoriApi } from "../api/index.js";
+import { toUser } from "../helper/index.js";
 import type { Friend, List } from "../types/index.js";
 import { BaseSatoriAction } from "./base-action.js";
 

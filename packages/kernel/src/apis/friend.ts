@@ -6,14 +6,14 @@
  * （getBuddyReq / approvalFriendRequest / setBuddyRemark / delBuddy /
  * getDoubtBuddyReq / approvalDoubtBuddyReq）。
  */
-import { kernelError } from "../infra/errors.js";
+import { kernelError } from "../infra/index.js";
 import type {
     BuddyCategory,
     BuddyReq,
     DoubtBuddyReq,
     NodeIKernelBuddyService,
-} from "../types/services/buddy-service.js";
-import type { NodeIQQNTWrapperSession } from "../types/wrapper.js";
+    NodeIQQNTWrapperSession,
+} from "../types/index.js";
 import { checkLooseResult, unwrap } from "./result.js";
 
 /** 好友条目（uid + 昵称/备注，昵称由 buddy service 缓存补全）。 */
