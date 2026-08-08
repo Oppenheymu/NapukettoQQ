@@ -66,3 +66,7 @@ docs/
 
 # 内部设计文档（只服务开发，不对外同步；对外文档另行编写）
 **/docs/design.md
+
+# e2e 联调运行产物
+scripts/e2e/probe.log
+scripts/e2e/qr.png
