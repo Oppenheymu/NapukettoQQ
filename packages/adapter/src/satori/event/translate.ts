@@ -29,7 +29,7 @@ export interface SatoriEventContent {
 }
 
 /** 事件翻译依赖（selfUin + uidToUin）。 */
-export interface SatoriEventDeps extends SatoriTranslateDeps { }
+export interface SatoriEventDeps extends SatoriTranslateDeps {}
 
 /** 普通消息 → message-created 事件。 */
 export async function toSatoriMessageEvent(

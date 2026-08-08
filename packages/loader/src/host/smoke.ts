@@ -23,13 +23,13 @@ import { errMsg, forEachRawMessage, log } from "./util.js";
 const SMOKE_SETTLE_MS = 5000;
 
 /** 冒烟目标（c2c / group）。 */
-export interface SmokeTarget {
+interface SmokeTarget {
     kind: "c2c" | "group";
     uin: string;
 }
 
 /** 解析冒烟目标：NAPUTO_SMOKE_PEER（c2c:<uin> / group:<uin>），缺省发给自己。 */
-export function parseSmokeTarget(envPeer: string | undefined, selfUin: string): SmokeTarget {
+function parseSmokeTarget(envPeer: string | undefined, selfUin: string): SmokeTarget {
     if (!envPeer) {
         return { kind: "c2c", uin: selfUin };
     }
@@ -44,7 +44,7 @@ export function parseSmokeTarget(envPeer: string | undefined, selfUin: string): 
 }
 
 /** uin → uid（c2c 目标用；group 直接拿群号作 peerUid）。 */
-export async function resolvePeerUid(
+async function resolvePeerUid(
     kernel: KernelLike,
     ctx: CoreContextLike,
     target: SmokeTarget,

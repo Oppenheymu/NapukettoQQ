@@ -9,7 +9,7 @@ import { join } from "node:path";
 import { env } from "./env.js";
 
 /** boot 日志路径（NAPUTO_CFG_DIR 下，与 stub 验证日志同目录）。 */
-export const LOG_PATH = env.NAPUTO_CFG_DIR
+const LOG_PATH = env.NAPUTO_CFG_DIR
     ? join(env.NAPUTO_CFG_DIR, "napuketto-boot.log")
     : join(tmpdir(), "napuketto-boot.log");
 

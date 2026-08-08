@@ -25,7 +25,7 @@ export interface WrapperSessionStaticLike {
 
 /** 对象有效性判断：getMsgService() 调用不抛断言（cpp_impl 已激活）。
  * 与 isSessionUsable 的区别：这里允许返回 null（未 init 但对象有效）。 */
-export function isSessionObjectValid(s: unknown): boolean {
+function isSessionObjectValid(s: unknown): boolean {
     if (!s) return false;
     try {
         (s as { getMsgService(): unknown }).getMsgService();
