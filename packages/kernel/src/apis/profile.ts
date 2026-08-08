@@ -82,6 +82,33 @@ export class ProfileApi {
     }
 }
 
+/** 扁平化后的详情视图（双来源字段级回退的产物，仅含 StrangerInfo 需要的字段）。 */
+interface MergedDetail {
+    coreInfo?: { nick?: string; remark?: string } | undefined;
+    baseInfo?: { age?: number; qid?: string; sex?: number; longNick?: string } | undefined;
+    vasInfo?: { svipFlag?: boolean; yearVipFlag?: boolean; vipLevel?: number } | undefined;
+    commonExt?: { qqLevel?: number; regTime?: number } | undefined;
+    status?: number | undefined;
+}
+
+/** 宽松取值：undefined 时给默认值（null 也归默认）。 */
+function orDefault<T>(value: T | undefined, fallback: T): T {
+    return value ?? fallback;
+}
+
+/** 合并两份详情：优先 info（uid 完整详情），字段缺失回退 byUin（uin 初查详情）。 */
+function mergeDetail(info: UserDetailInfoByUin, byUin: UserDetailInfoByUin): MergedDetail {
+    const infoSimple = info.detail?.simpleInfo;
+    const byUinSimple = byUin.detail?.simpleInfo;
+    return {
+        coreInfo: infoSimple?.coreInfo ?? byUinSimple?.coreInfo,
+        baseInfo: infoSimple?.baseInfo ?? byUinSimple?.baseInfo,
+        vasInfo: infoSimple?.vasInfo ?? byUinSimple?.vasInfo,
+        commonExt: info.detail?.commonExt ?? byUin.detail?.commonExt,
+        status: infoSimple?.status?.status ?? byUinSimple?.status?.status,
+    };
+}
+
 /** 扁平化两份详情 → StrangerInfo（宽松取值，字段缺失给默认）。 */
 function flattenStrangerInfo(
     uin: string,
@@ -89,26 +116,22 @@ function flattenStrangerInfo(
     byUin: UserDetailInfoByUin,
     info: UserDetailInfoByUin,
 ): StrangerInfo {
-    const coreInfo = info.detail?.simpleInfo?.coreInfo ?? byUin.detail?.simpleInfo?.coreInfo;
-    const baseInfo = info.detail?.simpleInfo?.baseInfo ?? byUin.detail?.simpleInfo?.baseInfo;
-    const vasInfo = info.detail?.simpleInfo?.vasInfo ?? byUin.detail?.simpleInfo?.vasInfo;
-    const commonExt = info.detail?.commonExt ?? byUin.detail?.commonExt;
-    const status = info.detail?.simpleInfo?.status?.status ?? 0;
+    const d = mergeDetail(info, byUin);
     return {
         user_id: Number(uin),
         uid,
-        nickname: coreInfo?.nick ?? "",
-        age: baseInfo?.age ?? 0,
-        qid: baseInfo?.qid ?? "",
-        qq_level: commonExt?.qqLevel ?? 0,
-        sex: mapSex(baseInfo?.sex),
-        long_nick: baseInfo?.longNick ?? "",
-        reg_time: commonExt?.regTime ?? 0,
-        is_vip: vasInfo?.svipFlag ?? false,
-        is_years_vip: vasInfo?.yearVipFlag ?? false,
-        vip_level: vasInfo?.vipLevel ?? 0,
-        remark: coreInfo?.remark ?? "",
-        status,
+        nickname: orDefault(d.coreInfo?.nick, ""),
+        age: orDefault(d.baseInfo?.age, 0),
+        qid: orDefault(d.baseInfo?.qid, ""),
+        qq_level: orDefault(d.commonExt?.qqLevel, 0),
+        sex: mapSex(d.baseInfo?.sex),
+        long_nick: orDefault(d.baseInfo?.longNick, ""),
+        reg_time: orDefault(d.commonExt?.regTime, 0),
+        is_vip: orDefault(d.vasInfo?.svipFlag, false),
+        is_years_vip: orDefault(d.vasInfo?.yearVipFlag, false),
+        vip_level: orDefault(d.vasInfo?.vipLevel, 0),
+        remark: orDefault(d.coreInfo?.remark, ""),
+        status: orDefault(d.status, 0),
         login_days: 0,
     };
 }
