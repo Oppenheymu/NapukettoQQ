@@ -1,5 +1,13 @@
 # create-napukettoqq
 
+## 0.2.1
+
+### Patch Changes
+
+- 0192e20: 修复 Windows 下自动安装依赖时触发 Node ≥22 的 DEP0190 告警（`shell: true` + args 数组改为拼单命令行字符串，规避 `spawn` 参数不转义的弃用警告）。
+- Updated dependencies [69a53e5]
+  - @napuketto/cli@0.0.3
+
 ## 0.2.0
 
 ### Minor Changes
