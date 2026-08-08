@@ -3,7 +3,6 @@
     "name": "NapukettoQQ",
     "version": "1.0.0",
     "description": "",
-    "main": "index.js",
     "scripts": {
         "prepare": "pnpm -r build",
         "check": "biome check . && tsc --noEmit",
@@ -35,7 +34,6 @@
         "@biomejs/biome": "^2.5.6",
         "@changesets/cli": "^2.31.1",
         "@types/node": "^26.1.2",
-        "tsdown": "^0.22.14",
         "typescript": "^7.0.2",
         "vitest": "^4.1.10"
     }

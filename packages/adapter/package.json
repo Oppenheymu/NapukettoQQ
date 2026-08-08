@@ -47,7 +47,6 @@
         "@napuketto/kernel": "workspace:*",
         "@napuketto/media": "workspace:*",
         "@napuketto/network": "workspace:*",
-        "fast-xml-parser": "^5.10.1",
         "zod": "^4.4.3"
     }
 }

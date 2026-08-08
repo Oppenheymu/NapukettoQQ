@@ -11,7 +11,7 @@ export type { DoubtFriendRequestInfo, Friend, FriendCategory } from "./apis/frie
 export { FriendApi } from "./apis/friend.js";
 export { GroupApi } from "./apis/group.js";
 export { GroupNotifyApi } from "./apis/group-notify.js";
-export { MsgApi } from "./apis/index.js";
+export { MsgApi } from "./apis/msg.js";
 export type { StrangerInfo } from "./apis/profile.js";
 export { ProfileApi } from "./apis/profile.js";
 export { ProfileLikeApi } from "./apis/profile-like.js";
