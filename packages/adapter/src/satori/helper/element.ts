@@ -3,7 +3,9 @@
  *
  * - parseElements：XML 风格字符串 → 元素树（注释/转义/无值属性/未配对标签容错）
  * - renderElements：元素树 → 字符串（消息 content 序列化）
- * - canonical ↔ Satori 双向转换见 element-convert.ts（本文件尾部 re-export）
+ *
+ * canonical ↔ Satori 双向转换不在本文件：收方向（canonical → Satori）在
+ * canonical.ts，发方向（Satori → canonical）在 element-convert.ts，调用方直引。
  *
  * 语法要点（对齐规范）：
  * - 转义：&quot; &amp; &lt; &gt; &#39; &#x27; 与十进制/十六进制数字实体
@@ -230,12 +232,3 @@ function renderElement(el: SatoriElement): string {
     const inner = renderElements(children);
     return `<${el.type}${attrs}>${inner}</${el.type}>`;
 }
-
-/** canonical ↔ Satori 双向转换（收方向 canonical.ts / 发方向 element-convert.ts）。 */
-export type { CanonicalToSatoriDeps } from "./canonical.js";
-export { canonicalToSatoriElements } from "./canonical.js";
-export type { SatoriToCanonicalDeps } from "./element-convert.js";
-export {
-    parseContentToCanonical,
-    satoriToCanonicalElements,
-} from "./element-convert.js";

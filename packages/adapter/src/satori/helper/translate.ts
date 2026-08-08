@@ -6,7 +6,8 @@
  */
 import { ChatType, type RawMessage, toCanonicalElements } from "@napuketto/kernel";
 import type { Channel, Guild, Message, User } from "../types/resource.js";
-import { canonicalToSatoriElements, renderElements } from "./element.js";
+import { canonicalToSatoriElements } from "./canonical.js";
+import { renderElements } from "./element.js";
 import { toDirectChannel, toGroupChannel, toGuild, toUser } from "./ids.js";
 
 /** 收方向翻译依赖（uid → uin 转换，缺省 at 原样 uid）。 */

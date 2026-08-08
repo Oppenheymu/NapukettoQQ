@@ -4,7 +4,7 @@
  */
 import { z } from "zod";
 import type { SatoriApi } from "../api/satori-api.js";
-import { parseContentToCanonical } from "../helper/element.js";
+import { parseContentToCanonical } from "../helper/element-convert.js";
 import { toChannelById, toSatoriMessage } from "../helper/translate.js";
 import type { BidiList, Message } from "../types/index.js";
 import { BaseSatoriAction } from "./base-action.js";
