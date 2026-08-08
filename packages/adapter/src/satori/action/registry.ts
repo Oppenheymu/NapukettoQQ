@@ -1,25 +1,9 @@
 /**
  * Satori 动作注册表（按动作名索引，构建后只读）。
- * Satori 动作响应形态与 OB11 不同（直接返回资源 + HTTP 状态码），独立注册表。
+ * 复用 core 泛型 ActionRegistry（2026-08-08 克隆合并）。
  */
+import type { ActionRegistry } from "../../core/action-registry.js";
 import type { BaseSatoriAction } from "./base-action.js";
 
-export class SatoriActionRegistry {
-    private readonly actions = new Map<string, BaseSatoriAction<unknown, unknown>>();
-
-    register(action: BaseSatoriAction<unknown, unknown>): void {
-        this.actions.set(action.name, action);
-    }
-
-    get(name: string): BaseSatoriAction<unknown, unknown> | undefined {
-        return this.actions.get(name);
-    }
-
-    has(name: string): boolean {
-        return this.actions.has(name);
-    }
-
-    get names(): string[] {
-        return [...this.actions.keys()];
-    }
-}
+/** Satori 动作注册表（BaseSatoriAction 专用）。 */
+export type SatoriActionRegistry = ActionRegistry<BaseSatoriAction<unknown, unknown>>;

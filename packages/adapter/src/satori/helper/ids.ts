@@ -88,9 +88,3 @@ export function toMinimalLogin(sn: number, selfUin: string): Login {
         adapter: ADAPTER,
     };
 }
-
-/** 判断是否为群聊频道 id（QQ 平台：频道与群组重合，群号即频道 id）。 */
-export function isGroupChannel(channelId: string, selfUin: string): boolean {
-    // 群号通常 5-12 位数字且非机器人自身 uin（自身 uin 不是频道）
-    return /^\d{5,12}$/.test(channelId) && channelId !== selfUin;
-}

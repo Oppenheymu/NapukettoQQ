@@ -276,40 +276,9 @@ export function startNapuketto(options: StartNapukettoOptions): WrapperContext {
     } else if (isSelfHost) {
         createSession(ctx);
     }
-    // worker（utilityProcess）模式 + 自建宿主（标准 node）下 desktopGlobalPath 必须指向
-    // QQ 真实数据目录（数据根/nt_qq/global，HANDOVER-V6 三要素之三），否则登录数据读写
-    // 错位（P2-1 实测 2026-08-06；getLoginList 空）。
-    // QQ 主进程（V1）模式 QQ 自己已配置 engine，保持 env.dataDir 原行为。
-    // 判断条件：electronProcessType() === "browser" 是 QQ 主进程；utility=worker，
-    // undefined=标准 node（自建宿主）——两者都需要解析 QQ 数据目录。
-    let qqGlobalPath: string | null = null;
-    if (electronProcessType() !== "browser") {
-        const root = resolveQqUserDataRoot(wrapperExports);
-        if (root !== null) {
-            qqGlobalPath = resolveQqGlobalPath(root);
-        }
-    }
-    initEngine(ctx, engineConfig ?? defaultEngineConfig(env ?? {}, qqGlobalPath ?? undefined));
+    initEngine(ctx, engineConfig ?? defaultEngineConfig(env ?? {}, resolveBootQqGlobalPath(ctx)));
 
-    // loginService：优先捕获实例，其次单例 get()（自建宿主/worker 下 QQ 环境创建
-    // 的实例才完整——`new` 自建实例读不到登录列表（getLoginList 空），HANDOVER-V6
-    // p0-login3 实证），最后 new 回退。
-    if (qqLoginService !== undefined && qqLoginService !== null) {
-        ctx.loginService = qqLoginService;
-    } else {
-        try {
-            const loginSvcCtor = ctx.exports.NodeIKernelLoginService as unknown as {
-                get?: () => unknown;
-            } | null;
-            if (loginSvcCtor !== null && typeof loginSvcCtor.get === "function") {
-                ctx.loginService = loginSvcCtor.get();
-            } else {
-                ctx.loginService = new ctx.exports.NodeIKernelLoginService();
-            }
-        } catch {
-            ctx.loginService = null;
-        }
-    }
+    resolveLoginService(ctx, qqLoginService);
 
     // session：路线 B（utility）与 QQ 主进程（browser）在 engine 后创建；
     // 自建宿主已在 engine 前创建（isSelfHost 分支），此处跳过避免重复。
@@ -324,6 +293,48 @@ export function startNapuketto(options: StartNapukettoOptions): WrapperContext {
         startSession(ctx);
     }
     return ctx;
+}
+
+/**
+ * 解析 QQ 真实数据目录的 global 路径（desktopGlobalPath 三要素之三）。
+ * worker（utilityProcess）模式 + 自建宿主（标准 node）下必须指向 QQ 真实
+ * 数据目录（数据根/nt_qq/global，HANDOVER-V6），否则登录数据读写错位
+ * （P2-1 实测 2026-08-06；getLoginList 空）。QQ 主进程（V1）QQ 自己已配置
+ * engine，无需解析。
+ */
+function resolveBootQqGlobalPath(ctx: WrapperContext): string | undefined {
+    if (electronProcessType() === "browser") {
+        return undefined;
+    }
+    const root = resolveQqUserDataRoot(ctx.exports);
+    if (root === null) {
+        return undefined;
+    }
+    return resolveQqGlobalPath(root);
+}
+
+/**
+ * 解析 loginService：优先捕获实例，其次单例 get()（自建宿主/worker 下 QQ 环境
+ * 创建的实例才完整——`new` 自建实例读不到登录列表（getLoginList 空），
+ * HANDOVER-V6 p0-login3 实证），最后 new 回退。
+ */
+function resolveLoginService(ctx: WrapperContext, qqLoginService: unknown): void {
+    if (qqLoginService !== undefined && qqLoginService !== null) {
+        ctx.loginService = qqLoginService as WrapperContext["loginService"];
+        return;
+    }
+    try {
+        const loginSvcCtor = ctx.exports.NodeIKernelLoginService as unknown as {
+            get?: () => unknown;
+        } | null;
+        if (loginSvcCtor !== null && typeof loginSvcCtor.get === "function") {
+            ctx.loginService = loginSvcCtor.get();
+        } else {
+            ctx.loginService = new ctx.exports.NodeIKernelLoginService();
+        }
+    } catch {
+        ctx.loginService = null;
+    }
 }
 
 /** startNapuketto 的引导环境（由 loader launcher 注入环境变量，boot.cjs 透传）。 */

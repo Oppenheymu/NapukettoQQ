@@ -5,7 +5,9 @@
  * 能力（消息编辑/频道管理/角色管理等）统一注册 NotImplementedAction。
  */
 
+import { ActionRegistry } from "../../core/action-registry.js";
 import type { SatoriApi } from "../api/satori-api.js";
+import type { BaseSatoriAction } from "./base-action.js";
 import { type ChannelActionDeps, ChannelGetAction, ChannelListAction } from "./channel.js";
 import {
     type FriendActionDeps,
@@ -33,7 +35,7 @@ import {
 } from "./message.js";
 import { NotImplementedAction } from "./not-implemented.js";
 import { type ReactionActionDeps, ReactionCreateAction, ReactionDeleteAction } from "./reaction.js";
-import { SatoriActionRegistry } from "./registry.js";
+import type { SatoriActionRegistry } from "./registry.js";
 import type { UserActionDeps } from "./user.js";
 import { UserChannelCreateAction, UserGetAction } from "./user.js";
 
@@ -62,7 +64,7 @@ const NOT_IMPLEMENTED = [
 
 /** 创建 Satori 动作注册表。 */
 export function createSatoriActionRegistry(deps: SatoriActionDeps): SatoriActionRegistry {
-    const registry = new SatoriActionRegistry();
+    const registry = new ActionRegistry<BaseSatoriAction<unknown, unknown>>();
     const { api } = deps;
 
     const messageDeps: MessageActionDeps = api;

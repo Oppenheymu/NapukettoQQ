@@ -157,39 +157,44 @@ export class WebApi {
         if (text === null) {
             return [];
         }
-        const match = /window\.__INITIAL_STATE__=(.*?);/.exec(text);
-        if (match === null || match[1] === undefined) {
-            return [];
-        }
-        let state: { talkativeList?: unknown; actorList?: unknown };
-        try {
-            state = JSON.parse(match[1]);
-        } catch {
-            return [];
-        }
-        const raw = type === WebHonorType.TALKATIVE ? state.talkativeList : state.actorList;
-        if (!Array.isArray(raw)) {
-            return [];
-        }
-        const out: HonorListItem[] = [];
-        for (const item of raw) {
-            if (item !== null && typeof item === "object") {
-                const obj = item as {
-                    uin?: unknown;
-                    name?: unknown;
-                    avatar?: unknown;
-                    desc?: unknown;
-                };
-                out.push({
-                    uin: String(obj.uin ?? ""),
-                    name: String(obj.name ?? ""),
-                    avatar: String(obj.avatar ?? ""),
-                    desc: String(obj.desc ?? ""),
-                });
-            }
-        }
-        return out;
+        return parseHonorList(text, type);
     }
+}
+
+/** 从 honorlist 页面提取 __INITIAL_STATE__ → 荣誉列表（解析失败返回空）。 */
+function parseHonorList(text: string, type: number): HonorListItem[] {
+    const match = /window\.__INITIAL_STATE__=(.*?);/.exec(text);
+    if (match === null || match[1] === undefined) {
+        return [];
+    }
+    let state: { talkativeList?: unknown; actorList?: unknown };
+    try {
+        state = JSON.parse(match[1]);
+    } catch {
+        return [];
+    }
+    const raw = type === WebHonorType.TALKATIVE ? state.talkativeList : state.actorList;
+    if (!Array.isArray(raw)) {
+        return [];
+    }
+    const out: HonorListItem[] = [];
+    for (const item of raw) {
+        if (item !== null && typeof item === "object") {
+            const obj = item as {
+                uin?: unknown;
+                name?: unknown;
+                avatar?: unknown;
+                desc?: unknown;
+            };
+            out.push({
+                uin: String(obj.uin ?? ""),
+                name: String(obj.name ?? ""),
+                avatar: String(obj.avatar ?? ""),
+                desc: String(obj.desc ?? ""),
+            });
+        }
+    }
+    return out;
 }
 
 /** 请求 qun.qq.com JSON 接口（带 Cookie；失败返回 null）。 */

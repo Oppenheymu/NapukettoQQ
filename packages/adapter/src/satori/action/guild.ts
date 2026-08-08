@@ -76,11 +76,13 @@ const guildApproveSchema = z.object({
     comment: z.string().optional(),
 });
 
-/** 处理群邀请（message_id = 群通知 seq）。 */
-export class GuildApproveAction extends BaseSatoriAction<z.infer<typeof guildApproveSchema>, void> {
-    readonly name = "guild.approve";
+/** 群请求 approve 基类（guild.approve / guild.member.approve 共用实现）。 */
+abstract class GroupRequestApproveBase extends BaseSatoriAction<
+    z.infer<typeof guildApproveSchema>,
+    void
+> {
     readonly schema = guildApproveSchema;
-    private readonly deps: GuildActionDeps;
+    protected readonly deps: GuildActionDeps;
 
     constructor(deps: GuildActionDeps) {
         super();
@@ -99,6 +101,15 @@ export class GuildApproveAction extends BaseSatoriAction<z.infer<typeof guildApp
             operateType,
             comment ?? "",
         );
+    }
+}
+
+/** 处理群邀请（message_id = 群通知 seq）。 */
+export class GuildApproveAction extends GroupRequestApproveBase {
+    readonly name = "guild.approve";
+
+    constructor(deps: GuildActionDeps) {
+        super(deps);
     }
 }
 
@@ -224,31 +235,12 @@ const guildMemberApproveSchema = z.object({
 });
 
 /** 处理加群申请（message_id = 群通知 seq）。 */
-export class GuildMemberApproveAction extends BaseSatoriAction<
-    z.infer<typeof guildMemberApproveSchema>,
-    void
-> {
+export class GuildMemberApproveAction extends GroupRequestApproveBase {
     readonly name = "guild.member.approve";
-    readonly schema = guildMemberApproveSchema;
-    private readonly deps: GuildActionDeps;
+    override readonly schema = guildMemberApproveSchema;
 
     constructor(deps: GuildActionDeps) {
-        super();
-        this.deps = deps;
-    }
-
-    protected async _handle(payload: z.infer<typeof guildMemberApproveSchema>): Promise<void> {
-        const { message_id: messageId, approve, comment } = payload;
-        const notify = await findGroupNotify(this.deps, messageId);
-        const operateType = approve
-            ? NTGroupRequestOperateTypes.KAGREE
-            : NTGroupRequestOperateTypes.KREFUSE;
-        await this.deps.groupNotifyApi.handleGroupRequest(
-            false,
-            notify,
-            operateType,
-            comment ?? "",
-        );
+        super(deps);
     }
 }
 

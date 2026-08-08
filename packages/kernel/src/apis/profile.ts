@@ -12,6 +12,7 @@ import type {
     UserDetailInfoByUin,
 } from "../types/services/profile-service.js";
 import type { NodeIQQNTWrapperSession } from "../types/wrapper.js";
+import { checkLooseResult } from "./result.js";
 
 /** 陌生人信息（get_stranger_info 返回）。 */
 export interface StrangerInfo {
@@ -49,14 +50,7 @@ export class ProfileApi {
         const res = (await this.service.setLongNick(longNick)) as
             | { result?: unknown; errMsg?: unknown }
             | undefined;
-        if (
-            res !== undefined &&
-            res !== null &&
-            typeof res.result === "number" &&
-            res.result !== 0
-        ) {
-            throw kernelError(`setLongNick 失败: ${String(res.errMsg ?? "")}`, "UNKNOWN");
-        }
+        checkLooseResult("setLongNick", res);
     }
 
     /** 设置昵称（set_qq_profile）。 */
@@ -64,14 +58,7 @@ export class ProfileApi {
         const res = (await this.service.setNickName(nickName)) as
             | { result?: unknown; errMsg?: unknown }
             | undefined;
-        if (
-            res !== undefined &&
-            res !== null &&
-            typeof res.result === "number" &&
-            res.result !== 0
-        ) {
-            throw kernelError(`setNickName 失败: ${String(res.errMsg ?? "")}`, "UNKNOWN");
-        }
+        checkLooseResult("setNickName", res);
     }
 
     /** 设置头像（set_qq_avatar；filePath 为本地路径）。 */

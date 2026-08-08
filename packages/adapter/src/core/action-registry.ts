@@ -1,16 +1,17 @@
 /**
  * 动作注册表：按动作名索引（构建后只读）。
+ * 泛型化（2026-08-08 克隆合并）：OB11 与 Satori 共用同一注册表实现。
  */
 import type { BaseAction } from "./BaseAction.js";
 
-export class ActionRegistry {
-    private readonly actions = new Map<string, BaseAction<unknown, unknown>>();
+export class ActionRegistry<TAction extends { name: string } = BaseAction<unknown, unknown>> {
+    private readonly actions = new Map<string, TAction>();
 
-    register(action: BaseAction<unknown, unknown>): void {
+    register(action: TAction): void {
         this.actions.set(action.name, action);
     }
 
-    get(name: string): BaseAction<unknown, unknown> | undefined {
+    get(name: string): TAction | undefined {
         return this.actions.get(name);
     }
 

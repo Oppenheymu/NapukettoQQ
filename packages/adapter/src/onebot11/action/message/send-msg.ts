@@ -9,13 +9,14 @@
  * 私聊：user_id 经 uin→uid → Peer{ chatType: C2C, peerUid: uid }。
  */
 
-import { type CanonicalElement, ChatType, kernelError, type Peer } from "@napuketto/kernel";
+import type { CanonicalElement } from "@napuketto/kernel";
 import { z } from "zod";
 import { BaseAction } from "../../../core/index.js";
 import type { OneBotApi } from "../../api/one-bot-api.js";
 import { applySendContext, cqMessageToCanonical, segmentsToCanonical } from "../../helper/index.js";
 import type { OB11MessageSegment } from "../../types/index.js";
 import { ob11ErrorCodeMap } from "../error-map.js";
+import { resolveTargetPeer } from "./resolve-peer.js";
 
 const sendMsgSchema = z.object({
     message_type: z.enum(["group", "private"]).optional(),
@@ -30,30 +31,12 @@ export type SendMsgPayload = z.infer<typeof sendMsgSchema>;
 /** send_msg 依赖（OneBotApi 视图，由装配方注入）。 */
 export type SendMsgDeps = Pick<OneBotApi, "msgApi" | "messageUnique" | "uinToUid">;
 
-/** 解析目标 Peer（group_id 直通；user_id 经 uin→uid）。 */
-async function resolvePeer(payload: SendMsgPayload, deps: SendMsgDeps): Promise<Peer> {
-    if (payload.group_id !== undefined) {
-        return { chatType: ChatType.GROUP, peerUid: String(payload.group_id) };
-    }
-    if (payload.user_id !== undefined) {
-        const uidMap = await deps.uinToUid([String(payload.user_id)]);
-        const uid = uidMap.get(String(payload.user_id));
-        if (uid === undefined) {
-            // 2026-08-07：抛类型化 KernelError（INVALID_PARAM=105），
-            // 此前普通 Error → retcode 999（UNKNOWN）
-            throw kernelError(`用户 ${payload.user_id} 的 uid 解析失败`, "INVALID_PARAM");
-        }
-        return { chatType: ChatType.C2C, peerUid: uid };
-    }
-    throw kernelError("send_msg 需要 group_id 或 user_id", "INVALID_PARAM");
-}
-
 /** 共享发送核心：解析 Peer → canonical 翻译（含 auto_escape）→ sendMessage → 映射 message_id。 */
 export async function sendOb11Message(
     payload: SendMsgPayload,
     deps: SendMsgDeps,
 ): Promise<{ message_id: number }> {
-    const peer = await resolvePeer(payload, deps);
+    const peer = await resolveTargetPeer(payload, deps, "send_msg 需要 group_id 或 user_id");
     // message: CQ 码字符串 → canonical；segment 数组 → canonical
     let canonical: CanonicalElement[];
     if (Array.isArray(payload.message)) {

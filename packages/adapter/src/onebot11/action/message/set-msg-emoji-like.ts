@@ -4,12 +4,11 @@
  * message_id → msgId + peer → 拉消息取 msgSeq → MsgApi.setMsgEmojiLike。
  */
 
-import { kernelError } from "@napuketto/kernel";
 import { z } from "zod";
 import { BaseAction } from "../../../core/index.js";
 import type { OneBotApi } from "../../api/one-bot-api.js";
-import { resolveMsgIdAndPeer } from "../../helper/message-unique.js";
 import { ob11ErrorCodeMap } from "../error-map.js";
+import { fetchMsgById } from "./resolve-peer.js";
 
 const setMsgEmojiLikeSchema = z.object({
     message_id: z.union([z.number(), z.string()]),
@@ -40,13 +39,11 @@ export class SetMsgEmojiLikeAction extends BaseAction<SetMsgEmojiLikePayload, nu
     }
 
     protected async _handle(payload: SetMsgEmojiLikePayload): Promise<null> {
-        const { msgId, peer } = resolveMsgIdAndPeer(payload.message_id, this.deps.messageUnique);
-        // msgSeq 需从消息本体取
-        const msgs = await this.deps.msgApi.fetchMsgsByMsgId(peer, [msgId]);
-        const [msg] = msgs;
-        if (msg === undefined) {
-            throw kernelError(`消息 ${payload.message_id} 不存在或已被撤回`, "NOT_FOUND");
-        }
+        const { msg, peer } = await fetchMsgById(
+            payload.message_id,
+            this.deps.messageUnique,
+            this.deps.msgApi,
+        );
         await this.deps.msgApi.setMsgEmojiLike(peer, {
             msgSeq: msg.msgSeq,
             emojiId: String(payload.emoji_id),

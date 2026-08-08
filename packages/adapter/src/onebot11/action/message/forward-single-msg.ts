@@ -5,12 +5,12 @@
  * MsgApi.forwardSingleMessage(srcPeer, [msgId], dstPeer)。
  */
 
-import { ChatType, kernelError, type Peer } from "@napuketto/kernel";
 import { z } from "zod";
 import { BaseAction } from "../../../core/index.js";
 import type { OneBotApi } from "../../api/one-bot-api.js";
 import { resolveMsgIdAndPeer } from "../../helper/message-unique.js";
 import { ob11ErrorCodeMap } from "../error-map.js";
+import { resolveTargetPeer } from "./resolve-peer.js";
 
 const forwardSingleMsgSchema = z.object({
     message_id: z.union([z.number(), z.string()]),
@@ -21,26 +21,7 @@ const forwardSingleMsgSchema = z.object({
 type ForwardSingleMsgPayload = z.infer<typeof forwardSingleMsgSchema>;
 
 /** 单条转发依赖（OneBotApi 视图，由装配方注入）。 */
-export type ForwardSingleMsgDeps = Pick<OneBotApi, "msgApi" | "messageUnique" | "uinToUid">;
-
-/** 解析目标 Peer（group_id 直通；user_id 经 uin→uid）。 */
-async function resolveTargetPeer(
-    payload: ForwardSingleMsgPayload,
-    deps: ForwardSingleMsgDeps,
-): Promise<Peer> {
-    if (payload.group_id !== undefined) {
-        return { chatType: ChatType.GROUP, peerUid: String(payload.group_id) };
-    }
-    if (payload.user_id !== undefined) {
-        const uidMap = await deps.uinToUid([String(payload.user_id)]);
-        const uid = uidMap.get(String(payload.user_id));
-        if (uid === undefined) {
-            throw kernelError(`用户 ${payload.user_id} 的 uid 解析失败`, "INVALID_PARAM");
-        }
-        return { chatType: ChatType.C2C, peerUid: uid };
-    }
-    throw kernelError("单条转发需要 group_id 或 user_id", "INVALID_PARAM");
-}
+type ForwardSingleMsgDeps = Pick<OneBotApi, "msgApi" | "messageUnique" | "uinToUid">;
 
 /** 单条转发基类（两个动作共用实现）。 */
 abstract class ForwardSingleMsgBase extends BaseAction<ForwardSingleMsgPayload, null> {
@@ -58,7 +39,11 @@ abstract class ForwardSingleMsgBase extends BaseAction<ForwardSingleMsgPayload, 
             payload.message_id,
             this.deps.messageUnique,
         );
-        const dstPeer = await resolveTargetPeer(payload, this.deps);
+        const dstPeer = await resolveTargetPeer(
+            payload,
+            this.deps,
+            "单条转发需要 group_id 或 user_id",
+        );
         await this.deps.msgApi.forwardSingleMessage(sourcePeer, [msgId], dstPeer);
         return null;
     }

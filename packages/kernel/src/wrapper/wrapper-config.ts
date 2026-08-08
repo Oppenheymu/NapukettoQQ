@@ -12,7 +12,6 @@
 
 import { existsSync, readFileSync } from "node:fs";
 import { hostname } from "node:os";
-import { dirname } from "node:path";
 import type {
     DeviceInfo,
     EnginInitDesktopConfig,
@@ -66,11 +65,6 @@ export function parseAppidFromMajor(majorPath: string): string | null {
         pos = end + 1;
     }
     return null;
-}
-
-/** 解析 wrapper.node 所在目录（含 major.node 与 appid 表）。 */
-export function resolveWrapperAppDir(wrapperPath: string): string {
-    return dirname(wrapperPath);
 }
 
 /** Windows 兜底 appid / qua（major.node 解析失败时）。 */

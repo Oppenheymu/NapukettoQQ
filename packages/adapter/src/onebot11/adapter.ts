@@ -17,6 +17,7 @@ import {
     BaseProtocolAdapter,
     type ProtocolConfig,
 } from "../core/index.js";
+import { forEachRawMessage } from "../core/raw-message.js";
 import { createOb11ActionRegistry } from "./action/index.js";
 import type { OneBotApiOptions } from "./api/one-bot-api.js";
 import { OneBotApi } from "./api/one-bot-api.js";
@@ -153,24 +154,20 @@ export class NapukettoOneBot11Adapter extends BaseProtocolAdapter<OB11Config> {
         }
         // onRecvMsg 回调参数为消息数组（2026-08-07 运行时实证）——遍历逐条翻译。
         this.unsubscribe = this.msgChannel.on("Msg/onRecvMsg", (msgs) => {
-            const list = Array.isArray(msgs) ? msgs : [msgs];
-            for (const msg of list) {
-                if (!msg || typeof msg !== "object") {
-                    continue;
-                }
+            forEachRawMessage(msgs, (msg) => {
                 // grayTip（系统事件）→ notice；否则 → 消息事件
                 if (hasGrayTip(msg)) {
                     this.broadcastNotice(msg).catch(() => {
                         // notice 翻译失败静默（grayTip 解析宽容）
                     });
-                    continue;
+                    return;
                 }
                 // 自身消息：默认不上报（OB11 规范行为；reportSelfMessage=true 时上报）
                 if (!this.reportSelfMessage && String(msg.senderUin) === this.selfUin) {
-                    continue;
+                    return;
                 }
                 void this.broadcastMessageEvent(msg);
-            }
+            });
         });
     }
 

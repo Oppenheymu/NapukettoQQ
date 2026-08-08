@@ -23,7 +23,7 @@ const TEMPLATES = new URL("../templates/", import.meta.url);
  * 发版时 changesets 升版本 + pnpm publish 把 workspace:* 替换为实际版本，
  * 模板版本自动跟随，无需手动同步（比硬编码常量可靠）。
  */
-export function cliVersionRange(): string {
+function cliVersionRange(): string {
     try {
         const ownPkg = JSON.parse(
             readFileSync(new URL("../package.json", import.meta.url), "utf8"),
@@ -91,7 +91,7 @@ export function validateProjectName(raw: string): string {
 }
 
 /** 由文件夹名派生 npm 包名（小写、空格 → -）。 */
-export function derivePackageName(dirName: string): string {
+function derivePackageName(dirName: string): string {
     return dirName.toLowerCase().replace(/\s+/g, "-");
 }
 
@@ -115,7 +115,7 @@ export async function checkDirStatus(dir: string): Promise<DirStatus> {
 }
 
 /** 清空目录内容（保留目录本身）。 */
-export async function emptyDir(dir: string): Promise<void> {
+async function emptyDir(dir: string): Promise<void> {
     for (const entry of await readdir(dir)) {
         await rm(path.join(dir, entry), { recursive: true, force: true });
     }

@@ -10,28 +10,9 @@ import { kernelError } from "../infra/errors.js";
 import type { Peer, RawMessage } from "../types/entities.js";
 import type { CanonicalElement } from "../types/message-element.js";
 import { toSendElements } from "../types/message-element.js";
-import type { GeneralCallResult, NodeIKernelMsgService } from "../types/services/msg-service.js";
+import type { NodeIKernelMsgService } from "../types/services/msg-service.js";
 import type { NodeIQQNTWrapperSession } from "../types/wrapper.js";
-
-/** 原生结果解包：result !== 0 抛 KernelError（errMsg 语义映射错误码）。 */
-function unwrapResult<T extends GeneralCallResult>(label: string, raw: T): void {
-    if (raw.result === 0) {
-        return;
-    }
-    const msg = raw.errMsg || "无错误详情";
-    let code: "SEND_FAILED" | "NOT_FOUND" | "NOT_LOGIN" | "PERMISSION_DENIED" | "UNKNOWN" =
-        "UNKNOWN";
-    if (msg.includes("未登录") || msg.includes("login")) {
-        code = "NOT_LOGIN";
-    } else if (msg.includes("无权限") || msg.includes("permission")) {
-        code = "PERMISSION_DENIED";
-    } else if (msg.includes("不存在") || msg.includes("not found")) {
-        code = "NOT_FOUND";
-    } else if (label === "sendMsg") {
-        code = "SEND_FAILED";
-    }
-    throw kernelError(`${label} 失败: ${msg}`, code);
-}
+import { unwrapResult } from "./result.js";
 
 /** 消息 API：从 session 拿 msg service，包装成语义化方法。 */
 export class MsgApi {

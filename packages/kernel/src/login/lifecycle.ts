@@ -24,28 +24,10 @@ import { kernelError } from "../infra/errors.js";
 import type { NodeIKernelSessionListener, WrapperSessionInitConfig } from "../types/wrapper.js";
 import { DependsAdapter, DispatcherAdapter } from "../wrapper/wrapper-adapters.js";
 import type { WrapperContext } from "../wrapper/wrapper-loader.js";
+import { waitFor } from "./wait.js";
 
 export type { LoginAccountInfo, LoginResult } from "./login-connect.js";
 export { listLoginAccounts, quickLogin, waitForNetworkConnection } from "./login-connect.js";
-
-/** 等待条件满足（轮询，带超时）。 */
-function waitFor(predicate: () => boolean, timeoutMs: number, intervalMs = 500): Promise<boolean> {
-    return new Promise((resolve) => {
-        const started = Date.now();
-        const tick = (): void => {
-            if (predicate()) {
-                resolve(true);
-                return;
-            }
-            if (Date.now() - started > timeoutMs) {
-                resolve(false);
-                return;
-            }
-            setTimeout(tick, intervalMs);
-        };
-        tick();
-    });
-}
 
 /** session init 默认超时（毫秒）。 */
 const DEFAULT_INIT_TIMEOUT_MS = 15_000;
@@ -90,8 +72,6 @@ export async function waitSessionReady(
 }
 
 /** 登录连接 + 快速登录（quickLogin 等）已拆到 login-connect.ts（见文件头 re-export）。 */
-
-/** session 初始化（4 参全为普通 JS 对象，等 init 完成信号）。 */
 
 /** session 初始化（4 参全为普通 JS 对象，等 init 完成信号）。 */
 export async function initAndStartSession(

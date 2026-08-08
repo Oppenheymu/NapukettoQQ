@@ -2,11 +2,11 @@
  * set_friend_remark 动作：设置好友备注（P2-11 接 kernel FriendApi.setFriendRemark）
  */
 
-import { kernelError } from "@napuketto/kernel";
 import { z } from "zod";
 import { BaseAction } from "../../../core/index.js";
 import type { OneBotApi } from "../../api/one-bot-api.js";
 import { ob11ErrorCodeMap } from "../error-map.js";
+import { resolveUid } from "../resolve-uid.js";
 
 const setFriendRemarkSchema = z.object({
     user_id: z.number(),
@@ -29,18 +29,8 @@ export class SetFriendRemarkAction extends BaseAction<SetFriendRemarkPayload, nu
     }
 
     protected async _handle(payload: SetFriendRemarkPayload): Promise<null> {
-        const uid = await this.resolveUid(payload.user_id);
+        const uid = await resolveUid(String(payload.user_id), this.deps.uinToUid);
         this.deps.friendApi.setFriendRemark(uid, payload.remark);
         return null;
-    }
-
-    /** user_id（uin）→ uid。 */
-    private async resolveUid(userId: number): Promise<string> {
-        const uidMap = await this.deps.uinToUid([String(userId)]);
-        const uid = uidMap.get(String(userId));
-        if (uid === undefined) {
-            throw kernelError(`用户 ${userId} 的 uid 解析失败`, "INVALID_PARAM");
-        }
-        return uid;
     }
 }

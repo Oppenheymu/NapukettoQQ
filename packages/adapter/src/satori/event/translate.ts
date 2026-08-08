@@ -11,6 +11,7 @@
  * 收方向 ID 空间：uid → uin 批量转换（deps.uidToUin，与消息翻译同依赖）。
  */
 import { ChatType, GrayTipSubType, type RawMessage, TipGroupElementType } from "@napuketto/kernel";
+import { collectGrayTipUids } from "../../core/gray-tip.js";
 import { toUser } from "../helper/ids.js";
 import { type SatoriTranslateDeps, toSatoriMessage } from "../helper/translate.js";
 import type { Channel, Guild, GuildMember, Message, User } from "../types/resource.js";
@@ -73,31 +74,8 @@ export function hasSatoriGrayTip(raw: RawMessage): boolean {
     return false;
 }
 
-/** 收集 grayTip 涉及的 uid（批量 uidToUin 用）。 */
-export function collectSatoriGrayTipUids(raw: RawMessage): string[] {
-    const uids = new Set<string>();
-    for (const el of raw.elements) {
-        const g = el.grayTipElement;
-        if (g === undefined) {
-            continue;
-        }
-        const revoke = g.revokeElement;
-        if (revoke?.operatorUid !== undefined && revoke.operatorUid !== "") {
-            uids.add(revoke.operatorUid);
-        }
-        const grp = g.groupElement;
-        if (grp === undefined) {
-            continue;
-        }
-        if (grp.memberUid !== undefined && grp.memberUid !== "") {
-            uids.add(grp.memberUid);
-        }
-        if (grp.adminUid !== undefined && grp.adminUid !== "") {
-            uids.add(grp.adminUid);
-        }
-    }
-    return [...uids];
-}
+/** 收集 grayTip 涉及的 uid（批量 uidToUin 用，core 共享实现）。 */
+export const collectSatoriGrayTipUids = collectGrayTipUids;
 
 /** 判断消息是否为群聊 grayTip（peerUid 是群号）。 */
 function isGroupMessage(raw: RawMessage): boolean {
@@ -176,47 +154,61 @@ function toMemberChangeEvent(
         if (grp === undefined || grp.type === undefined) {
             continue;
         }
-        const memberUid = grp.memberUid ?? "";
-        const adminUid = grp.adminUid ?? "";
-        const peerUin = String(raw.peerUin ?? "");
-        const guild: Guild = { id: peerUin };
-        if (raw.peerName !== undefined && raw.peerName !== "") {
-            guild.name = raw.peerName;
-        }
-        const channel: Channel = { id: peerUin, type: 0 };
-        let type: string | null = null;
-        if (grp.type === TipGroupElementType.MEMBER_ADD) {
-            type = "guild-member-added";
-        } else if (grp.type === TipGroupElementType.QUIT) {
-            type = "guild-member-removed";
-        }
+        const type = memberChangeType(grp.type);
         if (type === null) {
             return null;
         }
-        const memberUin = toUin(memberUid, uidToUinMap);
-        const nick = grp.memberNick ?? "";
-        const user = toUser(memberUin, nick);
-        const member: GuildMember = { user };
-        if (
-            grp.memberRemark !== undefined &&
-            grp.memberRemark !== "" &&
-            grp.memberRemark !== nick
-        ) {
-            member.nick = grp.memberRemark;
-        }
+        const memberUid = grp.memberUid ?? "";
+        const adminUid = grp.adminUid ?? "";
+        const peerUin = String(raw.peerUin ?? "");
         const content: SatoriEventContent = {
             type,
             timestamp: Number(raw.msgTime),
-            guild,
-            channel,
-            member,
-            user,
+            guild: toGroupGuild(peerUin, raw.peerName),
+            channel: { id: peerUin, type: 0 },
+            member: toMember(memberUid, grp.memberNick, grp.memberRemark, uidToUinMap),
+            user: toUser(toUin(memberUid, uidToUinMap), grp.memberNick),
         };
         if (adminUid !== "" && adminUid !== memberUid) {
-            const operatorUin = toUin(adminUid, uidToUinMap);
-            content.operator = toUser(operatorUin, grp.adminNick);
+            content.operator = toUser(toUin(adminUid, uidToUinMap), grp.adminNick);
         }
         return content;
     }
     return null;
+}
+
+/** 成员变动类型（MEMBER_ADD=added / QUIT=removed；其余 null）。 */
+function memberChangeType(
+    type: TipGroupElementType,
+): "guild-member-added" | "guild-member-removed" | null {
+    if (type === TipGroupElementType.MEMBER_ADD) {
+        return "guild-member-added";
+    }
+    if (type === TipGroupElementType.QUIT) {
+        return "guild-member-removed";
+    }
+    return null;
+}
+
+/** 构造群组（带可选群名）。 */
+function toGroupGuild(id: string, name: string | undefined): Guild {
+    const guild: Guild = { id };
+    if (name !== undefined && name !== "") {
+        guild.name = name;
+    }
+    return guild;
+}
+
+/** 构造群成员（user + 可选备注 nick）。 */
+function toMember(
+    uid: string,
+    nick: string | undefined,
+    remark: string | undefined,
+    uidToUinMap: Map<string, string>,
+): GuildMember {
+    const member: GuildMember = { user: toUser(toUin(uid, uidToUinMap), nick) };
+    if (remark !== undefined && remark !== "" && remark !== nick) {
+        member.nick = remark;
+    }
+    return member;
 }

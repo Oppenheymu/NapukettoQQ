@@ -73,7 +73,7 @@ async function ensureConfigTemplate(path: string, dataRoot: string): Promise<voi
 
 /** 主配置 store（读/写/校验；.toml 后缀 → smol-toml 序列化）。
  * 配置文件在项目根（resolveConfigPath），dataRoot 仅作兜底与 dataDir 默认值。 */
-export class CliConfigStore extends ConfigBase<CliConfig> {
+class CliConfigStore extends ConfigBase<CliConfig> {
     constructor(dataRoot: string) {
         super({
             path: resolveConfigPath({ dataRoot }),

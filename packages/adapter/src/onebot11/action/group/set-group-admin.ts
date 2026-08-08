@@ -4,10 +4,11 @@
  * enable=true 设为管理员，false 取消；user_id → uinToUid。
  */
 
-import { type GroupApi, kernelError, NTGroupMemberRole } from "@napuketto/kernel";
+import { type GroupApi, NTGroupMemberRole } from "@napuketto/kernel";
 import { z } from "zod";
 import { BaseAction } from "../../../core/index.js";
 import { ob11ErrorCodeMap } from "../error-map.js";
+import { resolveUid } from "../resolve-uid.js";
 
 const setGroupAdminSchema = z.object({
     group_id: z.number(),
@@ -32,11 +33,9 @@ export class SetGroupAdminAction extends BaseAction<SetGroupAdminPayload, null> 
     }
 
     protected async _handle(payload: SetGroupAdminPayload): Promise<null> {
-        const uidMap = await this.groupApi.uinToUid([String(payload.user_id)]);
-        const uid = uidMap.get(String(payload.user_id));
-        if (uid === undefined) {
-            throw kernelError(`用户 ${payload.user_id} 的 uid 解析失败`, "INVALID_PARAM");
-        }
+        const uid = await resolveUid(String(payload.user_id), (uins) =>
+            this.groupApi.uinToUid(uins),
+        );
         let role: NTGroupMemberRole = NTGroupMemberRole.MEMBER;
         if (payload.enable) {
             role = NTGroupMemberRole.ADMIN;

@@ -13,7 +13,7 @@
  *  - console 版带 ANSI（logger），boot 文件版纯文本（log），互不污染
  */
 import type { CanonicalElementLike, EventChannelLike, KernelLike, LoggerLike } from "./types.js";
-import { errMsg, log } from "./util.js";
+import { errMsg, forEachRawMessage, log } from "./util.js";
 
 /** 终端 ANSI 颜色（消息日志颜色分层，2026-08-07 用户定稿）。 */
 const ANSI = {
@@ -58,14 +58,10 @@ export function setupMsgLogging(
     logger: LoggerLike | undefined,
 ): void {
     channel.on("Msg/onRecvMsg", (msgs) => {
-        const list = Array.isArray(msgs) ? msgs : [msgs];
-        for (const msg of list) {
-            if (!msg || typeof msg !== "object") {
-                continue;
-            }
+        forEachRawMessage(msgs, (m) => {
             try {
-                const raw = msg as { chatType?: unknown; peerUin?: unknown; senderUin?: unknown };
-                const rendered = renderMessage(kernel, msg);
+                const raw = m as { chatType?: unknown; peerUin?: unknown; senderUin?: unknown };
+                const rendered = renderMessage(kernel, m);
                 const isGroup = raw.chatType === kernel.ChatType.GROUP;
                 const kind = isGroup ? "群聊" : "私聊";
                 const peerUin = String(raw.peerUin ?? "");
@@ -90,6 +86,6 @@ export function setupMsgLogging(
                 log(line2);
                 logger?.warn(line2);
             }
-        }
+        });
     });
 }

@@ -15,30 +15,43 @@ const setEssenceMsgSchema = z.object({
     message_id: z.union([z.number(), z.string()]),
 });
 
-type SetEssenceMsgPayload = z.infer<typeof setEssenceMsgSchema>;
-
 /** 精华消息依赖（OneBotApi 视图，由装配方注入）。 */
 export type EssenceMsgDeps = Pick<OneBotApi, "groupApi" | "messageUnique">;
 
-/** 设置精华消息（P2-10 接 kernel addGroupEssence）。 */
-export class SetEssenceMsgAction extends BaseAction<SetEssenceMsgPayload, null> {
-    readonly name = "set_essence_msg";
-    readonly schema = setEssenceMsgSchema;
+/** 精华消息基类（set/delete 共用实现，2026-08-08 克隆合并）。 */
+export abstract class EssenceMsgBase extends BaseAction<{ message_id: number | string }, null> {
     protected readonly errorCodeMap = ob11ErrorCodeMap;
 
-    private readonly deps: EssenceMsgDeps;
+    protected readonly deps: EssenceMsgDeps;
 
     constructor(deps: EssenceMsgDeps) {
         super();
         this.deps = deps;
     }
 
-    protected async _handle(payload: SetEssenceMsgPayload): Promise<null> {
+    protected async _handle(payload: { message_id: number | string }): Promise<null> {
         const { msgId, peer } = resolveMsgIdAndPeer(payload.message_id, this.deps.messageUnique);
         if (peer.chatType !== ChatType.GROUP) {
             throw kernelError("精华消息仅支持群聊消息", "INVALID_PARAM");
         }
-        await this.deps.groupApi.addGroupEssence(peer.peerUid, msgId);
+        await this.operate(peer.peerUid, msgId);
         return null;
+    }
+
+    /** 具体精华操作（子类实现：addGroupEssence / removeGroupEssence）。 */
+    protected abstract operate(groupCode: string, msgId: string): Promise<void>;
+}
+
+/** 设置精华消息（P2-10 接 kernel addGroupEssence）。 */
+export class SetEssenceMsgAction extends EssenceMsgBase {
+    readonly name = "set_essence_msg";
+    readonly schema = setEssenceMsgSchema;
+
+    constructor(deps: EssenceMsgDeps) {
+        super(deps);
+    }
+
+    protected async operate(groupCode: string, msgId: string): Promise<void> {
+        await this.deps.groupApi.addGroupEssence(groupCode, msgId);
     }
 }

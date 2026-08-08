@@ -7,6 +7,7 @@
  * wsReverse 废弃（zod strip 静默忽略，不兼容迁移）。
  */
 import { z } from "zod";
+import { createHttpServerSchema } from "../../core/transport-schema.js";
 
 /** HTTP 反向服务器默认端口。 */
 const DEFAULT_HTTP_PORT = 3000;
@@ -23,13 +24,7 @@ const DEFAULT_RECONNECT_DELAY_MS = 5000;
 const MESSAGE_FORMATS = ["array", "string"] as const;
 
 /** HTTP 反向服务器实例（第三方 POST 指令入口）。 */
-const httpServerSchema = z.object({
-    enabled: z.boolean().default(false),
-    host: z.string().default("127.0.0.1"),
-    port: z.number().int().default(DEFAULT_HTTP_PORT),
-    /** 实例级 token，覆盖全局 token（缺省继承全局）。 */
-    token: z.string().optional(),
-});
+const httpServerSchema = createHttpServerSchema(DEFAULT_HTTP_PORT);
 
 /** HTTP 正向上报实例（Webhook 事件推送）。 */
 const httpPostSchema = z.object({

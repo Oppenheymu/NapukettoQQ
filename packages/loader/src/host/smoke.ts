@@ -17,7 +17,7 @@
 
 import { env } from "./env.js";
 import type { CoreContextLike, KernelLike, LoginResultLike } from "./types.js";
-import { errMsg, log } from "./util.js";
+import { errMsg, forEachRawMessage, log } from "./util.js";
 
 /** 冒烟测试默认等待（毫秒）。 */
 const SMOKE_SETTLE_MS = 5000;
@@ -95,15 +95,11 @@ export async function runSmokeTest(
     let received = 0;
     let receivedText = "";
     channel.on("Msg/onRecvMsg", (msgs) => {
-        const list = Array.isArray(msgs) ? msgs : [msgs];
-        for (const msg of list) {
-            if (!msg || typeof msg !== "object") {
-                continue;
-            }
+        forEachRawMessage(msgs, (m) => {
             received += 1;
             try {
                 const texts = kernel
-                    .toCanonicalElements(msg)
+                    .toCanonicalElements(m)
                     .filter((el) => el.type === "text")
                     .map((el) => el.text)
                     .join("");
@@ -114,9 +110,9 @@ export async function runSmokeTest(
                 log(`smoke: onRecvMsg 解析失败: ${errMsg(e)}`);
             }
             log(
-                `smoke: 📥 onRecvMsg 收到 #${received}（msgId=${msg.msgId ?? "?"} seq=${msg.msgSeq ?? "?"} text="${receivedText}"）`,
+                `smoke: 📥 onRecvMsg 收到 #${received}（msgId=${(m as { msgId?: unknown }).msgId ?? "?"} seq=${(m as { msgSeq?: unknown }).msgSeq ?? "?"} text="${receivedText}"）`,
             );
-        }
+        });
     });
 
     // ③ 发送方向：MsgApi.sendMessage

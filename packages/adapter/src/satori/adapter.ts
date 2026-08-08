@@ -11,6 +11,7 @@
 import type { MsgEventChannel, RawMessage } from "@napuketto/kernel";
 import type { EventBroadcaster } from "@napuketto/network";
 import { BaseProtocolAdapter, type ProtocolConfig } from "../core/index.js";
+import { forEachRawMessage } from "../core/raw-message.js";
 import { createSatoriActionRegistry } from "./action/index.js";
 import type { SatoriApiOptions } from "./api/satori-api.js";
 import { SatoriApi } from "./api/satori-api.js";
@@ -121,20 +122,16 @@ export class NapukettoSatoriAdapter extends BaseProtocolAdapter<SatoriConfig> {
             return;
         }
         this.unsubscribe = this.msgChannel.on("Msg/onRecvMsg", (msgs) => {
-            const list = Array.isArray(msgs) ? msgs : [msgs];
-            for (const msg of list) {
-                if (!msg || typeof msg !== "object") {
-                    continue;
-                }
+            forEachRawMessage(msgs, (msg) => {
                 // grayTip（系统事件）→ 撤回/群成员变动事件；否则 → 消息事件
                 if (hasSatoriGrayTip(msg)) {
                     this.broadcastGrayTip(msg).catch(() => {
                         // grayTip 翻译失败静默（结构探测期宽容）
                     });
-                    continue;
+                    return;
                 }
                 void this.broadcastMessageCreated(msg);
-            }
+            });
         });
     }
 

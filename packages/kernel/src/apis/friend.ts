@@ -14,6 +14,7 @@ import type {
     NodeIKernelBuddyService,
 } from "../types/services/buddy-service.js";
 import type { NodeIQQNTWrapperSession } from "../types/wrapper.js";
+import { checkLooseResult, unwrap } from "./result.js";
 
 /** 好友条目（uid + 昵称/备注，昵称由 buddy service 缓存补全）。 */
 export interface Friend {
@@ -50,14 +51,6 @@ export interface DoubtFriendRequestInfo {
 export interface FriendApiOptions {
     /** uid→uin 转换器（通常注入 GroupApi.uidToUin）；缺省 uin 退化为 uid。 */
     uidToUin?: (uids: string[]) => Promise<Map<string, string>>;
-}
-
-/** 原生 result 解包（result 字段非 0 抛 KernelError）。 */
-function unwrap(label: string, result: number, errMsg?: string): void {
-    if (result === 0) {
-        return;
-    }
-    throw kernelError(`${label} 失败: ${errMsg ?? "无错误详情"}`, "UNKNOWN");
 }
 
 /** 好友 API：从 session 拿 buddy service，包装成语义化方法。 */
@@ -175,15 +168,7 @@ export class FriendApi {
             tempBlock,
             tempBothDel,
         })) as { result?: unknown; errMsg?: unknown } | undefined;
-        // 宽松校验：返回对象带 result 数字非 0 视为失败（形状待探测校准）
-        if (
-            res !== undefined &&
-            res !== null &&
-            typeof res.result === "number" &&
-            res.result !== 0
-        ) {
-            throw kernelError(`delBuddy 失败: ${String(res.errMsg ?? "")}`, "UNKNOWN");
-        }
+        checkLooseResult("delBuddy", res);
     }
 
     /** 可疑好友申请列表（get_doubt_friends_add_request；uin 经 uidToUin 转换）。 */

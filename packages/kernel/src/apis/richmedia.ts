@@ -12,6 +12,7 @@ import type {
     NodeIKernelRichMediaService,
 } from "../types/services/richmedia-service.js";
 import type { NodeIQQNTWrapperSession } from "../types/wrapper.js";
+import { unwrap } from "./result.js";
 
 /** 群文件业务类型（deleteGroupFile/moveGroupFile/renameGroupFile 用，说明书参考）。 */
 const GROUP_FILE_BIZ_TYPE = 102;
@@ -27,14 +28,6 @@ const HIDE_ONLINEDOC_FOLDER = 0;
 const DEFAULT_FILE_COUNT = 50;
 /** 空间查询文件数量（单条即可）。 */
 const SPACE_QUERY_FILE_COUNT = 1;
-
-/** 原生 result 解包（result 字段非 0 抛 KernelError）。 */
-function unwrap(label: string, result: number, errMsg?: string): void {
-    if (result === 0) {
-        return;
-    }
-    throw kernelError(`${label} 失败: ${errMsg ?? "无错误详情"}`, "UNKNOWN");
-}
 
 /** 群文件列表条目（fileInfo/folderInfo 取其一）。 */
 export interface GroupFileListItem {

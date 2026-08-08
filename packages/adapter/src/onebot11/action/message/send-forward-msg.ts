@@ -12,6 +12,7 @@ import { BaseAction } from "../../../core/index.js";
 import type { OneBotApi } from "../../api/one-bot-api.js";
 import type { MessageUnique } from "../../helper/message-unique.js";
 import { ob11ErrorCodeMap } from "../error-map.js";
+import { resolveUid } from "../resolve-uid.js";
 
 const forwardNodeSchema = z.object({
     type: z.literal("node").optional(),
@@ -63,6 +64,25 @@ function resolveSourceMessages(
     return out;
 }
 
+/** 合并转发发送（群/私聊共用：解析源消息 → 发送 → 映射 message_id）。 */
+async function sendForward(
+    messages: unknown[],
+    target: Peer,
+    deps: ForwardMsgDeps,
+): Promise<{ message_id: number }> {
+    const sources = resolveSourceMessages(messages, deps.messageUnique);
+    const [firstSource] = sources;
+    if (firstSource === undefined) {
+        throw kernelError("合并转发需要至少一条可解析的源消息（node.id）", "INVALID_PARAM");
+    }
+    const { msgId } = await deps.msgApi.sendForwardMessage(
+        target,
+        firstSource.peer,
+        sources.map((s) => s.msgId),
+    );
+    return { message_id: deps.messageUnique.alloc(msgId, target) };
+}
+
 /** 发送群合并转发（P2-12 接 kernel sendForwardMessage）。 */
 export class SendGroupForwardMsgAction extends BaseAction<
     SendGroupForwardMsgPayload,
@@ -80,18 +100,8 @@ export class SendGroupForwardMsgAction extends BaseAction<
     }
 
     protected async _handle(payload: SendGroupForwardMsgPayload): Promise<{ message_id: number }> {
-        const sources = resolveSourceMessages(payload.messages, this.deps.messageUnique);
-        const [firstSource] = sources;
-        if (firstSource === undefined) {
-            throw kernelError("合并转发需要至少一条可解析的源消息（node.id）", "INVALID_PARAM");
-        }
         const target: Peer = { chatType: ChatType.GROUP, peerUid: String(payload.group_id) };
-        const { msgId } = await this.deps.msgApi.sendForwardMessage(
-            target,
-            firstSource.peer,
-            sources.map((s) => s.msgId),
-        );
-        return { message_id: this.deps.messageUnique.alloc(msgId, target) };
+        return await sendForward(payload.messages, target, this.deps);
     }
 }
 
@@ -114,22 +124,8 @@ export class SendPrivateForwardMsgAction extends BaseAction<
     protected async _handle(
         payload: SendPrivateForwardMsgPayload,
     ): Promise<{ message_id: number }> {
-        const sources = resolveSourceMessages(payload.messages, this.deps.messageUnique);
-        const [firstSource] = sources;
-        if (firstSource === undefined) {
-            throw kernelError("合并转发需要至少一条可解析的源消息（node.id）", "INVALID_PARAM");
-        }
-        const uidMap = await this.deps.uinToUid([String(payload.user_id)]);
-        const uid = uidMap.get(String(payload.user_id));
-        if (uid === undefined) {
-            throw kernelError(`用户 ${payload.user_id} 的 uid 解析失败`, "INVALID_PARAM");
-        }
+        const uid = await resolveUid(String(payload.user_id), this.deps.uinToUid);
         const target: Peer = { chatType: ChatType.C2C, peerUid: uid };
-        const { msgId } = await this.deps.msgApi.sendForwardMessage(
-            target,
-            firstSource.peer,
-            sources.map((s) => s.msgId),
-        );
-        return { message_id: this.deps.messageUnique.alloc(msgId, target) };
+        return await sendForward(payload.messages, target, this.deps);
     }
 }

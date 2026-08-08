@@ -12,7 +12,15 @@
  *
  * user_id/operator_id 都是 uin：接收 uidToUin Map（调用方批量转换后传入，保持纯函数）。
  */
-import { GrayTipSubType, type RawMessage, TipGroupElementType } from "@napuketto/kernel";
+import {
+    GrayTipSubType,
+    type RawMessage,
+    type TipGroupElement,
+    TipGroupElementType,
+} from "@napuketto/kernel";
+
+export { collectGrayTipUids } from "../../core/gray-tip.js";
+
 import type {
     OB11Event,
     OB11GroupAdminNoticeEvent,
@@ -34,38 +42,6 @@ export interface NoticeTranslateContext {
 /** 检查消息是否含可翻译的 grayTip 元素。 */
 export function hasGrayTip(msg: RawMessage): boolean {
     return msg.elements.some((el) => el.grayTipElement !== undefined);
-}
-
-/** 收集 grayTip 涉及的 uid（批量 uidToUin 用）。 */
-export function collectGrayTipUids(msg: RawMessage): string[] {
-    const uids = new Set<string>();
-    for (const el of msg.elements) {
-        const g = el.grayTipElement;
-        if (g === undefined) {
-            continue;
-        }
-        const revoke = g.revokeElement;
-        if (revoke?.operatorUid !== undefined && revoke.operatorUid !== "") {
-            uids.add(revoke.operatorUid);
-        }
-        const grp = g.groupElement;
-        if (grp === undefined) {
-            continue;
-        }
-        if (grp.memberUid !== undefined && grp.memberUid !== "") {
-            uids.add(grp.memberUid);
-        }
-        if (grp.adminUid !== undefined && grp.adminUid !== "") {
-            uids.add(grp.adminUid);
-        }
-        if (grp.shutUp?.admin?.uid !== undefined && grp.shutUp.admin.uid !== "") {
-            uids.add(grp.shutUp.admin.uid);
-        }
-        if (grp.shutUp?.member?.uid !== undefined && grp.shutUp.member.uid !== "") {
-            uids.add(grp.shutUp.member.uid);
-        }
-    }
-    return [...uids];
 }
 
 /** uid → uin（上下文映射缺省退化为 uid）。 */
@@ -127,69 +103,110 @@ function toGroupChange(
     if (grp === undefined || grp.type === undefined) {
         return null;
     }
-    const groupId = Number(msg.peerUid);
-    const time = Math.floor(Number(msg.msgTime) / MS_TO_SEC);
-    const selfId = Number(ctx.selfUin);
-    const memberUid = grp.memberUid ?? "";
-    const adminUid = grp.adminUid ?? "";
+    const common = {
+        time: Math.floor(Number(msg.msgTime) / MS_TO_SEC),
+        selfId: Number(ctx.selfUin),
+        groupId: Number(msg.peerUid),
+        memberUid: grp.memberUid ?? "",
+        adminUid: grp.adminUid ?? "",
+    };
     switch (grp.type) {
-        case TipGroupElementType.MEMBER_ADD: {
-            const event: OB11GroupIncreaseNoticeEvent = {
-                time,
-                self_id: selfId,
-                post_type: "notice",
-                notice_type: "group_increase",
-                sub_type: adminUid === memberUid ? "approve" : "invite",
-                group_id: groupId,
-                operator_id: toUin(adminUid, ctx),
-                user_id: toUin(memberUid, ctx),
-            };
-            return event;
-        }
-        case TipGroupElementType.QUIT: {
-            const event: OB11GroupDecreaseNoticeEvent = {
-                time,
-                self_id: selfId,
-                post_type: "notice",
-                notice_type: "group_decrease",
-                sub_type: "leave",
-                group_id: groupId,
-                operator_id: toUin(adminUid, ctx),
-                user_id: toUin(memberUid, ctx),
-            };
-            return event;
-        }
+        case TipGroupElementType.MEMBER_ADD:
+            return toMemberAdd(common, ctx);
+        case TipGroupElementType.QUIT:
+            return toQuit(common, ctx);
         case TipGroupElementType.BLOCK:
-        case TipGroupElementType.UNBLOCK: {
-            const event: OB11GroupAdminNoticeEvent = {
-                time,
-                self_id: selfId,
-                post_type: "notice",
-                notice_type: "group_admin",
-                sub_type: grp.type === TipGroupElementType.BLOCK ? "set" : "unset",
-                group_id: groupId,
-                user_id: toUin(memberUid === "" ? adminUid : memberUid, ctx),
-            };
-            return event;
-        }
-        case TipGroupElementType.SHUT_UP: {
-            const shutUp = grp.shutUp;
-            const event: OB11GroupBanNoticeEvent = {
-                time,
-                self_id: selfId,
-                post_type: "notice",
-                notice_type: "group_ban",
-                sub_type: Number(shutUp?.duration ?? 0) > 0 ? "ban" : "lift_ban",
-                group_id: groupId,
-                operator_id: toUin(shutUp?.admin?.uid ?? adminUid, ctx),
-                user_id: toUin(shutUp?.member?.uid ?? memberUid, ctx),
-                duration: Number(shutUp?.duration ?? 0),
-            };
-            return event;
-        }
+        case TipGroupElementType.UNBLOCK:
+            return toAdminChange(common, grp, ctx);
+        case TipGroupElementType.SHUT_UP:
+            return toBan(common, grp, ctx);
         default:
             return null;
     }
+}
+
+/** 群成员变动公共字段。 */
+interface GroupChangeCommon {
+    time: number;
+    selfId: number;
+    groupId: number;
+    memberUid: string;
+    adminUid: string;
+}
+
+/** 群成员增加（approve=管理员操作 / invite=普通邀请）。 */
+function toMemberAdd(
+    common: GroupChangeCommon,
+    ctx: NoticeTranslateContext,
+): OB11GroupIncreaseNoticeEvent {
+    const { time, selfId, groupId, memberUid, adminUid } = common;
+    return {
+        time,
+        self_id: selfId,
+        post_type: "notice",
+        notice_type: "group_increase",
+        sub_type: adminUid === memberUid ? "approve" : "invite",
+        group_id: groupId,
+        operator_id: toUin(adminUid, ctx),
+        user_id: toUin(memberUid, ctx),
+    };
+}
+
+/** 群成员退出（leave）。 */
+function toQuit(
+    common: GroupChangeCommon,
+    ctx: NoticeTranslateContext,
+): OB11GroupDecreaseNoticeEvent {
+    const { time, selfId, groupId, memberUid, adminUid } = common;
+    return {
+        time,
+        self_id: selfId,
+        post_type: "notice",
+        notice_type: "group_decrease",
+        sub_type: "leave",
+        group_id: groupId,
+        operator_id: toUin(adminUid, ctx),
+        user_id: toUin(memberUid, ctx),
+    };
+}
+
+/** 管理员变更（BLOCK=set / UNBLOCK=unset）。 */
+function toAdminChange(
+    common: GroupChangeCommon,
+    grp: TipGroupElement,
+    ctx: NoticeTranslateContext,
+): OB11GroupAdminNoticeEvent {
+    const { time, selfId, groupId, memberUid, adminUid } = common;
+    return {
+        time,
+        self_id: selfId,
+        post_type: "notice",
+        notice_type: "group_admin",
+        sub_type: grp.type === TipGroupElementType.BLOCK ? "set" : "unset",
+        group_id: groupId,
+        user_id: toUin(memberUid === "" ? adminUid : memberUid, ctx),
+    };
+}
+
+/** 禁言（duration>0=ban / 否则 lift_ban）。 */
+function toBan(
+    common: GroupChangeCommon,
+    grp: TipGroupElement,
+    ctx: NoticeTranslateContext,
+): OB11GroupBanNoticeEvent {
+    const { time, selfId, groupId, adminUid, memberUid } = common;
+    const shutUp = grp.shutUp;
+    return {
+        time,
+        self_id: selfId,
+        post_type: "notice",
+        notice_type: "group_ban",
+        sub_type: Number(shutUp?.duration ?? 0) > 0 ? "ban" : "lift_ban",
+        group_id: groupId,
+        operator_id: toUin(shutUp?.admin?.uid ?? adminUid, ctx),
+        user_id: toUin(shutUp?.member?.uid ?? memberUid, ctx),
+        duration: Number(shutUp?.duration ?? 0),
+    };
 }
 
 /** RawMessage → OB11 notice 事件（无 grayTip 返回 null）。 */

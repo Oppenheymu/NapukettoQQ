@@ -17,14 +17,7 @@ import {
 } from "../types/services/group-service.js";
 import type { NodeIKernelMsgService } from "../types/services/msg-service.js";
 import type { NodeIQQNTWrapperSession } from "../types/wrapper.js";
-
-/** 原生 result 解包（result 字段非 0 抛 KernelError）。 */
-function unwrap(label: string, result: number, errMsg?: string): void {
-    if (result === 0) {
-        return;
-    }
-    throw kernelError(`${label} 失败: ${errMsg ?? "无错误详情"}`, "UNKNOWN");
-}
+import { checkLooseResult, unwrap } from "./result.js";
 
 /** 群 API：从 session 拿 group service，包装成语义化方法。 */
 export class GroupApi {
@@ -262,15 +255,7 @@ export class GroupApi {
                 | { result?: unknown; errMsg?: unknown }
                 | undefined;
         }
-        // 宽松校验：返回对象带 result 数字非 0 视为失败（形状待探测校准）
-        if (
-            res !== undefined &&
-            res !== null &&
-            typeof res.result === "number" &&
-            res.result !== 0
-        ) {
-            throw kernelError(`${label} 失败: ${String(res.errMsg ?? "")}`, "UNKNOWN");
-        }
+        checkLooseResult(label, res);
     }
 
     /** @all 剩余次数（get_group_at_all_remain）。 */

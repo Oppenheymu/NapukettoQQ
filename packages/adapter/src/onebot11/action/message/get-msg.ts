@@ -4,7 +4,7 @@
  * message_id → msgId + peer（MessageUnique 反查）→ 拉消息 → OB11 消息信息结构。
  */
 
-import { kernelError, toCanonicalElements } from "@napuketto/kernel";
+import { toCanonicalElements } from "@napuketto/kernel";
 import { z } from "zod";
 import { BaseAction } from "../../../core/index.js";
 import type { OneBotApi } from "../../api/one-bot-api.js";
@@ -13,9 +13,9 @@ import {
     type ReceiveTranslateContext,
     toOb11MessageInfo,
 } from "../../helper/index.js";
-import { resolveMsgIdAndPeer } from "../../helper/message-unique.js";
 import type { OB11MessageInfo } from "../../types/index.js";
 import { ob11ErrorCodeMap } from "../error-map.js";
+import { fetchMsgById } from "./resolve-peer.js";
 
 const getMsgSchema = z.object({
     message_id: z.union([z.number(), z.string()]),
@@ -40,12 +40,11 @@ export class GetMsgAction extends BaseAction<GetMsgPayload, OB11MessageInfo> {
     }
 
     protected async _handle(payload: GetMsgPayload): Promise<OB11MessageInfo> {
-        const { msgId, peer } = resolveMsgIdAndPeer(payload.message_id, this.deps.messageUnique);
-        const msgs = await this.deps.msgApi.fetchMsgsByMsgId(peer, [msgId]);
-        const [msg] = msgs;
-        if (msg === undefined) {
-            throw kernelError(`消息 ${payload.message_id} 不存在或已被撤回`, "NOT_FOUND");
-        }
+        const { msg } = await fetchMsgById(
+            payload.message_id,
+            this.deps.messageUnique,
+            this.deps.msgApi,
+        );
         // P2-19：收集 at uid → 批量 uidToUin → 上下文注入（at uid→uin、reply 映射）
         const elements = toCanonicalElements(msg);
         const { atUids } = collectReceiveNeeds(elements);

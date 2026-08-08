@@ -13,14 +13,7 @@ import type {
     NTGroupRequestOperateTypes,
 } from "../types/services/group-service.js";
 import type { NodeIQQNTWrapperSession } from "../types/wrapper.js";
-
-/** 原生 result 解包（result 字段非 0 抛 KernelError）。 */
-function unwrap(label: string, result: number, errMsg?: string): void {
-    if (result === 0) {
-        return;
-    }
-    throw kernelError(`${label} 失败: ${errMsg ?? "无错误详情"}`, "UNKNOWN");
-}
+import { unwrap } from "./result.js";
 
 /** 群通知 API：从 session 拿 group service，包装成语义化方法。 */
 export class GroupNotifyApi {

@@ -9,6 +9,7 @@
 import { kernelError } from "../infra/errors.js";
 import { createLoginListener } from "../wrapper/wrapper-adapters.js";
 import type { WrapperContext } from "../wrapper/wrapper-loader.js";
+import { sleep, waitFor } from "./wait.js";
 
 /** 登录结果（QR 或快速登录）。 */
 export interface LoginResult {
@@ -55,32 +56,6 @@ const NETWORK_READY_POLL_MS = 1000;
 
 /** 连接稳定缓冲（毫秒，p0-kernel-flow 实证值）。 */
 const CONNECTION_SETTLE_MS = 3000;
-
-/** 等待条件满足（轮询，带超时）。 */
-function waitFor(predicate: () => boolean, timeoutMs: number, intervalMs = 500): Promise<boolean> {
-    return new Promise((resolve) => {
-        const started = Date.now();
-        const tick = (): void => {
-            if (predicate()) {
-                resolve(true);
-                return;
-            }
-            if (Date.now() - started > timeoutMs) {
-                resolve(false);
-                return;
-            }
-            setTimeout(tick, intervalMs);
-        };
-        tick();
-    });
-}
-
-/** 短延迟。 */
-function sleep(ms: number): Promise<void> {
-    return new Promise((resolve) => {
-        setTimeout(resolve, ms);
-    });
-}
 
 /**
  * 等待网络连接就绪（loginService.getMsfStatus() === 3）。

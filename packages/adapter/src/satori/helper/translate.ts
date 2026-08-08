@@ -5,7 +5,7 @@
  * uidToUin 批量转换（依赖注入，与 OB11 的 ReceiveTranslateContext 同思路）。
  */
 import { ChatType, type RawMessage, toCanonicalElements } from "@napuketto/kernel";
-import type { Channel, Guild, Message, User } from "../types/resource.js";
+import type { Channel, Message } from "../types/resource.js";
 import { canonicalToSatoriElements } from "./canonical.js";
 import { renderElements } from "./element.js";
 import { toDirectChannel, toGroupChannel, toGuild, toUser } from "./ids.js";
@@ -16,14 +16,6 @@ export interface SatoriTranslateDeps {
     selfUin: string;
     /** uid → uin（at 目标 / 用户 ID；缺省不转换）。 */
     uidToUin?: (uids: string[]) => Promise<Map<string, string>>;
-}
-
-/** 提取消息的收方向依赖（adapter 订阅处构造，与 OB11 对齐）。 */
-export function translateDepsFrom(
-    selfUin: string,
-    uidToUin: (uids: string[]) => Promise<Map<string, string>>,
-): SatoriTranslateDeps {
-    return { selfUin, uidToUin };
 }
 
 /** RawMessage → Satori Message（资源提升：message 不嵌套 user/member/channel）。 */
@@ -73,14 +65,4 @@ export function toChannelById(channelId: string, isGroup: boolean, name?: string
         return toGroupChannel(channelId, name);
     }
     return toDirectChannel(channelId, name);
-}
-
-/** 群详情 → Satori Guild。 */
-export function toGuildFromName(groupCode: string, name?: string): Guild {
-    return toGuild(groupCode, name);
-}
-
-/** 用户（uin + 昵称）。 */
-export function toUserById(uin: string, nickname?: string): User {
-    return toUser(uin, nickname);
 }

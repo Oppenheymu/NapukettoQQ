@@ -2,10 +2,11 @@
  * set_group_card 动作：设置群名片（P2-10 接 kernel GroupApi.setMemberCardName）
  */
 
-import { type GroupApi, kernelError } from "@napuketto/kernel";
+import type { GroupApi } from "@napuketto/kernel";
 import { z } from "zod";
 import { BaseAction } from "../../../core/index.js";
 import { ob11ErrorCodeMap } from "../error-map.js";
+import { resolveUid } from "../resolve-uid.js";
 
 const setGroupCardSchema = z.object({
     group_id: z.number(),
@@ -30,11 +31,9 @@ export class SetGroupCardAction extends BaseAction<SetGroupCardPayload, null> {
     }
 
     protected async _handle(payload: SetGroupCardPayload): Promise<null> {
-        const uidMap = await this.groupApi.uinToUid([String(payload.user_id)]);
-        const uid = uidMap.get(String(payload.user_id));
-        if (uid === undefined) {
-            throw kernelError(`用户 ${payload.user_id} 的 uid 解析失败`, "INVALID_PARAM");
-        }
+        const uid = await resolveUid(String(payload.user_id), (uins) =>
+            this.groupApi.uinToUid(uins),
+        );
         this.groupApi.setMemberCardName(String(payload.group_id), uid, payload.card);
         return null;
     }

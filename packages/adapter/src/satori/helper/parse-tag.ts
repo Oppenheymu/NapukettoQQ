@@ -39,7 +39,7 @@ function decodeEntity(body: string): string {
 }
 
 /** 解码字符串中的全部实体。 */
-export function decodeEntities(input: string): string {
+function decodeEntities(input: string): string {
     return input.replace(/&([^;]+);/g, (_full, body: string) => decodeEntity(body));
 }
 
