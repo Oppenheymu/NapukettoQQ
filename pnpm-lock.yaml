@@ -270,7 +270,7 @@ importers:
         specifier: ^0.22.14
         version: 0.22.14(typescript@7.0.2)
 
-  apps/koishi-plugin-adapter-napuketto:
+  apps/koishi-plugin-adapter:
     devDependencies:
       '@biomejs/biome':
         specifier: ^2.5.6

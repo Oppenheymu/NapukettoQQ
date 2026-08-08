@@ -19,7 +19,7 @@ const repoRoot = join(__dirname, "..", "..");
 const bundle = require(join(
     repoRoot,
     "apps",
-    "koishi-plugin-adapter-napuketto",
+    "koishi-plugin-adapter",
     "lib",
     "index.cjs",
 ));

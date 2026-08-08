@@ -39,6 +39,6 @@
         "noEmit": true
     },
     "exclude": [
-        "apps/koishi-plugin-adapter-napuketto"
+        "apps/koishi-plugin-adapter"
     ]
 }
