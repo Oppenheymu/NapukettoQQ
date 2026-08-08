@@ -8,6 +8,7 @@
  * ⚠️ 不自研 kernel 依赖（loader 运行时 file:// 动态 import kernel，编译期不建
  * workspace 依赖——见 types.ts 注释）。错误码提取用宽松结构判断。
  */
+import { log } from "../util.js";
 
 /** 宽松 Peer 最小面（kernel Peer：chatType + peerUid）。 */
 export interface IpcPeer {
@@ -45,7 +46,12 @@ export type IpcActionHandler = (params: Record<string, unknown>) => Promise<unkn
 
 /**
  * 从宽松 params 构造 Peer（缺省 chatType=1 群聊）。
- * 优先 peerUid（uid 直通）；缺省时 peerUin（QQ 号）经 uinToUid 转换。
+ * 优先 peerUid（uid 直通）；缺省时 peerUin 经 uinToUid 转换。
+ *
+ * ⚠️ 2026-08-09 修复：群聊（chatType=2）peerUid 直接用群号（kernel Peer 定义
+ * 「群号 / 用户 uid」，OB11 resolve-peer 同构），**不走 uinToUid**——
+ * getUidByUins 是「用户 uin → uid」转换，传群号属非法调用（QQ 原生内部
+ * 抛 `Cannot read properties of undefined (reading 'service')`，实测）。
  */
 async function toPeer(
     params: Record<string, unknown>,
@@ -57,13 +63,19 @@ async function toPeer(
         return { chatType, peerUid: uidParam };
     }
     const uinParam = params["peerUin"];
-    if (typeof uinParam === "string" && uinParam !== "" && uinToUid !== undefined) {
-        const map = await uinToUid([uinParam]);
-        const uid = map.get(uinParam);
-        if (uid !== undefined && uid !== "") {
-            return { chatType, peerUid: uid };
+    if (typeof uinParam === "string" && uinParam !== "") {
+        if (chatType === 2) {
+            return { chatType, peerUid: uinParam };
         }
-        throw new Error(`uin 转 uid 失败: ${uinParam}`);
+        if (uinToUid !== undefined) {
+            const map = await uinToUid([uinParam]);
+            const uid = map.get(uinParam);
+            if (uid !== undefined && uid !== "") {
+                return { chatType, peerUid: uid };
+            }
+            throw new Error(`uin 转 uid 失败: ${uinParam}`);
+        }
+        throw new Error("缺 peerUid（或 peerUin 且未注入 uinToUid）");
     }
     throw new Error("缺 peerUid（或 peerUin 且未注入 uinToUid）");
 }
@@ -125,7 +137,11 @@ export async function callIpcAction(
         const value = await handler(params ?? {});
         return { ok: true, value };
     } catch (err) {
+        // 诊断（2026-08-09）：错误消息传回 koishi 会丢堆栈，先落 boot 日志
+        // 便于定位真实错误位置（QQ 原生内部抛错时消息难以反查）。
         const message = err instanceof Error ? err.message : String(err);
+        const stack = err instanceof Error && err.stack !== undefined ? err.stack : "";
+        log(`[ipc] action=${action} 失败: ${message}\n${stack}`);
         return { ok: false, error: { code: errorCodeOf(err), message } };
     }
 }

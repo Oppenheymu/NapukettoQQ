@@ -40,7 +40,7 @@ describe("createIpcActions", () => {
         expect(result).toEqual({ ok: true, value: { uin: "10001", nickname: "测试号" } });
     });
 
-    it("msg.sendMessage 透传 peer/elements 并返回 msgId", async () => {
+    it("msg.sendMessage 群聊 peerUin 直通为 peerUid（不走 uinToUid）", async () => {
         const ctx = mockCtx();
         const actions = createIpcActions(ctx);
         const result = await callIpcAction(actions, "msg.sendMessage", {
@@ -49,9 +49,26 @@ describe("createIpcActions", () => {
             elements: [{ type: "text", text: "你好" }],
         });
         expect(result).toEqual({ ok: true, value: { msgId: "42" } });
-        expect(ctx.msgApi.sendMessage).toHaveBeenCalledWith({ chatType: 2, peerUid: "u_12345" }, [
+        expect(ctx.msgApi.sendMessage).toHaveBeenCalledWith({ chatType: 2, peerUid: "12345" }, [
             { type: "text", text: "你好" },
         ]);
+        // 群聊不触发 uinToUid（getUidByUins 是用户转换，传群号属非法调用）
+        expect(ctx.uinToUid).not.toHaveBeenCalled();
+    });
+
+    it("msg.sendMessage 私聊 peerUin 经 uinToUid 转 uid", async () => {
+        const ctx = mockCtx();
+        const actions = createIpcActions(ctx);
+        const result = await callIpcAction(actions, "msg.sendMessage", {
+            chatType: 1,
+            peerUin: "12345",
+            elements: [{ type: "text", text: "你好" }],
+        });
+        expect(result).toEqual({ ok: true, value: { msgId: "42" } });
+        expect(ctx.msgApi.sendMessage).toHaveBeenCalledWith({ chatType: 1, peerUid: "u_12345" }, [
+            { type: "text", text: "你好" },
+        ]);
+        expect(ctx.uinToUid).toHaveBeenCalledWith(["12345"]);
     });
 
     it("msg.recallMessage 透传 msgIds", async () => {
