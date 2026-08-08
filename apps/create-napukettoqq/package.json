@@ -17,7 +17,8 @@
     },
     "dependencies": {
         "@clack/prompts": "^1.7.0",
-        "@napuketto/cli": "workspace:*"
+        "@napuketto/cli": "workspace:*",
+        "picocolors": "^1.0.0"
     },
     "devDependencies": {
         "tsdown": "^0.22.14"

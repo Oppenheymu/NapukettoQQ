@@ -21,6 +21,8 @@ import { readFileSync } from "node:fs";
 import { relative } from "node:path";
 import process from "node:process";
 import { cancel, confirm, intro, isCancel, log, outro, spinner, text } from "@clack/prompts";
+import pc from "picocolors";
+import type { PackageManager } from "./scaffold.js";
 import {
     checkDirStatus,
     DEFAULT_PROJECT_NAME,
@@ -30,6 +32,9 @@ import {
     scaffoldProject,
     validateProjectName,
 } from "./scaffold.js";
+
+// picocolors 是 CJS 包（无 ESM 命名导出），Node ESM 下需 default import 再解构
+const { blue, bold, cyan, dim, red, yellow } = pc;
 
 /** CLI 参数解析结果。 */
 interface CliOptions {
@@ -91,13 +96,19 @@ async function askProjectName(yes: boolean): Promise<string> {
     if (yes) {
         return DEFAULT_PROJECT_NAME;
     }
+    // placeholder = 淡灰默认名：直接回车 = 用默认名，键入任意字符 = 从空自定义。
+    // 不设 initialValue——否则 clack 渲染的是已输入态（蓝色、光标在末尾），
+    // 淡灰 placeholder 不显示（对齐 koishi create 的观感）。
     const name = await text({
         message: "部署文件夹名",
         placeholder: DEFAULT_PROJECT_NAME,
-        initialValue: DEFAULT_PROJECT_NAME,
         validate: (input: string | undefined) => {
+            // 空输入 = 使用默认名，不报错
+            if (input === undefined || input.trim() === "") {
+                return undefined;
+            }
             try {
-                validateProjectName(input ?? "");
+                validateProjectName(input);
                 return undefined;
             } catch (err) {
                 return err instanceof Error ? err.message : String(err);
@@ -108,7 +119,34 @@ async function askProjectName(yes: boolean): Promise<string> {
         cancel("操作已取消");
         process.exit(0);
     }
-    return validateProjectName(name);
+    const trimmed = name.trim();
+    return trimmed === "" ? DEFAULT_PROJECT_NAME : validateProjectName(trimmed);
+}
+
+/**
+ * 包管理器品牌色（美化 v4，对齐 koishi create 观感）。
+ * 16 色近似 + bold：兼容所有终端（不依赖 truecolor），Windows Terminal /
+ * 老 conhost 都能正常显示。只做「标题 + 命令」两层，不做三套 UI。
+ */
+function brandColor(pm: PackageManager): (text: string) => string {
+    switch (pm) {
+        case "pnpm":
+            return (t) => yellow(bold(t));
+        case "yarn":
+            return (t) => blue(bold(t));
+        case "npm":
+            return (t) => red(bold(t));
+    }
+}
+
+/** 生成后的项目骨架文件树（提升完成感，dim 树枝 + 品牌色勾）。 */
+function renderTree(dirName: string, brand: (t: string) => string): string {
+    return [
+        brand("✓") + dim(" 生成的文件："),
+        dim(`  ${dirName}/`),
+        dim("  ├── ") + cyan("package.json"),
+        dim("  └── ") + cyan("napuketto.toml"),
+    ].join("\n");
 }
 
 /** 询问是否移除现有文件并继续（目标目录非空时）。 */
@@ -176,8 +214,12 @@ async function main(): Promise<void> {
         return;
     }
 
-    // intro：顶边框 + 名称 + 版本
-    intro(`create-napukettoqq  v${readVersion()}`);
+    // 包管理器提前检测：intro 品牌色 + install/start 命令都按它定向
+    const pm = detectPackageManager();
+    const brand = brandColor(pm);
+
+    // intro：品牌色标题（按调用方包管理器取色，PNPM 黄 / Yarn 蓝 / npm 红）
+    intro(brand(`create-napukettoqq  v${readVersion()}`));
 
     const dirName = opts.name ?? (await askProjectName(opts.yes));
     const targetDir = resolveTargetDir(dirName);
@@ -202,18 +244,17 @@ async function main(): Promise<void> {
     s.start(`正在生成项目骨架 ${dirName} ...`);
     const result = await scaffoldProject(dirName, overwrite);
     s.stop(`项目骨架已生成：${dirName}`);
+    log.message(renderTree(dirName, brand));
     log.success(`位置：${result.dir}`);
 
     // 自动安装依赖（用调用方包管理器）
-    const pm = detectPackageManager();
-    log.info(`包管理器：${pm}（自动检测）`);
     log.info("前置要求：本机已安装 QQ NT（wrapper.node 来自 QQ 安装目录）。");
-    log.info(`正在安装依赖（${pm} install）...`);
+    log.info(`正在安装依赖（${brand(pm)} install）...`);
     const installCode = await runInteractive(pmBin(pm), ["install"], result.dir);
     if (installCode !== 0) {
         log.error(`依赖安装失败（退出码 ${installCode}）。请手动执行：`);
         log.step(`cd ${result.dir}`);
-        log.step(`${pm} install`);
+        log.step(brand(`${pm} install`));
         outro("创建失败，请手动安装后重试。");
         process.exitCode = 1;
         return;
@@ -232,7 +273,7 @@ async function main(): Promise<void> {
             const related = relative(process.cwd(), targetDir);
             log.step(`cd ${related}`);
         }
-        log.step(`${pm} start -q <你的QQ号>`);
+        log.step(brand(`${pm} start -q <你的QQ号>`));
         log.message("配置说明见项目内 napuketto.toml。");
     }
 
