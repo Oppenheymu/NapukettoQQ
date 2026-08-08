@@ -1,8 +1,10 @@
 /**
  * 主配置类型与手写校验器（从 config-cmds.ts 拆分，2026-08-08 FTA 优化）
  *
- * 主配置 parse（不引入 zod）：数据根 / 自动重启 / 重启延迟 / 账号列表 /
- * onebot11 段 / satori 段。协议段为宽松对象，装配时由对应协议包的 zod schema 严格校验。
+ * 主配置 parse（不引入 zod）：数据根 / 自动重启 / 重启延迟 / 账号列表。
+ * 2026-08-08 结构拍板：**一个 QQ 账号一个 [[accounts]] 段，协议与通信配置嵌在
+ * 账号内**（[accounts.onebot11] / [accounts.satori]）；账号必填（至少一个）。
+ * 协议段为宽松对象，装配时由对应协议包的 zod schema 严格校验。
  */
 import { kernelError, resolveDataRoot } from "@napuketto/kernel";
 
@@ -11,10 +13,17 @@ const DEFAULT_AUTO_RESTART = true;
 /** 默认重启延迟（毫秒）。 */
 const DEFAULT_RESTART_DELAY_MS = 2000;
 
-/** 账号配置项。 */
+/** 协议段键（宽松对象，装配时 zod 严格校验）。 */
+type ProtocolKey = "onebot11" | "satori";
+
+/** 账号配置项（qq 必填；协议段缺省 = 该账号不启用对应协议）。 */
 export interface CliAccountConfig {
     qq: string;
     enabled?: boolean;
+    /** OneBot 11 协议段（与 ob11ConfigSchema 对应，宽松对象，装配时 zod 校验）。 */
+    onebot11?: Record<string, unknown>;
+    /** Satori 协议段（与 satoriConfigSchema 对应，宽松对象，装配时 zod 校验）。 */
+    satori?: Record<string, unknown>;
 }
 
 /** 主配置（跨账号，全局单文件 TOML）。 */
@@ -25,37 +34,30 @@ export interface CliConfig {
     autoRestart: boolean;
     /** 崩溃后重启延迟（毫秒）。 */
     restartDelayMs: number;
-    /** 账号列表。 */
+    /** 账号列表（至少一个，qq 必填）。 */
     accounts: CliAccountConfig[];
-    /** onebot11 协议段（与 ob11ConfigSchema 对应，宽松对象，装配时 zod 校验）。 */
-    onebot11?: Record<string, unknown>;
-    /** satori 协议段（与 satoriConfigSchema 对应，宽松对象，装配时 zod 校验）。 */
-    satori?: Record<string, unknown>;
 }
 
-/** 解析 onebot11 段（宽松对象，装配时由 zod schema 严格校验）。 */
-function parseOnebot11(raw: Record<string, unknown>): Record<string, unknown> | undefined {
-    if (raw["onebot11"] === undefined) {
+/** 解析账号内协议段（宽松对象，装配时由 zod schema 严格校验）。 */
+function parseProtocolSection(
+    raw: Record<string, unknown>,
+    key: ProtocolKey,
+): Record<string, unknown> | undefined {
+    const section = raw[key];
+    if (section === undefined) {
         return;
     }
-    if (typeof raw["onebot11"] !== "object" || raw["onebot11"] === null) {
-        throw kernelError("主配置 onebot11 段必须是对象", "INVALID_PARAM");
+    if (typeof section !== "object" || section === null) {
+        throw kernelError(`主配置账号 ${key} 段必须是对象`, "INVALID_PARAM");
     }
-    return raw["onebot11"] as Record<string, unknown>;
+    return section as Record<string, unknown>;
 }
 
-/** 解析 satori 段（宽松对象，装配时由 zod schema 严格校验）。 */
-function parseSatori(raw: Record<string, unknown>): Record<string, unknown> | undefined {
-    if (raw["satori"] === undefined) {
-        return;
-    }
-    if (typeof raw["satori"] !== "object" || raw["satori"] === null) {
-        throw kernelError("主配置 satori 段必须是对象", "INVALID_PARAM");
-    }
-    return raw["satori"] as Record<string, unknown>;
-}
-
-/** 解析 dataDir（缺省用当前解析的数据根）。 */
+/**
+ * 解析 dataDir（缺省用当前解析的数据根 = 项目根/.napuketto）。
+ * 支持绝对路径、"~/" 前缀（用户主目录）、相对路径（相对启动目录），
+ * 消费端 resolveDataRoot 统一展开为绝对路径。
+ */
 function parseDataDir(raw: Record<string, unknown>): string {
     if (raw["dataDir"] === undefined) {
         return resolveDataRoot();
@@ -92,13 +94,19 @@ function parseRestartDelayMs(raw: Record<string, unknown>): number {
     return raw["restartDelayMs"];
 }
 
-/** 解析 accounts。 */
+/** 解析 accounts（必须至少一个账号，qq 必填）。 */
 function parseAccounts(raw: Record<string, unknown>): CliAccountConfig[] {
     if (raw["accounts"] === undefined) {
-        return [];
+        throw kernelError(
+            "主配置缺少 accounts（必须至少一个账号）；首次启动已生成模板，请编辑后重试",
+            "INVALID_PARAM",
+        );
     }
-    if (!Array.isArray(raw["accounts"])) {
-        throw kernelError("主配置 accounts 必须是数组", "INVALID_PARAM");
+    if (!Array.isArray(raw["accounts"]) || raw["accounts"].length === 0) {
+        throw kernelError(
+            "主配置 accounts 必须是非空数组（至少一个 QQ 账号）；首次启动已生成模板，请编辑后重试",
+            "INVALID_PARAM",
+        );
     }
     const accounts: CliAccountConfig[] = [];
     for (const item of raw["accounts"]) {
@@ -107,7 +115,7 @@ function parseAccounts(raw: Record<string, unknown>): CliAccountConfig[] {
     return accounts;
 }
 
-/** 解析单个账号项。 */
+/** 解析单个账号项（qq 必填；协议段缺省 = 不启用）。 */
 function parseAccount(item: unknown): CliAccountConfig {
     if (typeof item !== "object" || item === null) {
         throw kernelError("主配置 accounts 元素必须是对象", "INVALID_PARAM");
@@ -123,6 +131,15 @@ function parseAccount(item: unknown): CliAccountConfig {
         }
         out.enabled = enabled;
     }
+    const raw = item as Record<string, unknown>;
+    const onebot11 = parseProtocolSection(raw, "onebot11");
+    if (onebot11 !== undefined) {
+        out.onebot11 = onebot11;
+    }
+    const satori = parseProtocolSection(raw, "satori");
+    if (satori !== undefined) {
+        out.satori = satori;
+    }
     return out;
 }
 
@@ -136,14 +153,5 @@ export function parseCliConfig(input: unknown): CliConfig {
     const autoRestart = parseAutoRestart(raw);
     const restartDelayMs = parseRestartDelayMs(raw);
     const accounts = parseAccounts(raw);
-    const onebot11 = parseOnebot11(raw);
-    const satori = parseSatori(raw);
-    const out: CliConfig = { dataDir, autoRestart, restartDelayMs, accounts };
-    if (onebot11 !== undefined) {
-        out.onebot11 = onebot11;
-    }
-    if (satori !== undefined) {
-        out.satori = satori;
-    }
-    return out;
+    return { dataDir, autoRestart, restartDelayMs, accounts };
 }

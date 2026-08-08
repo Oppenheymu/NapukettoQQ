@@ -113,8 +113,12 @@ export async function startProtocols(
         });
         // network 广播 + OB11 适配器
         const broadcaster = new network.EventBroadcaster();
-        // 全局 TOML 配置段（<项目根>/napuketto.toml，[onebot11] / [satori] 段 seed）。
-        const { cfgFile, ob11Section, satoriSection } = loadProtocolSections(kernel);
+        // 全局 TOML 配置段：按登录账号 uin 从 accounts 取 [onebot11] / [satori] 段作 seed
+        // （2026-08-08 结构拍板：协议配置嵌在账号内；未配置协议的账号不装配对应协议）。
+        const { cfgFile, ob11Section, satoriSection } = loadProtocolSections(
+            kernel,
+            loginResult.uin,
+        );
         const ob11Config = new adapterCore.ProtocolConfig({
             path: cfgFile,
             schema: adapter.ob11ConfigSchema,

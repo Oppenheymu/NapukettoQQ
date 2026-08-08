@@ -102,13 +102,26 @@ pnpm start
 
 ### 3. 配置
 
-配置为项目根单一 TOML：`napuketto.toml`（首次启动自动生成）：
+配置为项目根单一 TOML：`napuketto.toml`（首次启动自动生成；本机配置不入库）：
 
 ```toml
-# 数据根目录：账号/日志/缓存/QQ 数据存放位置
-dataDir = "C:\\Users\\<用户名>\\.napuketto"
+# 全局配置（跨账号）
+# dataDir = ".napuketto"      # 可选；缺省 = <项目根>/.napuketto（跨平台）
+
+[[accounts]]                  # 账号（至少一个，qq 必填）
+qq = "123456"
+enabled = true
+
+[accounts.onebot11]           # 该账号的 OneBot 11 配置（无此段 = 不启用 OB11）
+[[accounts.onebot11.httpServers]]
+enabled = true
+port = 3000
 ```
-数据根解析优先级：`--data-dir <dir>` > 环境变量 `NAPKETTO_DATA` > `~/.napuketto`。
+
+配置组织（2026-08-08 拍板）：一个 QQ 账号一个 `[[accounts]]` 段，协议与通信配置
+嵌在账号内（`[accounts.onebot11]` / `[accounts.satori]`），账号必填。
+数据根（账号目录/日志/缓存/QQ 数据）默认 `<项目根>/.napuketto`；
+解析优先级：`--data-dir <dir>` > 环境变量 `NAPKETTO_DATA` > 项目根默认。
 
 ## 版本与发布
 

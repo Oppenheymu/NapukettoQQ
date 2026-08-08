@@ -12,4 +12,4 @@ napuketto config list      # 列出全局配置与账号配置
 napuketto config apply <file>  # 应用外部配置（校验后写回）
 ```
 
-常用选项：`-d, --data-dir <dir>` 数据根目录（缺省 `~/.napuketto`）；`--stub-dir <dir>` stub QQNT.dll 目录。
+常用选项：`-d, --data-dir <dir>` 数据根目录（缺省 `<项目根>/.napuketto`）；`--stub-dir <dir>` stub QQNT.dll 目录。

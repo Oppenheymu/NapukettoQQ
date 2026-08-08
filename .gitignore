@@ -19,6 +19,9 @@ napuketto.toml
 # 例外：create 脚手架的配置模板需入库（模板为 .tmpl 后缀，不匹配上方规则）
 !apps/create-napukettoqq/templates/*.tmpl
 
+# 数据根（项目根/.napuketto，账号目录/日志/缓存/QQ 数据，2026-08-08 起默认在项目根）
+.napuketto/
+
 # typescript build info
 **/*.tsbuildinfo
 

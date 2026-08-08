@@ -1,11 +1,13 @@
 #!/usr/bin/env node
 
 /**
- * @napuketto/cli 入口（P2-6 + P6，2026-08-05；2026-08-07 用户拍板：只保留自建宿主）
+ * @napuketto/cli 入口（P2-6 + P6，2026-08-05；2026-08-07 用户拍板：只保留自建宿主；
+ * 2026-08-08 配置结构拍板：账号必填，协议配置嵌在账号内）
  *
  * commander 参数解析：
  *   - 单账号：-q <uin> → runSingleAccount（自建宿主：标准 node + stub QQNT.dll，不拉起 QQ）
  *   - 多账号：-q A -q B 或 supervisor 子命令 → runSupervisor（子进程编排）
+ *   - 无 -q：读全局配置 accounts（至少一个，账号必填）→ supervisor 拉起全部启用账号
  *   - config 子命令：init / list / apply（主配置管理）
  *
  * 路线 B（拉起 QQ + 注入）已淘汰（2026-08-07 用户拍板），仅 launchQqWithLoader 历史回退。
@@ -138,42 +140,31 @@ async function runSingleAccountBranch(
     await runSingleAccount(bootOptions);
 }
 
-/** 无 -q 时：读全局配置 accounts → 有则 supervisor 拉起；无则单账号启动（自建宿主自动快速登录/QR）。 */
+/** 无 -q 时：读全局配置 accounts（账号必填，2026-08-08 拍板），supervisor 拉起全部启用账号。
+ * 不再有「配置为空 → 交互式单账号登录」老路径：缺账号直接报错提示编辑模板。 */
 async function autoStart(opts: { dataDir?: string; stubDir?: string }): Promise<void> {
-    try {
-        const dataRoot = resolveDataRoot(opts.dataDir);
-        const config = await loadCliConfig(dataRoot);
-        if (config.accounts.length > 0) {
-            await runSupervisor({
-                ...(opts.dataDir !== undefined ? { dataDir: opts.dataDir } : {}),
-                ...(opts.stubDir !== undefined ? { stubDir: opts.stubDir } : {}),
-            });
-            return;
-        }
-    } catch {
-        // 配置读取失败忽略，直接单账号启动
+    const dataRoot = resolveDataRoot(opts.dataDir);
+    const config = await loadCliConfig(dataRoot);
+    if (config.accounts.length === 0) {
+        // parseCliConfig 已强制至少一个，此处防御
+        throw new Error("主配置没有账号，请编辑 napuketto.toml 填写 [[accounts]] 段");
     }
-    const bootOptions: { dataDir?: string; stubDir?: string } = {};
-    if (opts.dataDir !== undefined) {
-        bootOptions.dataDir = opts.dataDir;
-    }
-    if (opts.stubDir !== undefined) {
-        bootOptions.stubDir = opts.stubDir;
-    }
-    logger.info("未指定 -q，自动快速登录（无历史账号则二维码登录）");
-    await runSingleAccount(bootOptions);
+    await runSupervisor({
+        ...(opts.dataDir !== undefined ? { dataDir: opts.dataDir } : {}),
+        ...(opts.stubDir !== undefined ? { stubDir: opts.stubDir } : {}),
+    });
 }
 
-/** 注册主命令 action（-q 单账号 / 多 -q supervisor / 无 -q 自动读配置或单账号启动）。 */
+/** 注册主命令 action（-q 单账号 / 多 -q supervisor / 无 -q 读配置 supervisor 拉起）。 */
 function registerMainAction(program: Command): void {
     program.action(
         async (opts: { qq?: string[]; dataDir?: string; qqPath?: string; stubDir?: string }) => {
-            const qqs = opts.qq ?? [];
-            if (qqs.length === 0) {
-                await autoStart(opts);
-                return;
-            }
             try {
+                const qqs = opts.qq ?? [];
+                if (qqs.length === 0) {
+                    await autoStart(opts);
+                    return;
+                }
                 if (qqs.length === 1) {
                     await runSingleAccountBranch(opts, qqs);
                 } else {
@@ -211,7 +202,7 @@ function main(): void {
             collectQq,
             [],
         )
-        .option("-d, --data-dir <dir>", "数据根目录（缺省 ~/.napuketto）")
+        .option("-d, --data-dir <dir>", "数据根目录（缺省 <项目根>/.napuketto）")
         .option("--qq-path <path>", "QQ 安装路径（联调覆盖）")
         .option(
             "--stub-dir <dir>",

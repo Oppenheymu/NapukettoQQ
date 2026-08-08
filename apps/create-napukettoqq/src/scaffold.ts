@@ -10,7 +10,7 @@
 
 import { readFileSync } from "node:fs";
 import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
-import { homedir } from "node:os";
+
 import path from "node:path";
 import process from "node:process";
 
@@ -158,11 +158,10 @@ export async function scaffoldProject(dirName: string, overwrite = false): Promi
         await emptyDir(dir);
     }
 
-    // 渲染变量：dataDir 用 JSON.stringify 转义反斜杠 → TOML 基本字符串合法写法
+    // 渲染变量（napuketto.toml 模板不再插值 dataDir——缺省 = 项目根/.napuketto，跨平台）
     const vars: Record<string, string> = {
         packageName,
         cliVersion: cliVersionRange(),
-        dataDir: JSON.stringify(path.join(homedir(), ".napuketto")),
     };
     // 用户项目是「运行壳」：不开发代码，只需 package.json（依赖 + start）+ napuketto.toml（配置）
     // 模板文件为 templates/<name>.tmpl（.tmpl 后缀避免 TOML/JSON 语言服务把占位符当非法语法）

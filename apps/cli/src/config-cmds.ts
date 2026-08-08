@@ -1,34 +1,33 @@
 /**
- * cli config 子命令：init / list / apply（P6，2026-08-05；2026-08-07 配置文件移到项目根）
+ * cli config 子命令：init / list / apply（P6，2026-08-05；2026-08-07 配置文件移到项目根；
+ * 2026-08-08 结构拍板：账号内嵌协议段）
  *
  * **全局单配置文件**：`<项目根>/napuketto.toml`（2026-08-07 用户拍板：配置文件放项目根，
  * 数据仍按数据根组织），本项目所有配置都在里面管理（TOML + smol-toml，配合 zod 校验，
- * 用户 2026-08-05 拍板：JSON 门槛太高）：
+ * 用户 2026-08-05 拍板：JSON 门槛太高）。本机配置不入库（.gitignore）。
  *
- *   dataDir = "C:\\...\\.napuketto"   # 数据根（账号目录/日志/缓存/QQ 数据），与配置文件位置解耦
+ * 2026-08-08 结构（用户拍板）：**一个 QQ 账号一个 [[accounts]] 段，协议与通信配置嵌在
+ * 账号内**，账号必填（至少一个，qq 必填）：
+ *
+ *   # dataDir = ".napuketto"    # 可选；缺省 = 项目根/.napuketto（跨平台）
  *   autoRestart = true
  *   restartDelayMs = 2000
  *   [[accounts]]
- *   qq = "123456"
+ *   qq = "123456"                # QQ 号（必填）
  *   enabled = true
- *   [onebot11]                 # 协议段，与 ob11ConfigSchema 对应
- *   heartbeatInterval = 3000
- *   [onebot11.http]            # 嵌套表
- *   enabled = false
- *   host = "127.0.0.1"
- *   port = 3000
- *   [satori]                   # 协议段，与 satoriConfigSchema 对应
+ *   [accounts.onebot11]          # 该账号的 OB11 段（无 = 不启用）
  *   token = ""
- *   [[satori.httpServers]]     # HTTP RPC 服务器
- *   enabled = false
- *   port = 5500
- *   [[satori.wsServers]]       # WS 事件服务（/v1/events）
+ *   [[accounts.onebot11.httpServers]]
  *   enabled = true
- *   port = 5501
+ *   port = 3000
+ *   [accounts.satori]            # 该账号的 Satori 段（无 = 不启用）
+ *   [[accounts.satori.httpServers]]
+ *   enabled = true
+ *   port = 5500
  *
- * 配置文件路径解析见 kernel `resolveConfigPath`（NAPKETTO_CONFIG 显式 > 项目根探测 > cwd > 数据根兜底）；
+ * 配置文件路径解析见 kernel `resolveConfigPath`（NAPKETTO_CONFIG 显式 > 项目根探测 > 数据根兜底）；
  * 校验器为手写 parse（适配 kernel ConfigBase 的 ConfigSchema 形状）；
- * 协议段由对应协议包的 zod schema 校验（boot.cjs 装配时经 seed 传入）。
+ * 协议段由对应协议包的 zod schema 校验（boot 装配时按登录账号 uin 从 accounts 取段作 seed）。
  */
 import type { Dirent } from "node:fs";
 import { mkdirSync, readdirSync } from "node:fs";
@@ -48,26 +47,24 @@ import { type CliConfig, parseCliConfig } from "./config-parse.js";
 import { configTemplate } from "./config-template.js";
 import { logger } from "./logger.js";
 
-/** 主配置默认值（dataRoot 为当前解析的数据根）。 */
+/** 主配置默认值（dataRoot 为当前解析的数据根 = 项目根/.napuketto）。 */
 function defaultCliConfig(dataRoot: string): CliConfig {
     return {
         dataDir: dataRoot,
         autoRestart: true,
         restartDelayMs: 2000,
         accounts: [],
-        onebot11: {},
-        satori: {},
     };
 }
 
 /** 配置文件缺失 → 生成带注释模板（首次启动自动生成默认配置）。 */
-async function ensureConfigTemplate(path: string, dataRoot: string): Promise<void> {
+async function ensureConfigTemplate(path: string): Promise<void> {
     try {
         await access(path);
     } catch {
         mkdirSync(dirname(path), { recursive: true });
-        await writeFile(path, `${configTemplate(dataRoot)}\n`, "utf8");
-        logger.info({ path }, "配置文件不存在，已生成默认模板（带注释，可参考修改）");
+        await writeFile(path, `${configTemplate()}\n`, "utf8");
+        logger.info({ path }, "配置文件不存在，已生成默认模板（请编辑 accounts 段填入 QQ 号）");
     }
 }
 
@@ -83,10 +80,10 @@ class CliConfigStore extends ConfigBase<CliConfig> {
     }
 }
 
-/** 读取主配置（缺失自动落默认）。 */
+/** 读取主配置（缺失自动落模板）。 */
 export async function loadCliConfig(dataRoot: string): Promise<CliConfig> {
     const store = new CliConfigStore(dataRoot);
-    await ensureConfigTemplate(store.path, dataRoot);
+    await ensureConfigTemplate(store.path);
     return await store.load();
 }
 
@@ -96,7 +93,8 @@ function toRecord(config: CliConfig): Record<string, unknown> {
 }
 
 /** config init：生成全局 TOML 配置文件（项目根）+ 数据根目录。
- * 文件不存在 → 写带注释模板；已存在 → 跳过（不覆盖用户配置）。 */
+ * 文件不存在 → 写带注释模板；已存在 → 跳过（不覆盖用户配置）。
+ * 输出原始模板内容（账号未填时解析会校验失败，init 只负责生成不校验）。 */
 export async function cmdConfigInit(opts: { dataDir?: string }): Promise<void> {
     const dataRoot = resolveDataRoot(opts.dataDir);
     mkdirSync(dataRoot, { recursive: true });
@@ -106,18 +104,18 @@ export async function cmdConfigInit(opts: { dataDir?: string }): Promise<void> {
         await access(store.path);
     } catch {
         mkdirSync(dirname(store.path), { recursive: true });
-        await writeFile(store.path, `${configTemplate(dataRoot)}\n`, "utf8");
+        await writeFile(store.path, `${configTemplate()}\n`, "utf8");
         created = true;
     }
-    const config = await store.load();
+    const raw = await readFile(store.path, "utf8");
     logger.info({ dataRoot }, "数据根");
     if (created) {
-        logger.info({ path: store.path }, "全局配置已生成（默认模板，带注释）");
+        logger.info({ path: store.path }, "全局配置已生成（请编辑 accounts 段填入 QQ 号）");
     } else {
         logger.info({ path: store.path }, "全局配置已存在（跳过生成，避免覆盖用户配置）");
     }
     // TOML 内容为功能输出（机器可读），保持原样 stdout，不做日志包装
-    process.stdout.write(`${stringifyToml(toRecord(config))}\n`);
+    process.stdout.write(raw);
 }
 
 /** config list：列出全局配置与各账号目录。 */

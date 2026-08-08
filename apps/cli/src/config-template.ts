@@ -1,27 +1,30 @@
 /**
  * 配置模板（TOML 注释版，从 config-cmds.ts 拆分，2026-08-08 FTA 优化）。
- * `config init` 与首次启动（loadCliConfig）缺失时生成。dataDir 按当前数据根插值。
+ * `config init` 与首次启动（loadCliConfig）缺失时生成。
+ *
+ * 2026-08-08 结构拍板：**一个 QQ 账号一个 [[accounts]] 段，协议与通信配置嵌在
+ * 账号内**（[accounts.onebot11] / [accounts.satori]）；账号必填（至少一个）。
+ * dataDir 不再写死（缺省 = 项目根/.napuketto，跨平台），模板保持可移植。
  */
-export function configTemplate(dataRoot: string): string {
-    // JSON.stringify 转义反斜杠 → TOML 基本字符串合法写法（"C:\\Users\\..."）
-    const dataDirLiteral = JSON.stringify(dataRoot);
+export function configTemplate(): string {
     return `# ============================================================
 # NapukettoQQ 全局配置文件
 # ============================================================
 # 本文件由 \`napuketto config init\` 生成（或首次启动自动生成）。
+# 本机配置不入库（.gitignore）；修改后重启生效。
 #
-# 数据（账号目录/日志/缓存/QQ 数据）不在此文件，按数据根组织：
-#   优先级：--data-dir <dir> > NAPKETTO_DATA 环境变量 > ~/.napuketto
-# 配置文件路径解析：NAPKETTO_CONFIG > 项目根探测 > cwd > 数据根兜底。
-#
-# 单账号启动每次读取本文件；修改后重启生效。
+# 配置组织：一个 QQ 账号一个 [[accounts]] 段，协议与通信配置嵌在账号内
+# （[accounts.onebot11] / [accounts.satori]）。账号没有写某协议段 = 该账号
+# 不启用该协议。账号必填（至少一个，qq 必填）。
 
 # ------------------------------------------------------------
-# 基础配置
+# 全局配置（跨账号）
 # ------------------------------------------------------------
 
-# 数据根目录：账号目录/日志/缓存/QQ 数据存放位置（绝对路径）
-dataDir = ${dataDirLiteral}
+# 数据根目录：账号目录/日志/缓存/QQ 数据存放位置。
+# 缺省 = <项目根>/.napuketto（部署场景，跨平台，无需修改）。
+# 支持绝对路径、"~/" 前缀（用户主目录）、相对路径（相对启动目录）。
+# dataDir = ".napuketto"
 
 # 多账号（supervisor）模式下，账号进程崩溃是否自动重启
 autoRestart = true
@@ -29,15 +32,15 @@ autoRestart = true
 # 崩溃后自动重启的延迟（毫秒）
 restartDelayMs = 2000
 
-# 多账号列表（留空 = 单账号模式：启动后自动快速登录/扫码）
-# [[accounts]]
-# qq = "123456"          # QQ 号（必填）
-# enabled = true         # 是否启用（可选，缺省 true）
+# ------------------------------------------------------------
+# 账号（至少一个，qq 必填）
+# ------------------------------------------------------------
 
-# ------------------------------------------------------------
-# OneBot 11 协议段
-# ------------------------------------------------------------
-[onebot11]
+[[accounts]]
+qq = "123456"            # QQ 号（必填）
+enabled = true           # 是否启用（可选，缺省 true）
+
+[accounts.onebot11]      # 该账号的 OneBot 11 配置（无此段 = 不启用 OB11）
 
 # 鉴权 token（全局默认）：HTTP/WS 连接必须携带。
 #   校验方式：Authorization: Bearer <token> / 裸 token / URL 参数 ?access_token=<token>
@@ -55,21 +58,21 @@ reportSelfMessage = false
 messagePostFormat = "array"
 
 # ---- HTTP 反向服务器（接收第三方 POST 指令），可配置多个 ----
-[[onebot11.httpServers]]
+[[accounts.onebot11.httpServers]]
 enabled = true
 host = "127.0.0.1"       # 监听地址；0.0.0.0 = 监听所有网卡（局域网可连）
 port = 3000
 # token = "abc"          # 可选：覆盖全局 token
 
 # ---- HTTP 正向上报（Webhook：把事件 POST 到第三方地址），可配置多个 ----
-# [[onebot11.httpPostUrls]]
+# [[accounts.onebot11.httpPostUrls]]
 # enabled = true
 # url = "http://127.0.0.1:8080/onebot"   # 第三方接收地址
 # token = "abc"                          # 可选：覆盖全局 token
 # timeoutMs = 5000                       # 可选：上报超时（毫秒），缺省不超时
 
 # ---- WS 反向服务器（外部 WS 客户端主动连入），可配置多个 ----
-[[onebot11.wsServers]]
+[[accounts.onebot11.wsServers]]
 enabled = true
 host = "127.0.0.1"
 port = 3001
@@ -77,7 +80,7 @@ port = 3001
 # heartbeatInterval = 30000              # 可选：WS ping 间隔（毫秒）
 
 # ---- WS 正向客户端（主动连接外部 WS，双向），可配置多个 ----
-# [[onebot11.wsReverseUrls]]
+# [[accounts.onebot11.wsReverseUrls]]
 # enabled = true
 # url = "ws://127.0.0.1:8081/ws"         # 第三方 WS 地址（ws:// 或 wss://）
 # token = "abc"                          # 可选：覆盖全局 token
@@ -86,30 +89,18 @@ port = 3001
 # rejectUnauthorized = true              # 可选：wss:// 是否校验证书（自签证书设 false）
 # heartbeatInterval = 30000              # 可选：WS ping 间隔（毫秒）
 
-# ------------------------------------------------------------
-# Satori 协议段
-# ------------------------------------------------------------
-[satori]
-
-# 鉴权 token（全局默认）：HTTP RPC 走 Authorization: Bearer <token>；
-# WS 事件服务走 IDENTIFY 信令的 token 字段。留空 = 不鉴权。
-# token = ""
-
-# 媒体资源（img/audio/video/file）下载缓存目录（发方向 http(s) src 落盘）
-# cacheDir = ""
-
-# ---- HTTP RPC 服务器（POST /v1/{resource}.{method}），可配置多个 ----
-[[satori.httpServers]]
-enabled = true
-host = "127.0.0.1"       # 监听地址；0.0.0.0 = 监听所有网卡（局域网可连）
-port = 5500
-# token = "abc"          # 可选：覆盖全局 token
-
-# ---- WS 事件服务（/v1/events，Satori SDK/应用连入），可配置多个 ----
-[[satori.wsServers]]
-enabled = true
-host = "127.0.0.1"
-port = 5501
-# token = "abc"          # 可选：覆盖全局 token
+# 第二个账号示例（只开 Satori）：
+# [[accounts]]
+# qq = "654321"
+# [accounts.satori]
+# # token = ""                           # 可选：Satori 鉴权 token
+# [[accounts.satori.httpServers]]        # HTTP RPC（POST /v1/{resource}.{method}）
+# enabled = true
+# host = "127.0.0.1"
+# port = 5500
+# [[accounts.satori.wsServers]]          # WS 事件服务（/v1/events）
+# enabled = true
+# host = "127.0.0.1"
+# port = 5501
 `;
 }
