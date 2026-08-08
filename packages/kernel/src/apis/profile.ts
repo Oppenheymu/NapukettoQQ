@@ -7,31 +7,10 @@
  * - getStrangerInfo：get_stranger_info（uin → uid → 详情扁平化）
  */
 import { kernelError } from "../infra/index.js";
-import type {
-    NodeIKernelProfileService,
-    NodeIQQNTWrapperSession,
-    UserDetailInfoByUin,
-} from "../types/index.js";
+import type { NodeIKernelProfileService, NodeIQQNTWrapperSession } from "../types/index.js";
 import { checkLooseResult } from "./result.js";
-
-/** 陌生人信息（get_stranger_info 返回）。 */
-export interface StrangerInfo {
-    user_id: number;
-    uid: string;
-    nickname: string;
-    age: number;
-    qid: string;
-    qq_level: number;
-    sex: "male" | "female" | "unknown";
-    long_nick: string;
-    reg_time: number;
-    is_vip: boolean;
-    is_years_vip: boolean;
-    vip_level: number;
-    remark: string;
-    status: number;
-    login_days: number;
-}
+import type { StrangerInfo } from "./stranger-info.js";
+import { flattenStrangerInfo } from "./stranger-info.js";
 
 /** 资料 API：从 session 拿 profile service，包装成语义化方法。 */
 export class ProfileApi {
@@ -80,69 +59,4 @@ export class ProfileApi {
         const info = await this.service.getUserDetailInfo(uid);
         return flattenStrangerInfo(uin, uid, byUin, info);
     }
-}
-
-/** 扁平化后的详情视图（双来源字段级回退的产物，仅含 StrangerInfo 需要的字段）。 */
-interface MergedDetail {
-    coreInfo?: { nick?: string; remark?: string } | undefined;
-    baseInfo?: { age?: number; qid?: string; sex?: number; longNick?: string } | undefined;
-    vasInfo?: { svipFlag?: boolean; yearVipFlag?: boolean; vipLevel?: number } | undefined;
-    commonExt?: { qqLevel?: number; regTime?: number } | undefined;
-    status?: number | undefined;
-}
-
-/** 宽松取值：undefined 时给默认值（null 也归默认）。 */
-function orDefault<T>(value: T | undefined, fallback: T): T {
-    return value ?? fallback;
-}
-
-/** 合并两份详情：优先 info（uid 完整详情），字段缺失回退 byUin（uin 初查详情）。 */
-function mergeDetail(info: UserDetailInfoByUin, byUin: UserDetailInfoByUin): MergedDetail {
-    const infoSimple = info.detail?.simpleInfo;
-    const byUinSimple = byUin.detail?.simpleInfo;
-    return {
-        coreInfo: infoSimple?.coreInfo ?? byUinSimple?.coreInfo,
-        baseInfo: infoSimple?.baseInfo ?? byUinSimple?.baseInfo,
-        vasInfo: infoSimple?.vasInfo ?? byUinSimple?.vasInfo,
-        commonExt: info.detail?.commonExt ?? byUin.detail?.commonExt,
-        status: infoSimple?.status?.status ?? byUinSimple?.status?.status,
-    };
-}
-
-/** 扁平化两份详情 → StrangerInfo（宽松取值，字段缺失给默认）。 */
-function flattenStrangerInfo(
-    uin: string,
-    uid: string,
-    byUin: UserDetailInfoByUin,
-    info: UserDetailInfoByUin,
-): StrangerInfo {
-    const d = mergeDetail(info, byUin);
-    return {
-        user_id: Number(uin),
-        uid,
-        nickname: orDefault(d.coreInfo?.nick, ""),
-        age: orDefault(d.baseInfo?.age, 0),
-        qid: orDefault(d.baseInfo?.qid, ""),
-        qq_level: orDefault(d.commonExt?.qqLevel, 0),
-        sex: mapSex(d.baseInfo?.sex),
-        long_nick: orDefault(d.baseInfo?.longNick, ""),
-        reg_time: orDefault(d.commonExt?.regTime, 0),
-        is_vip: orDefault(d.vasInfo?.svipFlag, false),
-        is_years_vip: orDefault(d.vasInfo?.yearVipFlag, false),
-        vip_level: orDefault(d.vasInfo?.vipLevel, 0),
-        remark: orDefault(d.coreInfo?.remark, ""),
-        status: orDefault(d.status, 0),
-        login_days: 0,
-    };
-}
-
-/** 性别数值 → OB11 字符串（1=男 2=女 其余 unknown）。 */
-function mapSex(raw: number | undefined): "male" | "female" | "unknown" {
-    if (raw === 1) {
-        return "male";
-    }
-    if (raw === 2) {
-        return "female";
-    }
-    return "unknown";
 }
