@@ -60,18 +60,25 @@ export function compareVersions(a: string, b: string): number {
  * @param latest registry latest 版本（如 "0.0.6"）
  * @returns 需写入的 tilde 范围；无需改写则 null
  */
+/** workspace: 前缀（版本范围归一化）。 */
+const WORKSPACE_PREFIX_RE = /^workspace:/;
+/** 版本前缀（~ ^ >= < v 等）。 */
+const VERSION_PREFIX_RE = /^[~^>=<v\s]+/;
+/** 语义化版本号开头。 */
+const SEMVER_START_RE = /^\d+\.\d+\.\d+/;
+
 export function tildeRange(current: string | undefined, latest: string): string | null {
     // 归一化比较：去掉 workspace: 前缀与空格
-    const norm = (s: string) => s.replace(/^workspace:/, "").trim();
+    const norm = (s: string) => s.replace(WORKSPACE_PREFIX_RE, "").trim();
     const cur = current === undefined ? "" : norm(current);
     const target = `~${latest}`;
     if (cur === target) {
         return null;
     }
     // 提取当前范围中的版本号（去掉 ~/^/>= 等前缀）
-    const curVersion = cur.replace(/^[~^>=<v\s]+/, "");
+    const curVersion = cur.replace(VERSION_PREFIX_RE, "");
     // 版本号合法时，当前版本高于 registry latest → 不回退
-    if (curVersion !== "" && curVersion !== "*" && /^\d+\.\d+\.\d+/.test(curVersion)) {
+    if (curVersion !== "" && curVersion !== "*" && SEMVER_START_RE.test(curVersion)) {
         if (compareVersions(curVersion, latest) > 0) {
             return null;
         }

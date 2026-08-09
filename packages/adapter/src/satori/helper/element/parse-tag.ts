@@ -39,8 +39,11 @@ function decodeEntity(body: string): string {
 }
 
 /** 解码字符串中的全部实体。 */
+const ENTITY_RE = /&([^;]+);/g;
+
+/** 解码字符串中的全部实体。 */
 function decodeEntities(input: string): string {
-    return input.replace(/&([^;]+);/g, (_full, body: string) => decodeEntity(body));
+    return input.replace(ENTITY_RE, (_full, body: string) => decodeEntity(body));
 }
 
 /** 元素名：小写字母/数字/连字符，以字母开头（规范）。 */
@@ -56,19 +59,27 @@ export function readTagName(source: string, pos: number): { name: string; end: n
     return { name: m[0], end: pos + m[0].length };
 }
 
+/** 空白字符。 */
+const SPACE_RE = /\s/;
+
 /** 跳过空白；返回下一个非空白位置。 */
 function skipSpaces(source: string, start: number): number {
     let i = start;
-    while (i < source.length && /\s/.test(source.charAt(i))) {
+    while (i < source.length && SPACE_RE.test(source.charAt(i))) {
         i += 1;
     }
     return i;
 }
 
+/** 属性名（字母数字 / 冒号（命名空间）/ 连字符 / 下划线）。 */
+const ATTR_NAME_RE = /^[a-zA-Z0-9:_-]+/;
+/** 无引号属性值的结束字符（空白 / >）。 */
+const ATTR_VALUE_END_RE = /[\s>]/;
+
 /** 读取单个属性（名 / = / 值 / 无值属性），更新 attrs，返回下一个位置。 */
 function readAttr(source: string, start: number, attrs: Record<string, string>): number {
     // 属性名（字母数字 / 冒号（命名空间）/ 连字符 / 下划线）
-    const keyMatch = /^[a-zA-Z0-9:_-]+/.exec(source.slice(start));
+    const keyMatch = ATTR_NAME_RE.exec(source.slice(start));
     if (keyMatch === null) {
         return start + 1;
     }
@@ -94,7 +105,7 @@ function readAttr(source: string, start: number, attrs: Record<string, string>):
     } else {
         // 无引号值（到空白或 > 为止）
         const valueStart = i;
-        while (i < source.length && !/[\s>]/.test(source.charAt(i))) {
+        while (i < source.length && !ATTR_VALUE_END_RE.test(source.charAt(i))) {
             i += 1;
         }
         attrs[key] = decodeEntities(source.slice(valueStart, i));
@@ -125,7 +136,7 @@ function readTagAttrs(
             i += 1;
             continue;
         }
-        if (/\s/.test(ch)) {
+        if (SPACE_RE.test(ch)) {
             i += 1;
             continue;
         }

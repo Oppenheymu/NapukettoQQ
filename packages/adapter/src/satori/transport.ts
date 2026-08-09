@@ -30,6 +30,9 @@ const V1_PREFIX = "/v1/";
 /** Authorization 头前缀。 */
 const BEARER_PREFIX = "Bearer ";
 
+/** resource.method 路径模式（resource 与 method 均为字母开头的小写标识符，可含连字符/数字）。 */
+const ACTION_PATH_RE = /^([a-z][a-z0-9-]*)(?:\.[a-z][a-z0-9-]*)+$/i;
+
 /** 传输装配结果。 */
 export interface SatoriTransportSet {
     /** 传输适配器（HTTP RPC + WS 事件服务，均已注册 broadcaster）。 */
@@ -124,8 +127,7 @@ function parseActionPath(path: string): string | null {
         return null;
     }
     const rest = path.slice(V1_PREFIX.length);
-    // resource.method（resource 与 method 均为字母开头的小写标识符，可含连字符/数字）
-    const m = /^([a-z][a-z0-9-]*)(?:\.[a-z][a-z0-9-]*)+$/i.exec(rest);
+    const m = ACTION_PATH_RE.exec(rest);
     if (m === null) {
         return null;
     }

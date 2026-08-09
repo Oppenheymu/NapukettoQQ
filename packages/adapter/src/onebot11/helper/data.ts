@@ -117,6 +117,28 @@ export interface SendTranslateContext {
     ob11IdToMsgId?: (id: number) => string | undefined;
 }
 
+/** at 段：uin → uid（缺省不转换）。 */
+function translateAtElement(
+    el: Extract<CanonicalElement, { type: "at" }>,
+    ctx: SendTranslateContext,
+): CanonicalElement {
+    const uid = ctx.uinToUid?.get(el.target);
+    return uid !== undefined ? { ...el, target: uid } : el;
+}
+
+/** reply 段：OB11 message_id → NT msgId（反查不到原样透传）。 */
+function translateReplyElement(
+    el: Extract<CanonicalElement, { type: "reply" }>,
+    ctx: SendTranslateContext,
+): CanonicalElement {
+    const num = Number(el.messageId);
+    if (Number.isNaN(num)) {
+        return el;
+    }
+    const msgId = ctx.ob11IdToMsgId?.(num);
+    return msgId !== undefined ? { ...el, messageId: msgId } : el;
+}
+
 /**
  * canonical 元素数组 → 应用发送方向 ID 转换（at uin→uid、reply OB11 id→NT msgId）。
  * reply 反查不到时原样透传（兼容客户端直接给 NT msgId 的输入，不报错）。
@@ -131,20 +153,11 @@ export function applySendContext(
     const out: CanonicalElement[] = [];
     for (const el of elements) {
         if (el.type === "at" && el.target !== "all") {
-            const uid = ctx.uinToUid?.get(el.target);
-            out.push(uid !== undefined ? { ...el, target: uid } : el);
+            out.push(translateAtElement(el, ctx));
             continue;
         }
         if (el.type === "reply") {
-            const num = Number(el.messageId);
-            if (!Number.isNaN(num)) {
-                const msgId = ctx.ob11IdToMsgId?.(num);
-                if (msgId !== undefined) {
-                    out.push({ ...el, messageId: msgId });
-                    continue;
-                }
-            }
-            out.push(el);
+            out.push(translateReplyElement(el, ctx));
             continue;
         }
         out.push(el);

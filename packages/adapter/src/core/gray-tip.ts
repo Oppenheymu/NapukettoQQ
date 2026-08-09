@@ -6,6 +6,15 @@
  */
 import type { RawMessage } from "@napuketto/kernel";
 
+/** 非空 uid 才加入集合。 */
+function collectUids(uids: Set<string>, ...candidates: Array<string | undefined>): void {
+    for (const uid of candidates) {
+        if (uid !== undefined && uid !== "") {
+            uids.add(uid);
+        }
+    }
+}
+
 /** 收集 grayTip 涉及的 uid（批量 uidToUin 用）。 */
 export function collectGrayTipUids(msg: RawMessage): string[] {
     const uids = new Set<string>();
@@ -14,26 +23,18 @@ export function collectGrayTipUids(msg: RawMessage): string[] {
         if (g === undefined) {
             continue;
         }
-        const revoke = g.revokeElement;
-        if (revoke?.operatorUid !== undefined && revoke.operatorUid !== "") {
-            uids.add(revoke.operatorUid);
-        }
+        collectUids(uids, g.revokeElement?.operatorUid);
         const grp = g.groupElement;
         if (grp === undefined) {
             continue;
         }
-        if (grp.memberUid !== undefined && grp.memberUid !== "") {
-            uids.add(grp.memberUid);
-        }
-        if (grp.adminUid !== undefined && grp.adminUid !== "") {
-            uids.add(grp.adminUid);
-        }
-        if (grp.shutUp?.admin?.uid !== undefined && grp.shutUp.admin.uid !== "") {
-            uids.add(grp.shutUp.admin.uid);
-        }
-        if (grp.shutUp?.member?.uid !== undefined && grp.shutUp.member.uid !== "") {
-            uids.add(grp.shutUp.member.uid);
-        }
+        collectUids(
+            uids,
+            grp.memberUid,
+            grp.adminUid,
+            grp.shutUp?.admin?.uid,
+            grp.shutUp?.member?.uid,
+        );
     }
     return [...uids];
 }

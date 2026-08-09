@@ -122,7 +122,11 @@ try {
         | { get?(): { addO3MiscListener(listener: unknown): void } }
         | undefined;
     if (O3 && typeof O3.get === "function") {
-        O3.get().addO3MiscListener({ getOnAmgomDataPiece() {} });
+        O3.get().addO3MiscListener({
+            getOnAmgomDataPiece() {
+                // 空实现：wrapper 契约回调，仅需注册存在即可激活事件分发
+            },
+        });
         log("[self-host] ✅ O3MiscService 激活事件分发");
     } else {
         log("[self-host] ⚠️ NodeIO3MiscService 缺失（版本变化？继续尝试）");

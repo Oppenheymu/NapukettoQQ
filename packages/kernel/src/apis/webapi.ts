@@ -71,33 +71,44 @@ export class WebApi {
         this.getCookies = opts.getCookies;
     }
 
+    /** 拉取单页精华消息（失败/retcode 非 0 返回 null）。 */
+    private async fetchEssencePage(
+        groupCode: string,
+        cookie: Record<string, string>,
+        bkn: string,
+        page: number,
+    ): Promise<{ items: EssenceMsgItem[]; isEnd: boolean } | null> {
+        const url =
+            "https://qun.qq.com/cgi-bin/group_digest/digest_list?" +
+            new URLSearchParams({
+                bkn,
+                page_start: String(page * ESSENCE_PAGE_LIMIT),
+                page_limit: String(ESSENCE_PAGE_LIMIT),
+                group_code: groupCode,
+            }).toString();
+        const ret = await fetchQunJson(url, cookie);
+        if (ret === null || ret.retcode !== 0) {
+            return null;
+        }
+        const list = ret.data?.msg_list;
+        return {
+            items: Array.isArray(list) ? list.filter((item) => item !== null) : [],
+            isEnd: ret.data?.is_end === true,
+        };
+    }
+
     /** 获取群精华消息列表（get_essence_msg_list；分页拉取至 is_end）。 */
     async getEssenceMsgList(groupCode: string): Promise<EssenceMsgItem[]> {
         const cookie = await this.getCookies(QUN_DOMAIN);
         const bkn = TicketApi.getBkn(cookie["skey"] ?? "");
         const out: EssenceMsgItem[] = [];
         for (let page = 0; page < ESSENCE_MAX_PAGES; page += 1) {
-            const url =
-                "https://qun.qq.com/cgi-bin/group_digest/digest_list?" +
-                new URLSearchParams({
-                    bkn,
-                    page_start: String(page * ESSENCE_PAGE_LIMIT),
-                    page_limit: String(ESSENCE_PAGE_LIMIT),
-                    group_code: groupCode,
-                }).toString();
-            const ret = await fetchQunJson(url, cookie);
-            if (ret === null || ret.retcode !== 0) {
+            const result = await this.fetchEssencePage(groupCode, cookie, bkn, page);
+            if (result === null) {
                 break;
             }
-            const list = ret.data?.msg_list;
-            if (Array.isArray(list)) {
-                for (const item of list) {
-                    if (item !== null) {
-                        out.push(item);
-                    }
-                }
-            }
-            if (ret.data?.is_end === true) {
+            out.push(...result.items);
+            if (result.isEnd) {
                 break;
             }
         }
@@ -161,9 +172,12 @@ export class WebApi {
     }
 }
 
+/** honorlist 页面 __INITIAL_STATE__ 提取。 */
+const INITIAL_STATE_RE = /window\.__INITIAL_STATE__=(.*?);/;
+
 /** 从 honorlist 页面提取 __INITIAL_STATE__ → 荣誉列表（解析失败返回空）。 */
 export function parseHonorList(text: string, type: number): HonorListItem[] {
-    const match = /window\.__INITIAL_STATE__=(.*?);/.exec(text);
+    const match = INITIAL_STATE_RE.exec(text);
     if (match === null || match[1] === undefined) {
         return [];
     }

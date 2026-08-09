@@ -23,6 +23,11 @@ function resolveInternalPath(src: string): string {
     return tmpIdx === -1 ? rest : rest.slice(tmpIdx + 5);
 }
 
+/** http(s) URL 前缀。 */
+const HTTP_URL_RE = /^https?:\/\//i;
+/** 文件名不安全字符（URL 尾部段转文件名时替换）。 */
+const UNSAFE_NAME_RE = /[^a-zA-Z0-9._-]/g;
+
 /**
  * 解析资源 src：
  * - internal:{platform}/{user.id}/{path} → 本地路径（第一版仅支持 _tmp 保留路径）
@@ -33,7 +38,7 @@ export async function resolveAsset(src: string, cacheDir: string): Promise<strin
     if (src.startsWith("internal:")) {
         return resolveInternalPath(src);
     }
-    if (/^https?:\/\//i.test(src)) {
+    if (HTTP_URL_RE.test(src)) {
         return downloadAsset(src, cacheDir);
     }
     return src;
@@ -48,7 +53,7 @@ async function downloadAsset(url: string, cacheDir: string): Promise<string> {
     }
     const buf = Buffer.from(await res.arrayBuffer());
     const rawName = url.split("/").pop() ?? `asset-${Date.now()}`;
-    const safeName = rawName.replace(/[^a-zA-Z0-9._-]/g, "_") || `asset-${Date.now()}`;
+    const safeName = rawName.replace(UNSAFE_NAME_RE, "_") || `asset-${Date.now()}`;
     const filePath = join(cacheDir, safeName);
     await writeFile(filePath, buf);
     return filePath;

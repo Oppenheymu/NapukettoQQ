@@ -137,7 +137,7 @@ if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.a
         })
         .catch((err: unknown) => {
             const message = err instanceof Error ? err.message : String(err);
-            console.error(`[sync-adapter-deps] ❌ ${message}`);
+            process.stderr.write(`[sync-adapter-deps] ❌ ${message}\n`);
             process.exitCode = 1;
         });
 }

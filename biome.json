@@ -1,5 +1,5 @@
 {
-    "$schema": "https://biomejs.dev/schemas/2.5.6/schema.json",
+    "$schema": "https://biomejs.dev/schemas/2.5.7/schema.json",
     "vcs": {
         "enabled": true,
         "clientKind": "git",
@@ -20,10 +20,19 @@
         "rules": {
             "preset": "recommended",
             "correctness": {
-                "noUnresolvedImports": "off"
+                "noUnresolvedImports": "off",
+                "noUnusedPrivateClassMembers": "error"
             },
             "complexity": {
-                "useLiteralKeys": "off"
+                "useLiteralKeys": "off",
+                "noUselessUndefinedInitialization": "error",
+                "noForEach": "error",
+                "noExcessiveCognitiveComplexity": {
+                    "level": "error",
+                    "options": {
+                        "maxAllowedComplexity": 15
+                    }
+                }
             },
             "style": {
                 "useNamingConvention": {
@@ -51,7 +60,35 @@
                             }
                         ]
                     }
+                },
+                "useImportType": "error",
+                "useDefaultParameterLast": "error",
+                "useConsistentArrayType": "error",
+                "useArrayLiterals": "error",
+                "noParameterProperties": "error",
+                "useNodeAssertStrict": "error",
+                "useFilenamingConvention": {
+                    "level": "error",
+                    "options": {
+                        "filenameCases": ["camelCase", "kebab-case"]
+                    }
                 }
+            },
+            "suspicious": {
+                "noEmptyBlockStatements": "error",
+                "useErrorMessage": "error",
+                "noSkippedTests": "error",
+                "noConsole": {
+                    "level": "error",
+                    "options": {
+                        "allow": ["log"]
+                    }
+                }
+            },
+            "performance": {
+                "noAccumulatingSpread": "error",
+                "useTopLevelRegex": "error",
+                "noReExportAll": "error"
             },
             "nursery": {
                 "noFloatingPromises": "error"
@@ -68,6 +105,16 @@
                 "rules": {
                     "style": {
                         "useNamingConvention": "off"
+                    }
+                }
+            }
+        },
+        {
+            "includes": ["**/*.test.ts", "**/*.test.tsx", "**/*.spec.ts", "**/__tests__/**"],
+            "linter": {
+                "rules": {
+                    "performance": {
+                        "useTopLevelRegex": "off"
                     }
                 }
             }

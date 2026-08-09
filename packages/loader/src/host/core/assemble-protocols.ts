@@ -9,6 +9,11 @@ import type { KernelLike, LoginResultLike } from "../types.js";
 import { errMsg, log } from "../util.js";
 import type { KernelServices } from "./kernel-services.js";
 
+/** Windows 反斜杠（file:// URL 化时替换）。 */
+const BACKSLASH_RE = /\\/g;
+/** adapter 入口 index.mjs 后缀（子路径导出替换用）。 */
+const INDEX_MJS_RE = /index\.mjs$/;
+
 /** network 包最小面（@napuketto/network，动态 import）。 */
 interface NetworkModuleLike {
     EventBroadcaster: new () => unknown;
@@ -53,21 +58,21 @@ export async function assembleOb11AndSatori(
     }
     try {
         const network = (await import(
-            `file://${networkEntry.replace(/\\/g, "/")}`
+            `file://${networkEntry.replace(BACKSLASH_RE, "/")}`
         )) as unknown as NetworkModuleLike;
         // adapter 子路径导出（ADR-014）：onebot11 面（ob11ConfigSchema/
         // NapukettoOneBot11Adapter）走 ./onebot11，core 框架（ProtocolConfig）走 ./core。
-        const onebot11Entry = adapterEntry.replace(/index\.mjs$/, "onebot11/index.mjs");
-        const satoriEntry = adapterEntry.replace(/index\.mjs$/, "satori/index.mjs");
-        const coreEntry = adapterEntry.replace(/index\.mjs$/, "core/index.mjs");
+        const onebot11Entry = adapterEntry.replace(INDEX_MJS_RE, "onebot11/index.mjs");
+        const satoriEntry = adapterEntry.replace(INDEX_MJS_RE, "satori/index.mjs");
+        const coreEntry = adapterEntry.replace(INDEX_MJS_RE, "core/index.mjs");
         const adapter = (await import(
-            `file://${onebot11Entry.replace(/\\/g, "/")}`
+            `file://${onebot11Entry.replace(BACKSLASH_RE, "/")}`
         )) as unknown as Onebot11ModuleLike;
         const satoriAdapter = (await import(
-            `file://${satoriEntry.replace(/\\/g, "/")}`
+            `file://${satoriEntry.replace(BACKSLASH_RE, "/")}`
         )) as unknown as SatoriModuleLike;
         const adapterCore = (await import(
-            `file://${coreEntry.replace(/\\/g, "/")}`
+            `file://${coreEntry.replace(BACKSLASH_RE, "/")}`
         )) as unknown as AdapterCoreModuleLike;
 
         const { channel, groupCache } = services;

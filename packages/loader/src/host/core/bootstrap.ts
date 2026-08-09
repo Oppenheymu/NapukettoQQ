@@ -35,6 +35,63 @@ function resolveAppid(kernel: KernelLike, bootEnv: BootstrapEnv): string | numbe
     );
 }
 
+/** 快速登录 + session 初始化（kernel lifecycle 路径；生命周期方法缺失则跳过）。 */
+async function quickLoginAndStartSession(
+    kernel: KernelLike,
+    ctx: CoreContextLike,
+    Appid: number,
+    bootEnv: BootstrapEnv,
+): Promise<void> {
+    if (
+        typeof kernel.quickLogin !== "function" ||
+        typeof kernel.initAndStartSession !== "function"
+    ) {
+        log("bootstrap: kernel missing lifecycle fns (quickLogin/initAndStartSession)");
+        return;
+    }
+    if (typeof kernel.buildLoginConfig === "function" && ctx.loginService) {
+        const loginCfg = kernel.buildLoginConfig(
+            Appid,
+            bootEnv.qqVersion || "",
+            bootEnv.dataDir || ".",
+        );
+        if (typeof ctx.loginService.initConfig === "function") {
+            ctx.loginService.initConfig(loginCfg);
+            log("bootstrap: loginService.initConfig OK");
+        }
+    }
+    const loginResult = await kernel.quickLogin(ctx, {});
+    log(`bootstrap: quickLogin OK, uin=${loginResult.uin}, uid=${loginResult.uid}`);
+    const sessionConfig = kernel.buildSessionConfig({
+        appid: Appid,
+        fullVersion: bootEnv.qqVersion || "",
+        selfUin: loginResult.uin,
+        selfUid: loginResult.uid,
+        accountPath: bootEnv.dataDir || ".",
+        downloadPath: join(bootEnv.dataDir || ".", "temp"),
+    });
+    const listener = kernel.createLifecycleSessionListener();
+    await kernel.initAndStartSession(ctx, sessionConfig, listener, {
+        timeoutMs: 20000,
+    });
+    log("bootstrap: session init + startNT OK!");
+}
+
+/** 冒烟探测（NAPUTO_PROBE=1 时运行）。 */
+async function probeRuntime(kernel: KernelLike, ctx: CoreContextLike): Promise<void> {
+    if (env.NAPUTO_PROBE !== "1" || typeof kernel.probeRuntime !== "function") {
+        return;
+    }
+    try {
+        const probe = kernel.probeRuntime(ctx);
+        log(
+            `bootstrap: probe done, session=${probe.session ? "ok" : "null"}, services=${Object.keys(probe.services ?? {}).length}`,
+        );
+    } catch (e) {
+        log(`bootstrap: probe error: ${errMsg(e)}`);
+    }
+}
+
 /** 回退：旧装配路径（startNapuketto + 手工 lifecycle）。 */
 async function bootstrapFallback(
     kernel: KernelLike,
@@ -55,49 +112,8 @@ async function bootstrapFallback(
     log(
         `bootstrap: startNapuketto OK, engine=${typeof ctx.engine}, session=${ctx.session !== null}`,
     );
-    if (
-        typeof kernel.quickLogin === "function" &&
-        typeof kernel.initAndStartSession === "function"
-    ) {
-        if (typeof kernel.buildLoginConfig === "function" && ctx.loginService) {
-            const loginCfg = kernel.buildLoginConfig(
-                Appid as number,
-                bootEnv.qqVersion || "",
-                bootEnv.dataDir || ".",
-            );
-            if (typeof ctx.loginService.initConfig === "function") {
-                ctx.loginService.initConfig(loginCfg);
-                log("bootstrap: loginService.initConfig OK");
-            }
-        }
-        const loginResult = await kernel.quickLogin(ctx, {});
-        log(`bootstrap: quickLogin OK, uin=${loginResult.uin}, uid=${loginResult.uid}`);
-        const sessionConfig = kernel.buildSessionConfig({
-            appid: Appid,
-            fullVersion: bootEnv.qqVersion || "",
-            selfUin: loginResult.uin,
-            selfUid: loginResult.uid,
-            accountPath: bootEnv.dataDir || ".",
-            downloadPath: join(bootEnv.dataDir || ".", "temp"),
-        });
-        const listener = kernel.createLifecycleSessionListener();
-        await kernel.initAndStartSession(ctx, sessionConfig, listener, {
-            timeoutMs: 20000,
-        });
-        log("bootstrap: session init + startNT OK!");
-    } else {
-        log("bootstrap: kernel missing lifecycle fns (quickLogin/initAndStartSession)");
-    }
-    if (env.NAPUTO_PROBE === "1" && typeof kernel.probeRuntime === "function") {
-        try {
-            const probe = kernel.probeRuntime(ctx);
-            log(
-                `bootstrap: probe done, session=${probe.session ? "ok" : "null"}, services=${Object.keys(probe.services ?? {}).length}`,
-            );
-        } catch (e) {
-            log(`bootstrap: probe error: ${errMsg(e)}`);
-        }
-    }
+    await quickLoginAndStartSession(kernel, ctx, Appid as number, bootEnv);
+    await probeRuntime(kernel, ctx);
 }
 
 /** 核心引导：import kernel → 装配 → 登录 → 替换 session → 等待就绪 → 协议装配。 */

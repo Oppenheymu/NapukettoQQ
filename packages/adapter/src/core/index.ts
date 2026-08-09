@@ -5,8 +5,8 @@
 export { ActionRegistry } from "./action-registry.js";
 export type { ProtocolAdapterLike } from "./adapter-registry.js";
 export { AdapterRegistry } from "./adapter-registry.js";
-export type { ActionResult, ErrorCodeMap } from "./BaseAction.js";
-export { BaseAction } from "./BaseAction.js";
-export type { ProtocolHooks } from "./BaseProtocolAdapter.js";
-export { BaseProtocolAdapter } from "./BaseProtocolAdapter.js";
+export type { ActionResult, ErrorCodeMap } from "./base-action.js";
+export { BaseAction } from "./base-action.js";
+export type { ProtocolHooks } from "./base-protocol-adapter.js";
+export { BaseProtocolAdapter } from "./base-protocol-adapter.js";
 export { ProtocolConfig } from "./config.js";

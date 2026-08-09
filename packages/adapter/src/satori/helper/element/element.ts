@@ -24,9 +24,12 @@ export interface SatoriElement {
     text?: string;
 }
 
+/** 文本转义正则（& < >）。 */
+const TEXT_ESCAPE_RE = /[&<>]/g;
+
 /** 文本转义（& < >）。 */
 function encodeText(input: string): string {
-    return input.replace(/[&<>]/g, (ch) => {
+    return input.replace(TEXT_ESCAPE_RE, (ch) => {
         if (ch === "&") {
             return "&amp;";
         }
@@ -37,9 +40,12 @@ function encodeText(input: string): string {
     });
 }
 
+/** 属性值转义正则（& " < >）。 */
+const ATTR_ESCAPE_RE = /[&"<>]/g;
+
 /** 属性值转义（& " < >）。 */
 function encodeAttr(input: string): string {
-    return input.replace(/[&"<>]/g, (ch) => {
+    return input.replace(ATTR_ESCAPE_RE, (ch) => {
         if (ch === "&") {
             return "&amp;";
         }
@@ -53,18 +59,25 @@ function encodeAttr(input: string): string {
     });
 }
 
+/** 行首连续空白。 */
+const LEADING_WS_RE = /^\s+/;
+/** 行尾连续空白。 */
+const TRAILING_WS_RE = /\s+$/;
+/** 换行符。 */
+const NEWLINE_RE = /[\r\n]/;
+
 /**
  * 文本规范化：开头/结尾的「包含换行符的连续空白」被忽略（规范），
  * 中间的空白与不含换行的首尾空白保留。
  */
 function normalizeText(raw: string): string {
-    const leading = /^\s+/.exec(raw);
-    const trailing = /\s+$/.exec(raw);
+    const leading = LEADING_WS_RE.exec(raw);
+    const trailing = TRAILING_WS_RE.exec(raw);
     let out = raw;
-    if (leading !== null && /[\r\n]/.test(leading[0])) {
+    if (leading !== null && NEWLINE_RE.test(leading[0])) {
         out = out.slice(leading[0].length);
     }
-    if (trailing !== null && /[\r\n]/.test(trailing[0])) {
+    if (trailing !== null && NEWLINE_RE.test(trailing[0])) {
         out = out.slice(0, -trailing[0].length);
     }
     return out;

@@ -19,8 +19,16 @@ describe("serialize", () => {
     });
 
     it("function → [function name]", () => {
-        expect(serialize(function abc() {})).toBe("[function abc]");
-        expect(serialize(() => {})).toBe("[function ]");
+        expect(
+            serialize(function abc() {
+                // 空函数体：serialize 仅取函数名
+            }),
+        ).toBe("[function abc]");
+        expect(
+            serialize(() => {
+                // 空函数体：serialize 仅取函数名
+            }),
+        ).toBe("[function ]");
     });
 
     it("数组递归 + 截断上限", () => {

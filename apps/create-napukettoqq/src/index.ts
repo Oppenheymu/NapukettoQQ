@@ -22,7 +22,7 @@ import { relative } from "node:path";
 import process from "node:process";
 import { cancel, confirm, intro, isCancel, log, outro, spinner, text } from "@clack/prompts";
 import pc from "picocolors";
-import type { PackageManager } from "./scaffold.js";
+import type { PackageManager, ScaffoldResult } from "./scaffold.js";
 import {
     checkDirStatus,
     DEFAULT_PROJECT_NAME,
@@ -178,9 +178,14 @@ async function askStartNow(yes: boolean): Promise<boolean> {
     return ok;
 }
 
+/** 空白/引号判定。 */
+const SHELL_WHITESPACE_RE = /[\s"]/;
+/** 内部引号转义。 */
+const QUOTE_RE = /"/g;
+
 /** 拼命令行时最小转义：含空白/引号则加双引号包裹（参数均为内部字面量，仅兜底）。 */
 function quoteShellArg(arg: string): string {
-    return /[\s"]/.test(arg) ? `"${arg.replace(/"/g, '\\"')}"` : arg;
+    return SHELL_WHITESPACE_RE.test(arg) ? `"${arg.replace(QUOTE_RE, '\\"')}"` : arg;
 }
 
 /** 前台执行命令（stdio 继承，用户可见进度/交互），返回退出码。 */
@@ -207,6 +212,45 @@ function runInteractive(bin: string, args: string[], cwd: string): Promise<numbe
     });
 }
 
+/** 目标目录准备：非空需确认清空（-f 跳过确认；-y 不隐式清空）。返回 null = 已取消。 */
+async function prepareTargetDir(
+    dirName: string,
+    opts: CliOptions,
+): Promise<{ targetDir: string; overwrite: boolean } | null> {
+    const targetDir = resolveTargetDir(dirName);
+    let overwrite = false;
+    if ((await checkDirStatus(targetDir)) === "nonempty") {
+        if (!opts.forced) {
+            log.warn(`目标目录 "${dirName}" 已存在且非空。`);
+            overwrite = await confirmRemove(dirName);
+            if (!overwrite) {
+                outro("已取消，未做任何修改。");
+                return null;
+            }
+        } else {
+            overwrite = true;
+        }
+    }
+    return { targetDir, overwrite };
+}
+
+/** 安装依赖（失败提示手动安装路径）。返回是否继续。 */
+async function installDeps(pm: PackageManager, result: ScaffoldResult): Promise<boolean> {
+    const color = brandColor(pm);
+    log.info("前置要求：本机已安装 QQ NT（wrapper.node 来自 QQ 安装目录）。");
+    log.info(`正在安装依赖（${color(pm)} install）...`);
+    const installCode = await runInteractive(pmBin(pm), ["install"], result.dir);
+    if (installCode === 0) {
+        return true;
+    }
+    log.error(`依赖安装失败（退出码 ${installCode}）。请手动执行：`);
+    log.step(`cd ${result.dir}`);
+    log.step(color(`${pm} install`));
+    outro("创建失败，请手动安装后重试。");
+    process.exitCode = 1;
+    return false;
+}
+
 async function main(): Promise<void> {
     const opts = parseArgs(process.argv.slice(2));
     if (opts.help) {
@@ -222,22 +266,11 @@ async function main(): Promise<void> {
     intro(brand(`create-napukettoqq  v${readVersion()}`));
 
     const dirName = opts.name ?? (await askProjectName(opts.yes));
-    const targetDir = resolveTargetDir(dirName);
-
-    // 目标目录准备：非空需确认清空（-f 跳过确认；-y 不隐式清空，保持默认安全语义）
-    let overwrite = false;
-    if ((await checkDirStatus(targetDir)) === "nonempty") {
-        if (!opts.forced) {
-            log.warn(`目标目录 "${dirName}" 已存在且非空。`);
-            overwrite = await confirmRemove(dirName);
-            if (!overwrite) {
-                outro("已取消，未做任何修改。");
-                return;
-            }
-        } else {
-            overwrite = true;
-        }
+    const prepared = await prepareTargetDir(dirName, opts);
+    if (prepared === null) {
+        return;
     }
+    const { targetDir, overwrite } = prepared;
 
     // 生成骨架（spinner 进度）
     const s = spinner();
@@ -248,15 +281,7 @@ async function main(): Promise<void> {
     log.success(`位置：${result.dir}`);
 
     // 自动安装依赖（用调用方包管理器）
-    log.info("前置要求：本机已安装 QQ NT（wrapper.node 来自 QQ 安装目录）。");
-    log.info(`正在安装依赖（${brand(pm)} install）...`);
-    const installCode = await runInteractive(pmBin(pm), ["install"], result.dir);
-    if (installCode !== 0) {
-        log.error(`依赖安装失败（退出码 ${installCode}）。请手动执行：`);
-        log.step(`cd ${result.dir}`);
-        log.step(brand(`${pm} install`));
-        outro("创建失败，请手动安装后重试。");
-        process.exitCode = 1;
+    if (!(await installDeps(pm, result))) {
         return;
     }
 

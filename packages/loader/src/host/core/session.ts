@@ -46,6 +46,28 @@ export function isSessionUsable(s: unknown): boolean {
     }
 }
 
+/** 描述单个 session 对象（探测日志用；无效对象返回带断言信息的占位）。 */
+function describeSession(s: unknown): string {
+    if (!s) {
+        return "null";
+    }
+    try {
+        const sess = s as { getSessionId?(): unknown; getMsgService?(): unknown };
+        const id = typeof sess.getSessionId === "function" ? String(sess.getSessionId()) : "?";
+        const svc = typeof sess.getMsgService === "function" ? sess.getMsgService() : null;
+        return `id=${id} msgSvc=${svc !== null && svc !== undefined ? "READY" : "null"}`;
+    } catch (e) {
+        return `id=? msgSvc=断言(${errMsg(e).slice(0, 60)})`;
+    }
+}
+
+/** 非空候选才追加探测描述。 */
+function pushProbe(out: string[], label: string, candidate: unknown): void {
+    if (candidate) {
+        out.push(`${label}[${describeSession(candidate)}]`);
+    }
+}
+
 /** session 就绪探测（5s 间隔，60s 上限）——观察 qqSession / get() 状态。 */
 export function startSessionProbe(
     state: SharedState,
@@ -58,33 +80,15 @@ export function startSessionProbe(
                 | WrapperSessionStaticLike
                 | undefined;
             const out: string[] = [];
-            // 通用 sessionId 提取（getSessionId 方法存在则打印——确认单例表身份）
-            const describe = (s: unknown): string => {
-                if (!s) return "null";
-                try {
-                    const sess = s as { getSessionId?(): unknown; getMsgService?(): unknown };
-                    const id =
-                        typeof sess.getSessionId === "function" ? String(sess.getSessionId()) : "?";
-                    const svc =
-                        typeof sess.getMsgService === "function" ? sess.getMsgService() : null;
-                    return `id=${id} msgSvc=${svc !== null && svc !== undefined ? "READY" : "null"}`;
-                } catch (e) {
-                    return `id=? msgSvc=断言(${errMsg(e).slice(0, 60)})`;
-                }
-            };
-            if (
-                state.qqSession &&
-                typeof (state.qqSession as { getMsgService?: unknown }).getMsgService === "function"
-            ) {
-                out.push(`qqSession[${describe(state.qqSession)}]`);
+            const qqSession = state.qqSession as { getMsgService?: unknown } | null | undefined;
+            if (qqSession && typeof qqSession.getMsgService === "function") {
+                pushProbe(out, "qqSession", qqSession);
             }
             if (S2 && typeof S2.get === "function") {
-                const got = S2.get();
-                out.push(`get()[${describe(got)}]`);
+                pushProbe(out, "get()", S2.get());
             }
             if (S2 && typeof S2.getNTWrapperSession === "function") {
-                const gotNT = S2.getNTWrapperSession("Session");
-                if (gotNT) out.push(`getNT("Session")[${describe(gotNT)}]`);
+                pushProbe(out, 'getNT("Session")', S2.getNTWrapperSession("Session"));
             }
             log(`BOOT: session 探测: ${out.join(" | ")}`);
         } catch (e) {
