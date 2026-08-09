@@ -36,7 +36,9 @@
         "forceConsistentCasingInFileNames": true,
         "declaration": true,
         "declarationMap": true,
-        "noEmit": true
+        "noEmit": true,
+        "allowImportingTsExtensions": true,
+        "erasableSyntaxOnly": true
     },
     "exclude": [
         "apps/koishi-plugin-adapter"
