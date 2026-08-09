@@ -6,7 +6,7 @@
  *  - extractDataRoot：JSON 字符串宽容解析（递归找 QQ 路径）/ 纯路径透传 / 非法 JSON
  */
 import { describe, expect, it } from "vitest";
-import { extractDataRoot, resolveQqGlobalPath } from "./qq-data-path.js";
+import { extractDataRoot, resolveQqGlobalPath } from "../qq-data-path.js";
 
 /** 平台无关路径断言（join 在 Windows 会把 / 转成 \）。 */
 function expectPathEqual(actual: string, expected: string): void {

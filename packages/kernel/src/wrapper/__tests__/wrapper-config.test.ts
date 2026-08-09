@@ -10,7 +10,7 @@ import { rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { parseAppidFromMajor, resolveAppidQua } from "./wrapper-config.js";
+import { parseAppidFromMajor, resolveAppidQua } from "../wrapper-config.js";
 
 /** 临时文件路径。 */
 let majorPath: string;

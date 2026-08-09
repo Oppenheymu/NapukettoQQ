@@ -11,7 +11,7 @@ import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { listQQVersions, resolveQQVersion, resolveWrapperPath } from "./wrapper-version.js";
+import { listQQVersions, resolveQQVersion, resolveWrapperPath } from "../wrapper-version.js";
 
 /** 临时 QQ 安装目录。 */
 let installDir: string;
