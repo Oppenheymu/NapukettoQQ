@@ -11,8 +11,15 @@ export function listMethods(obj: unknown): string[] {
         return [];
     }
     const names = new Set<string>();
+    collectPrototypeNames(obj, names);
+    collectOwnNames(obj, names);
+    return [...names].sort();
+}
+
+/** 收集原型链上的属性名（到 Object/Function.prototype 为止，去构造器）。 */
+function collectPrototypeNames(obj: unknown, names: Set<string>): void {
     let proto = Object.getPrototypeOf(obj);
-    while (proto && proto !== Object.prototype && proto !== Function.prototype) {
+    while (isProbeProto(proto)) {
         for (const name of Object.getOwnPropertyNames(proto)) {
             if (name !== "constructor") {
                 names.add(name);
@@ -20,13 +27,20 @@ export function listMethods(obj: unknown): string[] {
         }
         proto = Object.getPrototypeOf(proto);
     }
-    // 自有属性方法也并入
+}
+
+/** 是否仍需遍历的原型（非 Object/Function.prototype 且非空）。 */
+function isProbeProto(proto: object | null): proto is object {
+    return proto !== null && proto !== Object.prototype && proto !== Function.prototype;
+}
+
+/** 收集自有属性名（去构造器）。 */
+function collectOwnNames(obj: unknown, names: Set<string>): void {
     for (const name of Object.getOwnPropertyNames(obj)) {
         if (name !== "constructor") {
             names.add(name);
         }
     }
-    return [...names].sort();
 }
 
 /** 安全调用：尝试调用方法拿返回值，失败记录错误（不中断探测）。 */

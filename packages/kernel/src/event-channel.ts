@@ -146,9 +146,7 @@ export class NTEventChannel<L extends ListenerShape, Name extends string> {
             try {
                 anyHandler(event as string, ...args);
             } catch (err) {
-                for (const errorHandler of this.errorHandlers) {
-                    errorHandler(err);
-                }
+                this.notifyError(err);
             }
         }
         const listeners = this.emitter.listeners(event as string);
@@ -157,10 +155,15 @@ export class NTEventChannel<L extends ListenerShape, Name extends string> {
                 (listener as (...a: unknown[]) => void)(...args);
             } catch (err) {
                 // error 兜底：单个订阅者异常不打断派发，统一通知 onError
-                for (const handler of this.errorHandlers) {
-                    handler(err);
-                }
+                this.notifyError(err);
             }
+        }
+    }
+
+    /** 通知所有错误处理器（单个异常不打断其他处理器）。 */
+    private notifyError(err: unknown): void {
+        for (const handler of this.errorHandlers) {
+            handler(err);
         }
     }
 

@@ -90,9 +90,22 @@ export async function initAndStartSession(
     const depends = new DependsAdapter();
     const dispatcher = new DispatcherAdapter();
 
-    // 等 init 完成：以 onOpentelemetryInit(is_init===true) 为主（wrapper 契约），
-    // onSessionInitComplete(0) 为辅；非 0 即失败。
-    const initComplete = new Promise<void>((resolve, reject) => {
+    const initComplete = watchInitSignal(listener);
+    session.init(config, depends, dispatcher, listener);
+    startSessionBestEffort(ctx, session);
+
+    const ok = await Promise.race([
+        initComplete.then(() => true),
+        waitFor(() => false, opts.timeoutMs ?? DEFAULT_INIT_TIMEOUT_MS).then(() => false),
+    ]);
+    if (!ok) {
+        throw kernelError("session init 超时", "TIMEOUT");
+    }
+}
+
+/** 监听 init 完成信号：onOpentelemetryInit(is_init) 为主，onSessionInitComplete(0) 为辅。 */
+function watchInitSignal(listener: NodeIKernelSessionListener): Promise<void> {
+    return new Promise<void>((resolve, reject) => {
         const onOpentelemetry = listener.onOpentelemetryInit;
         listener.onOpentelemetryInit = (info) => {
             if (info.is_init) {
@@ -114,37 +127,44 @@ export async function initAndStartSession(
             }
         };
     });
+}
 
-    session.init(config, depends, dispatcher, listener);
-    // 启动：**先 init 后 start（2026-08-07 V9 决定性修正）**。
-    // 自建宿主实测（HANDOVER-V9，p0-napcat-min）：必须先 session.init 再
-    // startupSession.start()——顺序颠倒（先 start 后 init）业务 service 不挂载
-    // （getMsgService null）；init 后用 startNT（非 startupSession.start）也失败。
-    // NapCat initializeSession 同款：有 startupSession 用 start()，否则 startNT(0)。
+/**
+ * 启动会话（best effort，失败不致命）：
+ * **先 init 后 start（2026-08-07 V9 决定性修正）**。
+ * 自建宿主实测（HANDOVER-V9，p0-napcat-min）：必须先 session.init 再
+ * startupSession.start()——顺序颠倒（先 start 后 init）业务 service 不挂载
+ * （getMsgService null）；init 后用 startNT（非 startupSession.start）也失败。
+ * NapCat initializeSession 同款：有 startupSession 用 start()，否则 startNT(0)。
+ */
+function startSessionBestEffort(
+    ctx: WrapperContext,
+    session: NonNullable<WrapperContext["session"]>,
+): void {
+    if (startupSessionStart(ctx)) {
+        return;
+    }
+    try {
+        session.startNT(0);
+    } catch {
+        try {
+            session.startNT();
+        } catch {
+            // 无 startNT（9.9.31）：忽略，等 init 完成信号
+        }
+    }
+}
+
+/** 有 startupSession 则 start()（失败不致命），返回是否已处理。 */
+function startupSessionStart(ctx: WrapperContext): boolean {
     const { startupSession } = ctx;
-    if (startupSession !== null && typeof startupSession.start === "function") {
-        try {
-            startupSession.start();
-        } catch {
-            // start 失败不致命，靠 onOpentelemetryInit/onSessionInitComplete 信号判断
-        }
-    } else {
-        try {
-            session.startNT(0);
-        } catch {
-            try {
-                session.startNT();
-            } catch {
-                // 无 startNT（9.9.31）：忽略，等 init 完成信号
-            }
-        }
+    if (startupSession === null || typeof startupSession.start !== "function") {
+        return false;
     }
-
-    const ok = await Promise.race([
-        initComplete.then(() => true),
-        waitFor(() => false, opts.timeoutMs ?? DEFAULT_INIT_TIMEOUT_MS).then(() => false),
-    ]);
-    if (!ok) {
-        throw kernelError("session init 超时", "TIMEOUT");
+    try {
+        startupSession.start();
+    } catch {
+        // start 失败不致命，靠 onOpentelemetryInit/onSessionInitComplete 信号判断
     }
+    return true;
 }

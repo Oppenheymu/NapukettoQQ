@@ -11,22 +11,16 @@ import type { WrapperContext } from "./wrapper-loader.js";
 
 /** 从 getSessionIdList 的 Map 提取主 sessionId（nt_ 前缀优先）。 */
 function findMainSessionId(ids: Map<unknown, unknown>): string | null {
+    return firstStringId(ids, (s) => s.startsWith("nt_")) ?? firstStringId(ids, () => true);
+}
+
+/** 遍历 Map 找第一个满足谓词的字符串 id（值优先，其次键）。 */
+function firstStringId(ids: Map<unknown, unknown>, pred: (s: string) => boolean): string | null {
     for (const [k, v] of ids) {
-        if (typeof v === "string") {
-            if (v.startsWith("nt_")) {
-                return v;
-            }
-        } else if (typeof k === "string" && k.startsWith("nt_")) {
-            return k;
-        }
-    }
-    for (const [, v] of ids) {
-        if (typeof v === "string") {
+        if (typeof v === "string" && pred(v)) {
             return v;
         }
-    }
-    for (const k of ids.keys()) {
-        if (typeof k === "string") {
+        if (typeof k === "string" && pred(k)) {
             return k;
         }
     }
@@ -38,13 +32,8 @@ function resolveMainSession(
     created: { start?: () => void; getSessionIdList?: () => unknown },
     getNTWrapperSession: (id: string) => NodeIQQNTWrapperSession,
 ): NodeIQQNTWrapperSession | null {
-    if (typeof created.start === "function") {
-        created.start();
-    }
-    if (typeof created.getSessionIdList !== "function") {
-        return null;
-    }
-    const ids = created.getSessionIdList();
+    created.start?.();
+    const ids = typeof created.getSessionIdList === "function" ? created.getSessionIdList() : null;
     if (!(ids instanceof Map)) {
         return null;
     }
@@ -52,12 +41,10 @@ function resolveMainSession(
     if (mainId === null) {
         return null;
     }
-    const session = getNTWrapperSession(mainId);
-    const maybe = session as NodeIQQNTWrapperSession | null | undefined;
-    if (maybe !== null && maybe !== undefined && typeof maybe.getMsgService === "function") {
-        return maybe;
-    }
-    return null;
+    const maybe = getNTWrapperSession(mainId) as NodeIQQNTWrapperSession | null | undefined;
+    return maybe !== null && maybe !== undefined && typeof maybe.getMsgService === "function"
+        ? maybe
+        : null;
 }
 
 /**
@@ -65,21 +52,28 @@ function resolveMainSession(
  * 优先 `NodeIQQNTWrapperSession.get()`；返回 null 时回退 createSession。
  */
 export function getExistingSession(ctx: WrapperContext): NodeIQQNTWrapperSession | null {
+    const got = trySessionGet(ctx);
+    if (got !== null) {
+        ctx.session = got;
+        return got;
+    }
+    return null;
+}
+
+/** NodeIQQNTWrapperSession.get() 单例（无效/异常返回 null）。 */
+function trySessionGet(ctx: WrapperContext): NodeIQQNTWrapperSession | null {
     try {
         const S = ctx.exports.NodeIQQNTWrapperSession as unknown as {
             get?: () => NodeIQQNTWrapperSession;
         };
-        if (typeof S.get === "function") {
-            const got = S.get();
-            if (got && typeof got.getMsgService === "function") {
-                ctx.session = got;
-                return got;
-            }
+        if (typeof S.get !== "function") {
+            return null;
         }
+        const got = S.get();
+        return got && typeof got.getMsgService === "function" ? got : null;
     } catch {
-        // 复用失败，回退 create
+        return null; // 复用失败，回退 create
     }
-    return null;
 }
 
 /**
@@ -90,31 +84,35 @@ export function getExistingSession(ctx: WrapperContext): NodeIQQNTWrapperSession
  */
 export function getMainSession(ctx: WrapperContext): NodeIQQNTWrapperSession | null {
     try {
-        const startupRaw = ctx.exports.NodeIQQNTStartupSessionWrapper as unknown as {
-            create?: () => { start?: () => void; getSessionIdList?: () => unknown } | null;
-        };
-        const sessionCtor = ctx.exports.NodeIQQNTWrapperSession as unknown as {
-            getNTWrapperSession?: (id: string) => NodeIQQNTWrapperSession;
-        };
-        if (
-            typeof startupRaw.create !== "function" ||
-            typeof sessionCtor.getNTWrapperSession !== "function"
-        ) {
-            return null;
-        }
-        const created = startupRaw.create();
-        if (!created) {
-            return null;
-        }
-        const getSession = (id: string): NodeIQQNTWrapperSession =>
-            (sessionCtor.getNTWrapperSession as (name: string) => NodeIQQNTWrapperSession)(id);
-        const session = resolveMainSession(created, getSession);
-        if (session !== null) {
-            ctx.session = session;
-        }
-        return session;
+        return resolveMainFromStartup(ctx) ?? null;
     } catch {
-        // 复用失败，回退 create
+        return null; // 复用失败，回退 create
     }
-    return null;
+}
+
+/** startup.create → start → getSessionIdList → getNTWrapperSession 链路。 */
+function resolveMainFromStartup(ctx: WrapperContext): NodeIQQNTWrapperSession | null {
+    const startupRaw = ctx.exports.NodeIQQNTStartupSessionWrapper as unknown as {
+        create?: () => { start?: () => void; getSessionIdList?: () => unknown } | null;
+    };
+    const sessionCtor = ctx.exports.NodeIQQNTWrapperSession as unknown as {
+        getNTWrapperSession?: (id: string) => NodeIQQNTWrapperSession;
+    };
+    if (
+        typeof startupRaw.create !== "function" ||
+        typeof sessionCtor.getNTWrapperSession !== "function"
+    ) {
+        return null;
+    }
+    const created = startupRaw.create();
+    if (!created) {
+        return null;
+    }
+    const getSession = (id: string): NodeIQQNTWrapperSession =>
+        (sessionCtor.getNTWrapperSession as (name: string) => NodeIQQNTWrapperSession)(id);
+    const session = resolveMainSession(created, getSession);
+    if (session !== null) {
+        ctx.session = session;
+    }
+    return session;
 }

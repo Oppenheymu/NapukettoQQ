@@ -25,42 +25,68 @@ import { listMethods, tryCall } from "./probe-utils.js";
 /** 枚举候选 sessionId（nt_0..nt_9 / gpro_0..gpro_9）找 QQ 已 init 的 session。 */
 function enumerateSessionIds(ctx: WrapperContext): Record<string, unknown> {
     const S = ctx.exports.NodeIQQNTWrapperSession;
-    const enumFn = (S as unknown as Record<string, unknown>)["getNTWrapperSession"];
+    const enumFn = getNTWrapperSessionFn(ctx);
+    if (enumFn === null) {
+        return {};
+    }
     const out: Record<string, unknown> = {};
-    if (typeof enumFn !== "function") {
-        return out;
-    }
-    const ids: string[] = [];
     for (let i = 0; i < 10; i += 1) {
-        ids.push(`nt_${i}`, `gpro_${i}`);
-    }
-    for (const id of ids) {
-        try {
-            const value = (enumFn as (...args: unknown[]) => unknown).call(S, id);
-            if (!value) continue;
-            const rec = value as Record<string, unknown>;
-            // getter 存在性
-            const hasGetter = typeof rec["getMsgService"] === "function";
-            // 实际调用结果（关键：service 是否已 init）
-            let msgService: unknown = null;
-            let msgError: string | null = null;
-            try {
-                msgService = (rec["getMsgService"] as () => unknown).call(value);
-            } catch (e) {
-                msgError = e instanceof Error ? e.message : String(e);
-            }
-            out[id] = {
-                hasMsgServiceGetter: hasGetter,
-                msgServiceOk: msgService !== null && msgService !== undefined,
-                msgServiceMethods: msgService ? listMethods(msgService).length : 0,
-                msgError,
-                methods: listMethods(value),
-            };
-        } catch {
-            // 忽略单次失败
-        }
+        probeSessionId(enumFn, S, `nt_${i}`, out);
+        probeSessionId(enumFn, S, `gpro_${i}`, out);
     }
     return out;
+}
+
+/** 探测单个 sessionId（getter 存在性 + getMsgService 调用结果）。 */
+function probeSessionId(
+    enumFn: (...args: unknown[]) => unknown,
+    thisCtx: unknown,
+    id: string,
+    out: Record<string, unknown>,
+): void {
+    try {
+        const value = enumFn.call(thisCtx, id);
+        if (!value) {
+            return;
+        }
+        out[id] = probeSessionRecord(value);
+    } catch {
+        // 忽略单次失败
+    }
+}
+
+/** 探测单个 session 记录（getter 存在性 + msgService 调用结果 + 方法面）。 */
+function probeSessionRecord(value: unknown): Record<string, unknown> {
+    const rec = value as Record<string, unknown>;
+    const msg = tryMsgService(rec, value);
+    return {
+        hasMsgServiceGetter: typeof rec["getMsgService"] === "function",
+        msgServiceOk: msg.service !== null,
+        msgServiceMethods: msg.service ? listMethods(msg.service).length : 0,
+        msgError: msg.error,
+        methods: listMethods(value),
+    };
+}
+
+/** 尝试调用 getMsgService（失败记录错误，成功返回实例）。 */
+function tryMsgService(
+    rec: Record<string, unknown>,
+    thisCtx: unknown,
+): { service: unknown; error: string | null } {
+    try {
+        const svc = (rec["getMsgService"] as () => unknown).call(thisCtx);
+        return { service: svc ?? null, error: null };
+    } catch (e) {
+        return { service: null, error: e instanceof Error ? e.message : String(e) };
+    }
+}
+
+/** 取 NodeIQQNTWrapperSession.getNTWrapperSession 函数（无则 null）。 */
+function getNTWrapperSessionFn(ctx: WrapperContext): ((...args: unknown[]) => unknown) | null {
+    const fn = (ctx.exports.NodeIQQNTWrapperSession as unknown as Record<string, unknown>)[
+        "getNTWrapperSession"
+    ];
+    return typeof fn === "function" ? (fn as (...args: unknown[]) => unknown) : null;
 }
 
 /** 探测 startup 实例：start() + getSessionIdList()，提取 sessionIds（Map 值或键）。 */
@@ -71,29 +97,33 @@ function probeStartupChain(created: unknown): {
 } {
     const started = tryCall(created, "start");
     const ids = tryCall(created, "getSessionIdList");
-    const sessionIds: string[] = [];
-    if (ids.ok && ids.value instanceof Map) {
-        for (const [k, v] of ids.value) {
-            const id = typeof v === "string" ? v : String(k);
-            sessionIds.push(id);
-        }
-    }
     return {
         start: started.ok ? { ok: true } : { error: started.error },
         createdGetSessionIdList: ids.ok ? { value: serialize(ids.value) } : { error: ids.error },
-        sessionIds,
+        sessionIds: extractSessionIds(ids),
     };
+}
+
+/** 从 getSessionIdList 结果提取 sessionIds（Map 值或键优先）。 */
+function extractSessionIds(ids: { ok: boolean; value?: unknown }): string[] {
+    if (!(ids.ok && ids.value instanceof Map)) {
+        return [];
+    }
+    const out: string[] = [];
+    for (const [k, v] of ids.value) {
+        out.push(typeof v === "string" ? v : String(k));
+    }
+    return out;
 }
 
 /** 用真实 sessionId 取主 session（getNTWrapperSession(nt_x)）并记录方法面。 */
 function probeSessionById(ctx: WrapperContext, id: string): unknown {
-    const S = ctx.exports.NodeIQQNTWrapperSession;
-    const fn = (S as unknown as Record<string, unknown>)["getNTWrapperSession"];
-    if (typeof fn !== "function") {
+    const fn = getNTWrapperSessionFn(ctx);
+    if (fn === null) {
         return null;
     }
     try {
-        const value = (fn as (...args: unknown[]) => unknown).call(S, id);
+        const value = fn.call(ctx.exports.NodeIQQNTWrapperSession, id);
         return value
             ? { methods: listMethods(value), ownKeys: Object.getOwnPropertyNames(value) }
             : null;
@@ -104,26 +134,28 @@ function probeSessionById(ctx: WrapperContext, id: string): unknown {
 
 /** 兜底：候选名字 getNTWrapperSession（无 Map 数据时）。 */
 function probeByNameFallback(ctx: WrapperContext): Record<string, unknown> {
-    const S = ctx.exports.NodeIQQNTWrapperSession;
     const candidates = ["main", "primary", "session1", "default", ""];
     const getResults: Record<string, unknown> = {};
     for (const name of candidates) {
-        try {
-            const fn = (S as unknown as Record<string, unknown>)["getNTWrapperSession"];
-            const value =
-                typeof fn === "function"
-                    ? (fn as (...args: unknown[]) => unknown).call(S, name)
-                    : null;
-            getResults[name === "" ? "<empty>" : name] = value
-                ? { methods: listMethods(value), ownKeys: Object.getOwnPropertyNames(value) }
-                : null;
-        } catch (e) {
-            getResults[name === "" ? "<empty>" : name] = {
-                error: e instanceof Error ? e.message : String(e),
-            };
-        }
+        getResults[name === "" ? "<empty>" : name] = probeSessionByName(ctx, name);
     }
     return getResults;
+}
+
+/** 探测单个候选名（getNTWrapperSession(name)，记录方法面或错误）。 */
+function probeSessionByName(ctx: WrapperContext, name: string): unknown {
+    try {
+        const fn = getNTWrapperSessionFn(ctx);
+        if (fn === null) {
+            return null;
+        }
+        const value = fn.call(ctx.exports.NodeIQQNTWrapperSession, name);
+        return value
+            ? { methods: listMethods(value), ownKeys: Object.getOwnPropertyNames(value) }
+            : null;
+    } catch (e) {
+        return { error: e instanceof Error ? e.message : String(e) };
+    }
 }
 
 /** 探测 startup session 链路：create() → start() → getSessionIdList → getNTWrapperSession。 */
@@ -143,16 +175,7 @@ function probeStartup(ctx: WrapperContext): Record<string, unknown> | null {
           }
         : { error: created.error };
     if (created.ok && created.value) {
-        const chain = probeStartupChain(created.value);
-        out["start"] = chain.start;
-        out["createdGetSessionIdList"] = chain.createdGetSessionIdList;
-        out["sessionIds"] = chain.sessionIds;
-        // 用真实 sessionId 取主 session（格式 nt_<N> / gpro_<N>）
-        const mainId = chain.sessionIds.find((id) => id.startsWith("nt_")) ?? chain.sessionIds[0];
-        if (mainId !== undefined) {
-            out["mainSessionId"] = mainId;
-            out["mainSession"] = probeSessionById(ctx, mainId);
-        }
+        Object.assign(out, probeCreatedChain(ctx, created.value));
     }
     out["enumSessionIds"] = enumerateSessionIds(ctx);
     // 无 Map 数据时兜底：候选名字
@@ -162,49 +185,82 @@ function probeStartup(ctx: WrapperContext): Record<string, unknown> | null {
     return out;
 }
 
+/** 探测 create 后的实例链：start / getSessionIdList / 主 session。 */
+function probeCreatedChain(ctx: WrapperContext, created: unknown): Record<string, unknown> {
+    const chain = probeStartupChain(created);
+    const out: Record<string, unknown> = {
+        start: chain.start,
+        createdGetSessionIdList: chain.createdGetSessionIdList,
+        sessionIds: chain.sessionIds,
+    };
+    const mainId = findMainProbeId(chain.sessionIds);
+    if (mainId !== undefined) {
+        out["mainSessionId"] = mainId;
+        out["mainSession"] = probeSessionById(ctx, mainId);
+    }
+    return out;
+}
+
+/** 选主 sessionId（nt_ 前缀优先，否则第一个）。 */
+function findMainProbeId(sessionIds: string[]): string | undefined {
+    return sessionIds.find((id) => id.startsWith("nt_")) ?? sessionIds[0];
+}
+
 /** 探测 session 与 service 方法（优先复用 QQ 主 session）。 */
 function probeSession(ctx: WrapperContext): Record<string, unknown> {
     const out: Record<string, unknown> = {};
-    let session: unknown = null;
-    // 优先：startup → getSessionIdList → getNTWrapperSession（QQ 主 session）
+    const session = pickProbeSession(ctx, out);
+    out["session"] = session
+        ? { methods: listMethods(session), ownKeys: Object.getOwnPropertyNames(session) }
+        : null;
+    if (session !== null && session !== undefined) {
+        out["services"] = collectServiceGetters(session);
+    }
+    return out;
+}
+
+/** 选探测目标 session：优先 QQ 主 session（getMainSession），回退 ctx.session。 */
+function pickProbeSession(ctx: WrapperContext, out: Record<string, unknown>): unknown {
     try {
         const main = getMainSession(ctx);
         if (main !== null) {
-            session = main;
             out["sessionSource"] = "mainSession(getNTWrapperSession)";
+            return main;
         }
     } catch {
         // fallthrough
     }
-    if (session === null && ctx.session !== null) {
-        session = ctx.session;
+    if (ctx.session !== null) {
         out["sessionSource"] = "own-create";
+        return ctx.session;
     }
-    out["session"] = session
-        ? { methods: listMethods(session), ownKeys: Object.getOwnPropertyNames(session) }
-        : null;
+    return null;
+}
 
-    if (session !== null && session !== undefined) {
-        const getters = listMethods(session).filter(
-            (m) => m.startsWith("get") && m.endsWith("Service"),
-        );
-        const services: Record<string, unknown> = {};
-        for (const getter of getters) {
-            const call = tryCall(session, getter);
-            if (call.ok && call.value) {
-                const methods = listMethods(call.value);
-                services[getter] = {
-                    methods,
-                    ownKeys: Object.getOwnPropertyNames(call.value).slice(0, 20),
-                    shapes: shapeKeyGetters(call.value, methods),
-                };
-            } else {
-                services[getter] = { error: call.error ?? "null/undefined", ok: call.ok };
-            }
-        }
-        out["services"] = services;
+/** 收集 session 的 get*Service getter 方法面与返回形状。 */
+function collectServiceGetters(session: unknown): Record<string, unknown> {
+    const getters = listMethods(session).filter(
+        (m) => m.startsWith("get") && m.endsWith("Service"),
+    );
+    const services: Record<string, unknown> = {};
+    for (const getter of getters) {
+        services[getter] = probeServiceGetter(session, getter);
     }
-    return out;
+    return services;
+}
+
+/** 探测单个 getter：成功记录方法面/形状，失败记录错误。 */
+function probeServiceGetter(session: unknown, getter: string): unknown {
+    const call = tryCall(session, getter);
+    if (!(call.ok && call.value)) {
+        return { error: call.error ?? "null/undefined", ok: call.ok };
+    }
+    const methods = listMethods(call.value);
+    return {
+        methods,
+        ownKeys: Object.getOwnPropertyNames(call.value).slice(0, 20),
+        shapes: shapeKeyGetters(call.value, methods),
+    };
 }
 
 /**

@@ -178,21 +178,19 @@ export class RichMediaApi {
     }
 }
 
-/** 从 getGroupFileList 返回提取文件列表（兼容数组 / { items } / { fileList }）。 */
-function extractFileList(result: unknown): GroupFileListItem[] {
+/** 从 getGroupFileList 返回提取文件列表（兼容数组 / { items } / { fileList }）。导出供单测。 */
+export function extractFileList(result: unknown): GroupFileListItem[] {
     if (Array.isArray(result)) {
         return result as GroupFileListItem[];
     }
-    if (result !== null && typeof result === "object") {
-        const obj = result as { items?: unknown; fileList?: unknown; list?: unknown };
-        if (Array.isArray(obj.items)) {
-            return obj.items as GroupFileListItem[];
-        }
-        if (Array.isArray(obj.fileList)) {
-            return obj.fileList as GroupFileListItem[];
-        }
-        if (Array.isArray(obj.list)) {
-            return obj.list as GroupFileListItem[];
+    if (result === null || typeof result !== "object") {
+        return [];
+    }
+    const obj = result as { items?: unknown; fileList?: unknown; list?: unknown };
+    for (const key of ["items", "fileList", "list"] as const) {
+        const value = obj[key];
+        if (Array.isArray(value)) {
+            return value as GroupFileListItem[];
         }
     }
     return [];

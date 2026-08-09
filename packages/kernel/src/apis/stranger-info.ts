@@ -47,12 +47,25 @@ function mergeDetail(info: UserDetailInfoByUin, byUin: UserDetailInfoByUin): Mer
     const infoSimple = info.detail?.simpleInfo;
     const byUinSimple = byUin.detail?.simpleInfo;
     return {
-        coreInfo: infoSimple?.coreInfo ?? byUinSimple?.coreInfo,
-        baseInfo: infoSimple?.baseInfo ?? byUinSimple?.baseInfo,
-        vasInfo: infoSimple?.vasInfo ?? byUinSimple?.vasInfo,
-        commonExt: info.detail?.commonExt ?? byUin.detail?.commonExt,
-        status: infoSimple?.status?.status ?? byUinSimple?.status?.status,
+        coreInfo: pickField(infoSimple, byUinSimple, (s) => s?.coreInfo),
+        baseInfo: pickField(infoSimple, byUinSimple, (s) => s?.baseInfo),
+        vasInfo: pickField(infoSimple, byUinSimple, (s) => s?.vasInfo),
+        commonExt: pickField(info.detail, byUin.detail, (d) => d?.commonExt),
+        status: pickField(infoSimple, byUinSimple, (s) => s?.status?.status),
     };
+}
+
+/** 字段级回退：primary 的字段取不到回退 fallback 的同名字段（宽松取值）。 */
+function pickField<T, R>(
+    primary: T | undefined,
+    fallback: T | undefined,
+    get: (src: T) => R | undefined,
+): R | undefined {
+    const fromPrimary = primary !== undefined ? get(primary) : undefined;
+    if (fromPrimary !== undefined) {
+        return fromPrimary;
+    }
+    return fallback !== undefined ? get(fallback) : undefined;
 }
 
 /** 扁平化两份详情 → StrangerInfo（宽松取值，字段缺失给默认）。 */

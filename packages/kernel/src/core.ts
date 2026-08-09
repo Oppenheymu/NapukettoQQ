@@ -147,33 +147,7 @@ export class NapukettoCore {
         }
 
         // 1. loginService.initConfig（wrapper 流程：addKernelLoginListener 前）
-        const loginService = wrapper.loginService as {
-            initConfig?: (config: unknown) => void;
-        } | null;
-        if (loginService !== null && typeof loginService.initConfig === "function") {
-            // worker（utilityProcess）模式 + 自建宿主（标准 node）下 loginService 是
-            // new 的，commonPath 必须指向 QQ 真实数据目录（数据根/nt_qq/global，
-            // HANDOVER-V6 三要素之三）才能读到历史账号——cli 的 `.napuketto\default`
-            // 读不到（getLoginList 空，P2-1 实测 2026-08-06）。
-            // QQ 主进程（V1）模式 QQ 自己 initConfig 过正确路径，无需解析。
-            let qqGlobalPath: string | null = null;
-            if (electronProcessType() !== "browser") {
-                const root = resolveQqUserDataRoot(wrapper.exports);
-                if (root !== null) {
-                    qqGlobalPath = resolveQqGlobalPath(root);
-                }
-            }
-            const commonPath = qqGlobalPath ?? this.ctx.paths.accountDir;
-            const loginCfg = buildLoginConfig(
-                opts.appid,
-                wrapper.versionInfo.fullVersion,
-                commonPath,
-            );
-            loginService.initConfig(loginCfg);
-            this.ctx.logger.info({ commonPath }, "loginService.initConfig OK");
-        } else {
-            this.ctx.logger.warn("loginService 不可用，跳过 initConfig");
-        }
+        this.initLoginConfig(wrapper, opts.appid);
 
         // 2. 登录：快速登录（优先）→ QR 回退。登录成功前不碰 session。
         let loginResult: LoginResult;
@@ -199,6 +173,28 @@ export class NapukettoCore {
     }
 
     /**
+     * loginService.initConfig（worker/自建宿主需指定 QQ 真实数据路径）。
+     * worker（utilityProcess）模式 + 自建宿主（标准 node）下 loginService 是
+     * new 的，commonPath 必须指向 QQ 真实数据目录（数据根/nt_qq/global，
+     * HANDOVER-V6 三要素之三）才能读到历史账号——cli 的 `.napuketto\default`
+     * 读不到（getLoginList 空，P2-1 实测 2026-08-06）。
+     * QQ 主进程（V1）模式 QQ 自己 initConfig 过正确路径，无需解析。
+     */
+    private initLoginConfig(wrapper: WrapperContext, appid: string): void {
+        const loginService = wrapper.loginService as {
+            initConfig?: (config: unknown) => void;
+        } | null;
+        if (loginService === null || typeof loginService.initConfig !== "function") {
+            this.ctx.logger.warn("loginService 不可用，跳过 initConfig");
+            return;
+        }
+        const commonPath = resolveCommonPath(this.ctx, wrapper);
+        const loginCfg = buildLoginConfig(appid, wrapper.versionInfo.fullVersion, commonPath);
+        loginService.initConfig(loginCfg);
+        this.ctx.logger.info({ commonPath }, "loginService.initConfig OK");
+    }
+
+    /**
      * 替换当前 session（登录后 Proxy 捕获的 QQ 新实例替换自己 create 的无效实例）。
      * 在 QQ 主进程内由 boot.cjs 调用（登录成功后）。
      */
@@ -217,6 +213,30 @@ export class NapukettoCore {
         }
         const session = new QrLoginSession(wrapper.loginService);
         const qrPath = opts.qrCodePath ?? this.ctx.paths.file("cache", "qrcode.png");
+        this.subscribeQrProgress(session, opts, qrPath);
+
+        // 启动 QR 登录（注册监听 → connect → getQRCodePicture）
+        const startOpts: { quickUin?: string } = {};
+        if (opts.quickUin !== undefined) {
+            startOpts.quickUin = opts.quickUin;
+        }
+        session.start(startOpts);
+
+        await waitQrLoggedIn(session);
+        const self = session.selfInfo;
+        if (self === null) {
+            throw kernelError("QR 登录成功但 selfInfo 为空", "INVALID_STATE");
+        }
+        session.stop();
+        return { uin: self.uin, uid: self.uid, nick: self.nick };
+    }
+
+    /** 订阅 QR 进度：二维码写盘 + 状态机经 onLoginProgress 转发。 */
+    private subscribeQrProgress(
+        session: QrLoginSession,
+        opts: CoreLoginOptions,
+        qrPath: string,
+    ): void {
         session.onQrCode((qr) => {
             this.ctx.logger.warn(`请扫描二维码登录（保存: ${qrPath} | URL: ${qr.qrcodeUrl}）`);
             if (qr.pngBase64 !== "") {
@@ -228,33 +248,6 @@ export class NapukettoCore {
             this.ctx.logger.info({ state }, "QR 登录状态");
             opts.onLoginProgress?.({ state });
         });
-
-        // 启动 QR 登录（注册监听 → connect → getQRCodePicture）
-        const startOpts: { quickUin?: string } = {};
-        if (opts.quickUin !== undefined) {
-            startOpts.quickUin = opts.quickUin;
-        }
-        session.start(startOpts);
-
-        // 等待登录成功
-        await new Promise<void>((resolve, reject) => {
-            const offState = session.onStateChange((state) => {
-                if (state === "logged_in") {
-                    offState();
-                    resolve();
-                } else if (state === "failed") {
-                    offState();
-                    reject(kernelError("QR 登录失败", "NOT_LOGIN"));
-                }
-            });
-        });
-
-        const self = session.selfInfo;
-        if (self === null) {
-            throw kernelError("QR 登录成功但 selfInfo 为空", "INVALID_STATE");
-        }
-        session.stop();
-        return { uin: self.uin, uid: self.uid, nick: self.nick };
     }
 
     /** 停止：日志收尾（资源清理留给 P2 常驻管理）。 */
@@ -271,4 +264,34 @@ function writeQrCodePng(filePath: string, pngBase64: string): void {
     } catch {
         // 写失败不阻塞登录（cli 仍可打印 URL）
     }
+}
+
+/** 等待 QR 登录终态：logged_in resolve，failed reject。 */
+function waitQrLoggedIn(session: QrLoginSession): Promise<void> {
+    return new Promise<void>((resolve, reject) => {
+        const offState = session.onStateChange((state) => {
+            if (state === "logged_in") {
+                offState();
+                resolve();
+            } else if (state === "failed") {
+                offState();
+                reject(kernelError("QR 登录失败", "NOT_LOGIN"));
+            }
+        });
+    });
+}
+
+/**
+ * loginService.initConfig 的 commonPath：
+ * worker/自建宿主（非 browser）优先 QQ 真实数据目录（数据根/nt_qq/global），
+ * 否则回退账号目录。
+ */
+function resolveCommonPath(ctx: CoreContext, wrapper: WrapperContext): string {
+    if (electronProcessType() !== "browser") {
+        const root = resolveQqUserDataRoot(wrapper.exports);
+        if (root !== null) {
+            return resolveQqGlobalPath(root);
+        }
+    }
+    return ctx.paths.accountDir;
 }

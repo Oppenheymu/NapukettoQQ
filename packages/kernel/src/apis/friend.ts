@@ -193,34 +193,41 @@ export class FriendApi {
         item: DoubtBuddyReq,
         uinMap: Map<string, string>,
     ): DoubtFriendRequestInfo {
-        const info: DoubtFriendRequestInfo = {
-            flag: item.uid,
-            uin: Number(uinMap.get(item.uid) ?? item.uid),
-            type: "doubt",
-        };
-        if (item.nick !== undefined) {
-            info.nick = item.nick;
-        }
-        if (item.source !== undefined) {
-            info.source = item.source;
-        }
-        if (item.reason !== undefined) {
-            info.reason = item.reason;
-        }
-        if (item.msg !== undefined) {
-            info.msg = item.msg;
-        }
-        if (item.groupCode !== undefined) {
-            info.group_code = item.groupCode;
-        }
-        if (item.reqTime !== undefined) {
-            info.time = item.reqTime;
-        }
-        return info;
+        return toDoubtFriendRequestInfo(item, uinMap);
     }
 
     /** 处理可疑好友申请（set_doubt_friends_add_request；uid=flag）。 */
     handleDoubtFriendRequest(uid: string): void {
         this.service.approvalDoubtBuddyReq(uid, "", "");
     }
+}
+
+/** 可选字段条件赋值（undefined 跳过，兼容 exactOptionalPropertyTypes）。 */
+function assignOptional<K extends keyof DoubtFriendRequestInfo>(
+    info: DoubtFriendRequestInfo,
+    key: K,
+    value: DoubtFriendRequestInfo[K] | undefined,
+): void {
+    if (value !== undefined) {
+        info[key] = value;
+    }
+}
+
+/** 单项转换：DoubtBuddyReq → OB11 结构（导出供单测，friend.test.ts）。 */
+export function toDoubtFriendRequestInfo(
+    item: DoubtBuddyReq,
+    uinMap: Map<string, string>,
+): DoubtFriendRequestInfo {
+    const info: DoubtFriendRequestInfo = {
+        flag: item.uid,
+        uin: Number(uinMap.get(item.uid) ?? item.uid),
+        type: "doubt",
+    };
+    assignOptional(info, "nick", item.nick);
+    assignOptional(info, "source", item.source);
+    assignOptional(info, "reason", item.reason);
+    assignOptional(info, "msg", item.msg);
+    assignOptional(info, "group_code", item.groupCode);
+    assignOptional(info, "time", item.reqTime);
+    return info;
 }

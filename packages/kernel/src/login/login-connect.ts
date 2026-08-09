@@ -113,9 +113,21 @@ async function ensureLoginConnected(
     if (raw === null || typeof raw.connect !== "function") {
         return; // 无 connect（老版本 / QQ 主进程自连），跳过
     }
-    const connect = raw.connect; // 提取局部变量（闭包内属性 narrowing 失效，TS2722）
-    const addListener = raw.addKernelLoginListener;
-    await new Promise<void>((resolve) => {
+    await waitLoginConnected(raw, opts.timeoutMs);
+    // onLoginConnected 后网络栈仍在初始化（p0-kernel-flow 实证：connect → onLoginConnected
+    // → 3s 缓冲 → quickLoginWithUin 成功；无缓冲则「登录系统连接异常」）。
+    await sleep(CONNECTION_SETTLE_MS);
+}
+
+/** 等 onLoginConnected（注册临时监听 + connect + 超时兜底）。 */
+function waitLoginConnected(
+    raw: {
+        connect?: () => void;
+        addKernelLoginListener?: (listener: unknown) => number;
+    },
+    timeoutMs?: number,
+): Promise<void> {
+    return new Promise<void>((resolve) => {
         let settled = false;
         const finish = (): void => {
             if (!settled) {
@@ -123,36 +135,48 @@ async function ensureLoginConnected(
                 resolve();
             }
         };
+        tryRegisterConnectListener(raw, finish);
+        setTimeout(finish, timeoutMs ?? NETWORK_READY_TIMEOUT_MS);
         try {
-            // 临时监听等 onLoginConnected；保留不 remove——登录后续回调
-            // （onQRCodeLoginSucceed 等）仍可能触发，且进程内只登录一次，无泄漏风险。
-            const listener = createLoginListener();
-            listener.onLoginConnected = () => {
-                finish();
-            };
-            if (typeof addListener === "function") {
-                addListener(listener);
-            }
-        } catch {
-            // 监听注册失败不阻塞连接
-        }
-        setTimeout(finish, opts.timeoutMs ?? NETWORK_READY_TIMEOUT_MS);
-        try {
-            connect();
+            raw.connect?.();
         } catch {
             finish();
         }
     });
-    // onLoginConnected 后网络栈仍在初始化（p0-kernel-flow 实证：connect → onLoginConnected
-    // → 3s 缓冲 → quickLoginWithUin 成功；无缓冲则「登录系统连接异常」）。
-    await sleep(CONNECTION_SETTLE_MS);
+}
+
+/** 注册临时登录连接监听（失败不阻塞连接）。 */
+function tryRegisterConnectListener(
+    raw: {
+        connect?: () => void;
+        addKernelLoginListener?: (listener: unknown) => number;
+    },
+    finish: () => void,
+): void {
+    try {
+        // 临时监听等 onLoginConnected；保留不 remove——登录后续回调
+        // （onQRCodeLoginSucceed 等）仍可能触发，且进程内只登录一次，无泄漏风险。
+        const listener = createLoginListener();
+        listener.onLoginConnected = () => {
+            finish();
+        };
+        if (typeof raw.addKernelLoginListener === "function") {
+            raw.addKernelLoginListener(listener);
+        }
+    } catch {
+        // 监听注册失败不阻塞连接
+    }
 }
 
 /**
  * 目标账号选择（2026-08-07 修复：显式 uin 不在列表时**报错**而非静默 fallback——
  * 之前会退到第一个可快速登录账号，导致 `-q <uin>` 实际登成别的号）。
+ * 导出供单测（login-connect.test.ts）。
  */
-function pickLoginTarget(items: LoginAccountInfo[], uin: string | undefined): LoginAccountInfo {
+export function pickLoginTarget(
+    items: LoginAccountInfo[],
+    uin: string | undefined,
+): LoginAccountInfo {
     if (uin !== undefined) {
         const target = items.find((i) => i.uin === uin);
         if (target === undefined) {
@@ -185,22 +209,15 @@ async function loginWithNetworkRetry(
 ): Promise<LoginResult> {
     let lastErrMsg = "";
     for (let attempt = 1; attempt <= NETWORK_RETRY_MAX; attempt += 1) {
-        const result = await loginService.quickLoginWithUin(target.uin);
-        const { errMsg } = result.loginErrorInfo;
-        if (!errMsg) {
-            return {
-                uin: target.uin,
-                uid: target.uid ?? "",
-                nick: target.nickName ?? "",
-            };
+        const attemptResult = await attemptQuickLogin(loginService, target);
+        if (attemptResult.ok) {
+            return attemptResult.result;
         }
-        lastErrMsg = errMsg;
-        const isNetworkError =
-            errMsg.includes(NETWORK_ERROR_CODE) || errMsg.includes(CONNECTION_ERROR_HINT);
-        if (!isNetworkError || attempt >= NETWORK_RETRY_MAX) {
+        lastErrMsg = attemptResult.errMsg;
+        const shouldRetry = isNetworkError(lastErrMsg) && attempt < NETWORK_RETRY_MAX;
+        if (!shouldRetry) {
             break;
         }
-        // 网络未就绪 → 等连接后重试（不无限重试）
         const ready = await waitForNetworkConnection(ctx, {
             timeoutMs: opts.timeoutMs ?? NETWORK_READY_TIMEOUT_MS,
         });
@@ -209,6 +226,31 @@ async function loginWithNetworkRetry(
         }
     }
     throw kernelError(`快速登录失败: ${lastErrMsg}`, "NOT_LOGIN");
+}
+
+/** 单次快速登录尝试（成功带结果，失败带错误消息）。 */
+async function attemptQuickLogin(
+    loginService: LoginServiceShape,
+    target: LoginAccountInfo,
+): Promise<{ ok: true; result: LoginResult } | { ok: false; errMsg: string }> {
+    const result = await loginService.quickLoginWithUin(target.uin);
+    const { errMsg } = result.loginErrorInfo;
+    if (errMsg) {
+        return { ok: false, errMsg };
+    }
+    return {
+        ok: true,
+        result: {
+            uin: target.uin,
+            uid: target.uid ?? "",
+            nick: target.nickName ?? "",
+        },
+    };
+}
+
+/** 判定快速登录失败是否为网络异常（重试语义）。导出供单测。 */
+export function isNetworkError(errMsg: string): boolean {
+    return errMsg.includes(NETWORK_ERROR_CODE) || errMsg.includes(CONNECTION_ERROR_HINT);
 }
 
 /**

@@ -12,6 +12,7 @@ import type {
     NodeIKernelMsgService,
     NodeIQQNTWrapperSession,
     Peer,
+    RawElement,
     RawMessage,
 } from "../types/index.js";
 import { toSendElements } from "../types/index.js";
@@ -110,24 +111,15 @@ export class MsgApi {
      */
     async fetchPttText(msgId: string, target: Peer): Promise<string> {
         const msgs = await this.fetchMsgsByMsgId(target, [msgId]);
-        const [first] = msgs;
-        if (first === undefined) {
-            throw kernelError("消息不存在", "NOT_FOUND");
-        }
-        const ptt = first.elements.find((el) => el.pttElement !== undefined);
-        if (ptt?.pttElement === undefined) {
+        const ptt = findPttElement(msgs);
+        if (ptt === null) {
             throw kernelError("消息中不包含语音", "NOT_FOUND");
         }
         const raw = await this.service.translatePtt2Text(msgId, target, ptt);
         unwrapResult("translatePtt2Text", raw);
         // 转写异步完成：再拉一次拿 text
         const after = await this.fetchMsgsByMsgId(target, [msgId]);
-        const [afterFirst] = after;
-        if (afterFirst === undefined) {
-            throw kernelError("获取语音转文字结果失败", "UNKNOWN");
-        }
-        const text = afterFirst.elements.find((el) => el.pttElement !== undefined)?.pttElement
-            ?.text;
+        const text = findPttElement(after)?.pttElement?.text;
         if (text === undefined || text === "") {
             throw kernelError("获取语音转文字结果失败", "UNKNOWN");
         }
@@ -175,14 +167,8 @@ export class MsgApi {
     /** 获取合并转发内容（get_forward_msg；resId 取自 multiForwardMsgElement）。 */
     async fetchForwardMessage(peer: Peer, msgId: string): Promise<RawMessage[]> {
         const msgs = await this.fetchMsgsByMsgId(peer, [msgId]);
-        const [first] = msgs;
-        if (first === undefined) {
-            throw kernelError("消息不存在", "NOT_FOUND");
-        }
-        const forward = first.elements.find(
-            (el) => el.multiForwardMsgElement !== undefined,
-        )?.multiForwardMsgElement;
-        if (forward === undefined || forward.resId === "") {
+        const forward = findForwardElement(msgs);
+        if (forward === null || forward.resId === "") {
             throw kernelError("消息不包含合并转发内容", "NOT_FOUND");
         }
         const raw = await this.service.getMultiMsg(peer, msgId, forward.resId);
@@ -213,4 +199,27 @@ export class MsgApi {
         const raw = await this.service.setStatus(opts);
         unwrapResult("setStatus", raw);
     }
+}
+
+/** 在消息列表中找含 pttElement 的元素（找不到返回 null）。 */
+function findPttElement(msgs: RawMessage[]): RawElement | null {
+    const [first] = msgs;
+    if (first === undefined) {
+        return null;
+    }
+    return first.elements.find((el) => el.pttElement !== undefined) ?? null;
+}
+
+/** 在消息列表中找含 multiForwardMsgElement 的元素（找不到返回 null）。 */
+function findForwardElement(
+    msgs: RawMessage[],
+): { resId: string; fileName: string; xmlContent: string } | null {
+    const [first] = msgs;
+    if (first === undefined) {
+        return null;
+    }
+    return (
+        first.elements.find((el) => el.multiForwardMsgElement !== undefined)
+            ?.multiForwardMsgElement ?? null
+    );
 }

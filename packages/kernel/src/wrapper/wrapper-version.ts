@@ -29,14 +29,11 @@ function readVersionPackage(
             version?: string;
             buildVersion?: string;
         };
-        const result: { name: string; version: string; buildVersion?: string } = {
+        return {
             name: raw.name ?? "",
             version: raw.version ?? "",
+            ...(raw.buildVersion !== undefined ? { buildVersion: raw.buildVersion } : {}),
         };
-        if (raw.buildVersion !== undefined) {
-            result.buildVersion = raw.buildVersion;
-        }
-        return result;
     } catch (cause) {
         throw kernelError(`QQ 版本 package.json 解析失败: ${pkgPath}`, "INVALID_PARAM", { cause });
     }

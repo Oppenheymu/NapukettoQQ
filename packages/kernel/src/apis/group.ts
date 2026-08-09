@@ -64,24 +64,14 @@ export class GroupApi {
         if (typeof result === "number" && result !== 0) {
             unwrap("getGroupDetailInfo", result, errMsg);
         }
-        // 详情直接放在 result 对象里（最常见形状）
-        if (result !== null && typeof result === "object") {
-            return result as unknown as GroupDetailInfo;
+        const detail = extractGroupDetail(result, raw);
+        if (detail === null) {
+            throw kernelError(
+                `getGroupDetailInfo 返回形状异常（groupCode=${groupCode}）: ${errMsg}`,
+                "UNKNOWN",
+            );
         }
-        // result 为 0（成功）或空：从 raw 提取详情字段
-        const detail = raw as unknown as {
-            groupInfo?: unknown;
-            detailInfo?: unknown;
-            info?: unknown;
-        };
-        const candidate = detail.groupInfo ?? detail.detailInfo ?? detail.info;
-        if (candidate !== undefined && candidate !== null && typeof candidate === "object") {
-            return candidate as unknown as GroupDetailInfo;
-        }
-        throw kernelError(
-            `getGroupDetailInfo 返回形状异常（groupCode=${groupCode}）: ${errMsg}`,
-            "UNKNOWN",
-        );
+        return detail;
     }
 
     /** 群成员列表（forceFetch=true 强制拉取，默认缓存优先）。 */
@@ -275,4 +265,26 @@ export class GroupApi {
             remainAtAllCountForGroup: raw.atInfo.remainAtAllCountForGroup,
         };
     }
+}
+
+/**
+ * 从 getGroupDetailInfo 返回提取群详情（兼容三种形状）：
+ *  - result 为对象 → 详情直接在其中（最常见）
+ *  - result 为 0/空 → 从 raw.groupInfo / detailInfo / info 提取
+ * 提取不到返回 null（调用方抛 UNKNOWN）。导出供单测。
+ */
+export function extractGroupDetail(result: unknown, raw: unknown): GroupDetailInfo | null {
+    if (result !== null && typeof result === "object") {
+        return result as GroupDetailInfo;
+    }
+    const detail = raw as {
+        groupInfo?: unknown;
+        detailInfo?: unknown;
+        info?: unknown;
+    };
+    const candidate = detail.groupInfo ?? detail.detailInfo ?? detail.info;
+    if (candidate !== undefined && candidate !== null && typeof candidate === "object") {
+        return candidate as GroupDetailInfo;
+    }
+    return null;
 }

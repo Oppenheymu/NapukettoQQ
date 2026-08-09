@@ -19,6 +19,7 @@ import type {
     NodeIQQNTStartupSessionWrapper,
     NodeIQQNTWrapperEngine,
     NodeIQQNTWrapperSession,
+    NodeIQQNTWrapperSessionCtor,
     WrapperNodeApi,
     WrapperSessionInitConfig,
 } from "../types/index.js";
@@ -37,16 +38,12 @@ import {
 
 /** 默认 engine 配置（KWINDOWS + 版本号，字段待首个真实联调确认）。 */
 function defaultEngineConfig(env: BootEnv, qqDataPath?: string): EnginInitDesktopConfig {
-    let osVersion = process.platform;
-    if (process.platform === "win32") {
-        osVersion = "win32";
-    }
     return {
         base_path_prefix: env.dataDir ?? "",
         platform_type: PlatformType.KWINDOWS,
         app_type: 4,
         app_version: env.qqVersion ?? "",
-        os_version: osVersion,
+        os_version: process.platform,
         use_xlog: false,
         qua: "",
         global_path_config: {
@@ -76,23 +73,23 @@ export function electronProcessType(): string | undefined {
  * 正确路径，无需此解析。
  */
 export function resolveQqUserDataRoot(exports: WrapperNodeApi): string | null {
+    return extractUserDataRoot(exports) ?? join(homedir(), "Documents", "Tencent Files");
+}
+
+/** 从 QQ 官方 API 提取数据根（不可用返回 null，调用方回退默认）。 */
+function extractUserDataRoot(exports: WrapperNodeApi): string | null {
     try {
         const util = exports.NodeQQNTWrapperUtil as unknown as {
             get?: () => { getNTUserDataInfoConfig?: () => unknown };
         } | null;
-        const inst = util?.get?.();
-        const raw = inst?.getNTUserDataInfoConfig?.();
+        const raw = util?.get?.().getNTUserDataInfoConfig?.();
         if (typeof raw === "string" && raw.trim() !== "") {
-            const extracted = extractDataRoot(raw.trim());
-            if (extracted !== null) {
-                return extracted;
-            }
+            return extractDataRoot(raw.trim());
         }
     } catch {
         // 回退默认位置
     }
-    // 回退：QQNT 默认数据根
-    return join(homedir(), "Documents", "Tencent Files");
+    return null;
 }
 
 // ---------------------------------------------------------------
@@ -169,52 +166,53 @@ export function initEngine(ctx: WrapperContext, config: EnginInitDesktopConfig):
  * 返回带完整实现的实例。worker（utilityProcess）继承 QQ env 后同样有效。
  */
 export function createSession(ctx: WrapperContext): NodeIQQNTWrapperSession {
-    const X = ctx.exports;
-    const S = X.NodeIQQNTWrapperSession;
-    let session: NodeIQQNTWrapperSession | null = null;
+    const S = ctx.exports.NodeIQQNTWrapperSession;
+    const session =
+        createStartupSession(ctx) ?? getNTWrapperSession(S) ?? createNewSession(S) ?? new S();
+    ctx.session = session;
+    return session;
+}
 
-    // 1. StartupSessionWrapper.create()（NapCat 同款，建立启动 session）
+/** 步骤 1：StartupSessionWrapper.create()（建立启动 session，失败忽略）。 */
+function createStartupSession(ctx: WrapperContext): NodeIQQNTWrapperSession | null {
+    const Ssw = ctx.exports.NodeIQQNTStartupSessionWrapper as unknown as
+        | {
+              create?: () => NodeIQQNTStartupSessionWrapper;
+          }
+        | undefined;
+    if (Ssw === undefined || typeof Ssw.create !== "function") {
+        return null;
+    }
     try {
-        const Ssw = X.NodeIQQNTStartupSessionWrapper as
-            | { create?: () => NodeIQQNTStartupSessionWrapper }
-            | undefined;
-        if (Ssw !== undefined && typeof Ssw.create === "function") {
-            ctx.startupSession = Ssw.create();
-        }
+        ctx.startupSession = Ssw.create();
     } catch {
         // 可选，失败继续
     }
+    return null;
+}
 
-    // 2. getNTWrapperSession("nt_1")（QQ 主 session，带 cpp_impl）
+/** 步骤 2：getNTWrapperSession("nt_1")（QQ 主 session，带 cpp_impl）。 */
+function getNTWrapperSession(S: NodeIQQNTWrapperSessionCtor): NodeIQQNTWrapperSession | null {
+    if (typeof S.getNTWrapperSession !== "function") {
+        return null;
+    }
     try {
-        if (typeof S.getNTWrapperSession === "function") {
-            const got = S.getNTWrapperSession("nt_1") as NodeIQQNTWrapperSession | null;
-            if (got !== null && got !== undefined) {
-                session = got;
-            }
-        }
+        return S.getNTWrapperSession("nt_1");
     } catch {
-        // 回退
+        return null; // 回退
     }
+}
 
-    // 3. S.create() 回退
-    if (session === null) {
-        try {
-            if (typeof S.create === "function") {
-                session = S.create() as NodeIQQNTWrapperSession;
-            }
-        } catch {
-            session = null;
-        }
+/** 步骤 3：S.create() 回退。 */
+function createNewSession(S: NodeIQQNTWrapperSessionCtor): NodeIQQNTWrapperSession | null {
+    if (typeof S.create !== "function") {
+        return null;
     }
-
-    // 4. 最终回退：new S()（可能断言失败，作为最后手段）
-    if (session === null) {
-        session = new S();
+    try {
+        return S.create();
+    } catch {
+        return null;
     }
-
-    ctx.session = session;
-    return session;
 }
 
 /** session 初始化（4 参全为 JS 对象，NAPI 自动转换）。 */
@@ -265,34 +263,67 @@ export function startNapuketto(options: StartNapukettoOptions): WrapperContext {
         buildVersion: env?.qqVersion ?? "",
     };
     const ctx = createWrapper(wrapperExports, versionInfo);
+    const hasCapturedSession = captureSession(ctx, qqSession);
     // session 创建时机：**自建宿主（标准 node）必须在 engine init 之前创建**——
     // p0-kernel-flow 决定性顺序（HANDOVER-V6）：SSW.create + getNTWrapperSession("nt_1")
     // 在 engine.initWithDeskTopConfig 前；engine 先建 session 后建 → 登录后
     // session.init 的 onOpentelemetryInit 不触发（2026-08-07 自建宿主实测）。
     // 路线 B（utility）与 QQ 主进程（browser）保持 engine 先建原顺序（已验证）。
     const isSelfHost = electronProcessType() === undefined;
-    if (qqSession !== undefined && qqSession !== null) {
-        ctx.session = qqSession;
-    } else if (isSelfHost) {
-        createSession(ctx);
-    }
-    initEngine(ctx, engineConfig ?? defaultEngineConfig(env ?? {}, resolveBootQqGlobalPath(ctx)));
-
+    prepareSession(ctx, hasCapturedSession, isSelfHost);
+    initEngine(ctx, resolveEngineConfig(ctx, env, engineConfig));
     resolveLoginService(ctx, qqLoginService);
-
     // session：路线 B（utility）与 QQ 主进程（browser）在 engine 后创建；
     // 自建宿主已在 engine 前创建（isSelfHost 分支），此处跳过避免重复。
-    if (qqSession !== undefined && qqSession !== null) {
-        ctx.session = qqSession;
-    } else if (!isSelfHost) {
+    finishSession(ctx, hasCapturedSession, isSelfHost, sessionConfig);
+    return ctx;
+}
+
+/** engine 前 session 准备（自建宿主必须先建，顺序决定性）。 */
+function prepareSession(ctx: WrapperContext, hasCaptured: boolean, isSelfHost: boolean): void {
+    if (!hasCaptured && isSelfHost) {
         createSession(ctx);
     }
+}
 
+/** engine 后收尾：非自建宿主补建 session；配置了 sessionConfig 则 init+start。 */
+function finishSession(
+    ctx: WrapperContext,
+    hasCaptured: boolean,
+    isSelfHost: boolean,
+    sessionConfig: WrapperSessionInitConfig | undefined,
+): void {
+    if (!hasCaptured && !isSelfHost) {
+        createSession(ctx);
+    }
     if (sessionConfig !== undefined) {
         initSession(ctx, sessionConfig, createSessionListener());
         startSession(ctx);
     }
-    return ctx;
+}
+
+/** engine 配置：显式覆盖优先，否则默认（含 QQ 数据根 global 路径解析）。 */
+function resolveEngineConfig(
+    ctx: WrapperContext,
+    env: BootEnv | undefined,
+    engineConfig: EnginInitDesktopConfig | undefined,
+): EnginInitDesktopConfig {
+    if (engineConfig !== undefined) {
+        return engineConfig;
+    }
+    return defaultEngineConfig(env ?? {}, resolveBootQqGlobalPath(ctx));
+}
+
+/** 捕获 QQ 已 init 的 session（boot.cjs 拦截 `new` 窃取），返回是否捕获成功。 */
+function captureSession(
+    ctx: WrapperContext,
+    qqSession: NodeIQQNTWrapperSession | null | undefined,
+): boolean {
+    if (qqSession === undefined || qqSession === null) {
+        return false;
+    }
+    ctx.session = qqSession;
+    return true;
 }
 
 /**
@@ -323,17 +354,21 @@ function resolveLoginService(ctx: WrapperContext, qqLoginService: unknown): void
         ctx.loginService = qqLoginService as WrapperContext["loginService"];
         return;
     }
+    ctx.loginService = getOrCreateLoginService(ctx.exports);
+}
+
+/** 单例 get() 优先，缺失回退 new（都失败返回 null）。 */
+function getOrCreateLoginService(exports: WrapperNodeApi): unknown {
     try {
-        const loginSvcCtor = ctx.exports.NodeIKernelLoginService as unknown as {
+        const loginSvcCtor = exports.NodeIKernelLoginService as unknown as {
             get?: () => unknown;
         } | null;
         if (loginSvcCtor !== null && typeof loginSvcCtor.get === "function") {
-            ctx.loginService = loginSvcCtor.get();
-        } else {
-            ctx.loginService = new ctx.exports.NodeIKernelLoginService();
+            return loginSvcCtor.get();
         }
+        return new exports.NodeIKernelLoginService();
     } catch {
-        ctx.loginService = null;
+        return null;
     }
 }
 

@@ -214,29 +214,35 @@ export class GroupCache {
      * 返回 undefined 表示成员不在群。
      */
     async getMember(groupCode: string, uid: string): Promise<GroupMember | undefined> {
-        let map = this.members.get(groupCode);
-        if (map === undefined || map.size === 0) {
-            await this.getMembers(groupCode);
-            map = this.members.get(groupCode);
-        }
-        const cached = map?.get(uid);
+        const cached = await this.getCachedMember(groupCode, uid);
         if (cached !== undefined) {
             return cached;
         }
         const members = await this.dedupe<GroupMember[]>(`member:${groupCode}:${uid}`, () =>
             this.groupApi.getGroupMemberInfo(groupCode, [uid]),
         );
-        if (members.length === 0) {
+        const [member] = members;
+        if (member === undefined) {
             return;
         }
-        const [member] = members;
-        if (member !== undefined) {
-            const target = this.members.get(groupCode);
-            if (target !== undefined) {
-                target.set(member.uid, member);
-            }
+        const target = this.members.get(groupCode);
+        if (target !== undefined) {
+            target.set(member.uid, member);
         }
         return member;
+    }
+
+    /** 读缓存成员（缺失先整群回填一次）。 */
+    private async getCachedMember(
+        groupCode: string,
+        uid: string,
+    ): Promise<GroupMember | undefined> {
+        let map = this.members.get(groupCode);
+        if (map === undefined || map.size === 0) {
+            await this.getMembers(groupCode);
+            map = this.members.get(groupCode);
+        }
+        return map?.get(uid);
     }
 
     /** 惰性回填全量群列表（getGroup 缺失时）。 */

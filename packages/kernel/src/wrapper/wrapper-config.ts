@@ -46,6 +46,11 @@ export function parseAppidFromMajor(majorPath: string): string | null {
     } catch {
         return null;
     }
+    return scanAppidMarkers(buf);
+}
+
+/** 扫描 buf 中所有 QQAppId/ 标记，返回第一个纯数字串（无则 null）。 */
+function scanAppidMarkers(buf: Buffer): string | null {
     const marker = Buffer.from("QQAppId/", "utf-8");
     let pos = 0;
     while (pos < buf.length) {
@@ -53,18 +58,22 @@ export function parseAppidFromMajor(majorPath: string): string | null {
         if (idx === -1) {
             return null;
         }
-        const start = idx + marker.length;
-        let end = start;
-        while (end < buf.length && buf[end] !== 0) {
-            end += 1;
-        }
-        const str = buf.subarray(start, end).toString("utf-8");
+        const str = readMarkerValue(buf, idx + marker.length);
         if (DIGITS_ONLY_RE.test(str)) {
             return str;
         }
-        pos = end + 1;
+        pos = idx + marker.length + str.length + 1;
     }
     return null;
+}
+
+/** 读取标记后的 C 字符串（到首个 0 字节为止）。 */
+function readMarkerValue(buf: Buffer, start: number): string {
+    let end = start;
+    while (end < buf.length && buf[end] !== 0) {
+        end += 1;
+    }
+    return buf.subarray(start, end).toString("utf-8");
 }
 
 /** Windows 兜底 appid / qua（major.node 解析失败时）。 */

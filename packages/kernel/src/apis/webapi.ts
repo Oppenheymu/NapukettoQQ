@@ -127,32 +127,27 @@ export class WebApi {
             emotion_list: [],
             strong_newbie_list: [],
         };
-        if (type === WebHonorType.TALKATIVE || type === WebHonorType.ALL) {
-            const talkative = await this.fetchHonorList(groupCode, cookie, WebHonorType.TALKATIVE);
-            result.talkative_list = talkative;
-            const [first] = talkative;
-            if (first !== undefined) {
-                result.current_talkative = first;
+        await this.fillHonorLists(result, groupCode, cookie, type);
+        return result;
+    }
+
+    /** 按 type 填充荣誉列表（ALL 拉全部，单类型只拉对应类）。 */
+    private async fillHonorLists(
+        result: GroupHonorWebInfo,
+        groupCode: string,
+        cookie: Record<string, string>,
+        type: WebHonorType,
+    ): Promise<void> {
+        for (const target of honorTargets(type)) {
+            const list = await this.fetchHonorList(groupCode, cookie, target.kind);
+            result[target.listKey] = list;
+            if (target.kind === WebHonorType.TALKATIVE) {
+                const [first] = list;
+                if (first !== undefined) {
+                    result.current_talkative = first;
+                }
             }
         }
-        if (type === WebHonorType.PERFORMER || type === WebHonorType.ALL) {
-            result.performer_list = await this.fetchHonorList(
-                groupCode,
-                cookie,
-                WebHonorType.PERFORMER,
-            );
-        }
-        if (type === WebHonorType.LEGEND || type === WebHonorType.ALL) {
-            result.legend_list = await this.fetchHonorList(groupCode, cookie, WebHonorType.LEGEND);
-        }
-        if (type === WebHonorType.EMOTION || type === WebHonorType.ALL) {
-            result.emotion_list = await this.fetchHonorList(
-                groupCode,
-                cookie,
-                WebHonorType.EMOTION,
-            );
-        }
-        return result;
     }
 
     /** 拉取单类荣誉列表（honorlist 接口，正则提取 __INITIAL_STATE__）。 */
@@ -254,4 +249,21 @@ function cookieToString(cookie: Record<string, string>): string {
         parts.push(`${key}=${value}`);
     }
     return parts.join("; ");
+}
+
+/** 荣誉类型 → 目标列表（ALL 拉全部，单类型只拉对应类）。 */
+function honorTargets(type: WebHonorType): Array<{
+    kind: WebHonorType;
+    listKey: "talkative_list" | "performer_list" | "legend_list" | "emotion_list";
+}> {
+    const all = [
+        { kind: WebHonorType.TALKATIVE, listKey: "talkative_list" },
+        { kind: WebHonorType.PERFORMER, listKey: "performer_list" },
+        { kind: WebHonorType.LEGEND, listKey: "legend_list" },
+        { kind: WebHonorType.EMOTION, listKey: "emotion_list" },
+    ] as const;
+    if (type === WebHonorType.ALL) {
+        return [...all];
+    }
+    return all.filter((target) => target.kind === type);
 }
