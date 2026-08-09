@@ -7,9 +7,9 @@
  *  - 不支持的 video/file/forward/json/xml/unknown → 抛 KernelError
  */
 import { describe, expect, it } from "vitest";
-import { isKernelError } from "../infra/index.js";
-import { toSendElements } from "./message-element.js";
-import { ElementType } from "./services/msg-service.js";
+import { isKernelError } from "../../infra/index.ts";
+import { toSendElements } from "../message-element.ts";
+import { ElementType } from "../services/msg-service.ts";
 
 describe("toSendElements", () => {
     it("text → TEXT 元素", () => {

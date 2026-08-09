@@ -11,8 +11,8 @@
  */
 import { ChatType, type RawElement, type RawMessage } from "@napuketto/kernel";
 import { describe, expect, it } from "vitest";
-import { toCanonicalElements } from "./message-element.js";
-import { ElementType } from "./services/msg-service.js";
+import { toCanonicalElements } from "../message-element.ts";
+import { ElementType } from "../services/msg-service.ts";
 
 /** 构造 RawMessage（elements 可覆盖）。 */
 function makeMsg(elements: RawElement[]): RawMessage {
