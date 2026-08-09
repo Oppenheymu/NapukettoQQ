@@ -63,9 +63,11 @@ function makeCtx(exports: WrapperNodeApi): WrapperContext {
     };
 }
 
-/** 带 new 构造能力的 Session 构造器 mock。 */
+/** 带 new 构造能力的 Session 构造器 mock（必须用普通函数——箭头函数不能 new）。 */
 function sessionCtorMock(session: unknown): NodeIQQNTWrapperSessionCtor {
-    const ctor = vi.fn(() => session) as unknown as NodeIQQNTWrapperSessionCtor;
+    const ctor = vi.fn(function () {
+        return session;
+    }) as unknown as NodeIQQNTWrapperSessionCtor;
     Object.assign(ctor, {
         get: () => null,
         getNTWrapperSession: () => null,

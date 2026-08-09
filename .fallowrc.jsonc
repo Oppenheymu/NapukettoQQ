@@ -80,7 +80,18 @@
         "packages/kernel/src/types/services/index.ts",
         "packages/kernel/src/types/listeners/index.ts",
         "packages/kernel/src/infra/index.ts",
-        "packages/kernel/src/apis/index.ts"
+        "packages/kernel/src/apis/index.ts",
+        // 测试文件（**/*.test.ts）：单包目录下跑 fallow 时 vitest 入口检测不到，
+        // 测试文件被误判 unused files（dead files 26% 拉低 MI）。测试文件经
+        // 根 vitest.config.ts 的 runner 执行，不是死代码——豁免 unused-file 判定
+        // （保留复杂度/CRAP 检查，同 health.thresholdOverrides 精神）。
+        "packages/kernel/src/**/*.test.ts",
+        "packages/adapter/src/**/*.test.ts",
+        "packages/loader/src/**/*.test.ts",
+        "packages/network/src/**/*.test.ts",
+        "packages/media/src/**/*.test.ts",
+        "apps/**/*.test.ts",
+        "scripts/**/*.test.ts"
     ],
     // 测试文件豁免大函数检查（fallow 官方推荐）：长 describe/it 块会被误计为
     // ">60 LOC 大函数"，污染 unit size 扣分（unit size = per_k 大函数数 × 0.5）。
