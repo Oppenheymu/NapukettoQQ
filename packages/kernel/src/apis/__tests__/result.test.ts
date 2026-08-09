@@ -3,8 +3,8 @@
  * 锁定 unwrap / checkLooseResult / unwrapResult 现有行为，重构后回归。
  */
 import { describe, expect, it } from "vitest";
-import { isKernelError } from "../infra/index.js";
-import { checkLooseResult, unwrap, unwrapResult } from "./result.js";
+import { isKernelError } from "../../infra/index.js";
+import { checkLooseResult, unwrap, unwrapResult } from "../result.js";
 
 describe("unwrap", () => {
     it("result=0 不抛", () => {

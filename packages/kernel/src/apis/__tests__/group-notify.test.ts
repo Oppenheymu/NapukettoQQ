@@ -6,7 +6,7 @@
  *  - 非数组 / 非对象 / 缺字段 → 空数组
  */
 import { describe, expect, it } from "vitest";
-import { extractMemberList, extractNotifyList } from "./group-notify.js";
+import { extractMemberList, extractNotifyList } from "../group-notify.js";
 
 describe("extractNotifyList", () => {
     it("直接数组 → 原样返回", () => {

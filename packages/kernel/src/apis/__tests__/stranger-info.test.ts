@@ -7,8 +7,8 @@
  *  - sex 数值映射：1=male 2=female 其余 unknown
  */
 import { describe, expect, it } from "vitest";
-import type { UserDetailInfoByUin } from "../types/index.js";
-import { flattenStrangerInfo } from "./stranger-info.js";
+import type { UserDetailInfoByUin } from "../../types/index.js";
+import { flattenStrangerInfo } from "../stranger-info.js";
 
 /** 构造详情（detail 为可选对象，缺字段即缺失）。 */
 function detail(partial: UserDetailInfoByUin["detail"]): UserDetailInfoByUin {

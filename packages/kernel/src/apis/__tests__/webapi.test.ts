@@ -7,7 +7,7 @@
  *  - 解析失败 / 非数组 / 非对象项 → 宽容跳过，返回空或过滤
  */
 import { describe, expect, it } from "vitest";
-import { parseHonorList, WebHonorType } from "./webapi.js";
+import { parseHonorList, WebHonorType } from "../webapi.js";
 
 describe("parseHonorList", () => {
     it("talkative 页：提取 __INITIAL_STATE__.talkativeList", () => {
