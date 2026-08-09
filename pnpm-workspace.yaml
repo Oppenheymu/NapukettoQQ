@@ -1,9 +1,16 @@
 packages:
   - "packages/*"
   - "apps/*"
+# pnpm 11 构建脚本审批：允许这些依赖运行 postinstall（esbuild/parcel 需要）
+allowBuilds:
+  '@parcel/watcher': true
+  esbuild: true
+  vue-demi: true
 minimumReleaseAgeExclude:
   - '@napuketto/kernel@0.0.3'
+  - '@napuketto/kernel@0.0.4'
   - '@napuketto/loader@0.0.6'
+  - '@napuketto/loader@0.0.7'
 settings:
   # pnpm 11 的 verify-deps-before-run 预检：每次命令前自动 reinstall，在 git
   # submodule monorepo（koishi-plugin-adapter 子仓库）场景触发失败。关闭预检，

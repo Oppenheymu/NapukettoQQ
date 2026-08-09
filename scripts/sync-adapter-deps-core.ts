@@ -27,8 +27,34 @@ export interface DepChange {
 }
 
 /**
+ * 比较两个 semver 版本号（纯数字段比较，忽略 pre-release 标签）。
+ * 返回负数 = a<b，0 = a==b，正数 = a>b。
+ *
+ * @param a 版本号（如 "0.0.3"）
+ * @param b 版本号（如 "0.0.6"）
+ */
+export function compareVersions(a: string, b: string): number {
+    const pa = a.split(".").map((n) => Number.parseInt(n, 10));
+    const pb = b.split(".").map((n) => Number.parseInt(n, 10));
+    for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+        const na = pa[i] ?? 0;
+        const nb = pb[i] ?? 0;
+        if (na !== nb) {
+            return na - nb;
+        }
+    }
+    return 0;
+}
+
+/**
  * 解析版本范围，返回规范化的 tilde 范围（`~<版本>`）。
- * 幂等：已是 `~<最新>` 且版本匹配 → 返回 null（不触发改写）。
+ *
+ * 语义：**只向上追踪，绝不回退**——
+ *  - 已是 `~<latest>` 且版本匹配 → null（无需改写）
+ *  - 当前版本（去掉 ~/^/workspace: 前缀）**高于** registry latest → null
+ *    （发布链场景：changeset 已把依赖升到本地新版本，registry 尚未发布，
+ *    此时不回退——否则会把 `~0.0.4` 拉回 `~0.0.3`）
+ *  - 其余 → 改写为 `~<latest>`
  *
  * @param current 当前依赖范围（如 "^0.0.3" / "~0.0.6" / "workspace:~"）
  * @param latest registry latest 版本（如 "0.0.6"）
@@ -39,7 +65,18 @@ export function tildeRange(current: string | undefined, latest: string): string 
     const norm = (s: string) => s.replace(/^workspace:/, "").trim();
     const cur = current === undefined ? "" : norm(current);
     const target = `~${latest}`;
-    return cur === target ? null : target;
+    if (cur === target) {
+        return null;
+    }
+    // 提取当前范围中的版本号（去掉 ~/^/>= 等前缀）
+    const curVersion = cur.replace(/^[~^>=<v\s]+/, "");
+    // 版本号合法时，当前版本高于 registry latest → 不回退
+    if (curVersion !== "" && curVersion !== "*" && /^\d+\.\d+\.\d+/.test(curVersion)) {
+        if (compareVersions(curVersion, latest) > 0) {
+            return null;
+        }
+    }
+    return target;
 }
 
 /**

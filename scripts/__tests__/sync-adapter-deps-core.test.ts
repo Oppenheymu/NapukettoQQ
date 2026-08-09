@@ -3,11 +3,31 @@
  */
 import { describe, expect, it } from "vitest";
 import {
+    compareVersions,
     latestFromDistTags,
     planSync,
     TRACKED_PACKAGES,
     tildeRange,
 } from "../sync-adapter-deps-core.ts";
+
+describe("compareVersions", () => {
+    it("a < b → 负数", () => {
+        expect(compareVersions("0.0.3", "0.0.6")).toBeLessThan(0);
+    });
+
+    it("a > b → 正数", () => {
+        expect(compareVersions("0.0.6", "0.0.3")).toBeGreaterThan(0);
+    });
+
+    it("相等 → 0", () => {
+        expect(compareVersions("0.0.3", "0.0.3")).toBe(0);
+    });
+
+    it("不同段比较（minor 升 > patch 升）", () => {
+        expect(compareVersions("0.0.9", "0.1.0")).toBeLessThan(0);
+        expect(compareVersions("0.1.0", "0.0.9")).toBeGreaterThan(0);
+    });
+});
 
 describe("tildeRange", () => {
     it("已是目标 tilde 范围 → 返回 null（幂等，不触发改写）", () => {
@@ -35,6 +55,12 @@ describe("tildeRange", () => {
 
     it("缺省（未声明依赖）→ 返回目标 tilde", () => {
         expect(tildeRange(undefined, "0.0.6")).toBe("~0.0.6");
+    });
+
+    it("当前版本高于 registry latest → 不回退（发布链：changeset 已升版本但 registry 未发）", () => {
+        expect(tildeRange("~0.0.4", "0.0.3")).toBeNull();
+        expect(tildeRange("~0.0.7", "0.0.6")).toBeNull();
+        expect(tildeRange("^0.0.4", "0.0.3")).toBeNull();
     });
 });
 

@@ -1,6 +1,6 @@
 {
     "name": "@napuketto/kernel",
-    "version": "0.0.3",
+    "version": "0.0.4",
     "description": "Core runtime kernel of NapukettoQQ",
     "type": "module",
     "files": [
@@ -12,7 +12,9 @@
     "exports": {
         ".": {
             "types": "./dist/index.d.mts",
-            "import": "./dist/index.mjs"
+            "import": "./dist/index.mjs",
+            "require": "./dist/index.mjs",
+            "default": "./dist/index.mjs"
         }
     },
     "scripts": {
