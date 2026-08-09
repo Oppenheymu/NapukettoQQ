@@ -7,7 +7,7 @@ import {
     planSync,
     TRACKED_PACKAGES,
     tildeRange,
-} from "./sync-adapter-deps-core.ts";
+} from "../sync-adapter-deps-core.ts";
 
 describe("tildeRange", () => {
     it("已是目标 tilde 范围 → 返回 null（幂等，不触发改写）", () => {

@@ -5,7 +5,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { fetchDistTags, fetchLatestVersions, main, parseArgs } from "./sync-adapter-deps.ts";
+import { fetchDistTags, fetchLatestVersions, main, parseArgs } from "../sync-adapter-deps.ts";
 
 /** 临时目录（每个用例独立，测后清理）。 */
 let tmpDir: string;
