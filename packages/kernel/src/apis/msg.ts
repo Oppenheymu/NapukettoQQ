@@ -6,6 +6,7 @@
  *
  * 方法面（P2-1）：发送 / 撤回 / 拉历史 / 标记已读。group/friend 等后续 apis 同构。
  */
+import type { MsgEventChannel } from "../bridge/msg-bridge.js";
 import { kernelError } from "../infra/index.js";
 import type {
     CanonicalElement,
@@ -18,18 +19,27 @@ import type {
 import { toSendElements } from "../types/index.js";
 import { unwrapResult } from "./result.js";
 
+/** 发送状态（onMsgInfoListUpdate 事件 msg.sendStatus）。 */
+const SEND_STATUS = { FAILED: 0, SENDING: 1, SUCCESS: 2, SUCCESS_NO_SEQ: 3 } as const;
+
+/** 发送确认超时（毫秒）。 */
+const SEND_CONFIRM_TIMEOUT_MS = 15_000;
+
 /** 消息 API：从 session 拿 msg service，包装成语义化方法。 */
 export class MsgApi {
     private readonly service: NodeIKernelMsgService;
+    /** 消息事件通道（sendMsg 后等 onMsgInfoListUpdate 确认发送结果）。 */
+    private readonly channel: MsgEventChannel | null;
     /** 上次生成 msgId 的时间（单调递增，2026-08-07 防同毫秒并发碰撞）。 */
     private lastMsgTime = 0;
 
-    constructor(session: NodeIQQNTWrapperSession) {
+    constructor(session: NodeIQQNTWrapperSession, channel?: MsgEventChannel) {
         const service = session.getMsgService() as unknown as NodeIKernelMsgService | null;
         if (service === null || service === undefined) {
             throw kernelError("getMsgService() 返回空（session 未 init）", "INVALID_STATE");
         }
         this.service = service;
+        this.channel = channel ?? null;
     }
 
     /**
@@ -49,15 +59,72 @@ export class MsgApi {
     }
 
     /**
-     * 发送消息：canonical 元素 → NT 发送元素 → sendMsg。
+     * 发送消息：canonical 元素 → NT 发送元素 → sendMsg（NapCat 式）。
      * 返回 NT msgId（雪花 ID）。
+     *
+     * 2026-08-11 修复（NapCat 式，实测）：
+     *  - sendMsg 第一参传 '0'（固定），msgId 塞 peer.guildId —— 传 msgId 作第一参
+     *    时 wrapper 返回 result=5（失败），NapCat 同款调用返回 result=0。
+     *  - 发送结果以 onMsgInfoListUpdate 事件确认（sendStatus===2 成功）：sendMsg
+     *    返回值 result 可能为 5 但事件仍成功（异步确认），反之亦然。
+     *  - ⚠️ 必须先注册事件监听再调 sendMsg（事件可能在 sendMsg 返回前就触发）。
      */
     async sendMessage(target: Peer, elements: CanonicalElement[]): Promise<{ msgId: string }> {
         const sendElements = toSendElements(elements);
         const msgId = this.service.generateMsgUniqueId(target.chatType, this.nextMsgTime());
-        const raw = await this.service.sendMsg(msgId, target, sendElements, new Map());
-        unwrapResult("sendMsg", raw);
+        // NapCat 同款：msgId 塞 guildId，第一参 '0'
+        const sendPeer: Peer = { ...target, guildId: msgId };
+        // 无事件通道（老用法）：退化为看返回值
+        if (this.channel === null) {
+            const raw = await this.service.sendMsg("0", sendPeer, sendElements, new Map());
+            unwrapResult("sendMsg", raw);
+            return { msgId };
+        }
+        // 有事件通道：先注册确认监听（NapCat 式，事件可能早于 sendMsg 返回触发），
+        // 再调 sendMsg。最终结果以事件 sendStatus 为准（raw.result 非 0 不判失败）。
+        const confirm = this.confirmSend(msgId, target);
+        await this.service.sendMsg("0", sendPeer, sendElements, new Map());
+        await confirm;
         return { msgId };
+    }
+
+    /** 注册 onMsgInfoListUpdate 确认监听（返回 Promise，resolve 时发送成功）。 */
+    private confirmSend(msgId: string, target: Peer): Promise<void> {
+        const channel = this.channel;
+        if (channel === null) {
+            return Promise.resolve();
+        }
+        return new Promise((resolve, reject) => {
+            const off = channel.on("Msg/onMsgInfoListUpdate", (list) => {
+                const mine = list.find((m) => m.guildId === msgId);
+                if (mine === undefined) {
+                    return; // 不是本次消息
+                }
+                if (
+                    mine.sendStatus === SEND_STATUS.SUCCESS ||
+                    mine.sendStatus === SEND_STATUS.SUCCESS_NO_SEQ
+                ) {
+                    off();
+                    resolve();
+                } else if (mine.sendStatus === SEND_STATUS.FAILED) {
+                    off();
+                    reject(
+                        kernelError(`sendMsg 失败: sendStatus=${mine.sendStatus}`, "SEND_FAILED"),
+                    );
+                }
+                // SENDING：继续等
+            });
+            // 超时兜底
+            setTimeout(() => {
+                off();
+                reject(
+                    kernelError(
+                        `sendMsg 等待确认超时（msgId=${msgId}, target=${JSON.stringify(target)}）`,
+                        "SEND_FAILED",
+                    ),
+                );
+            }, SEND_CONFIRM_TIMEOUT_MS);
+        });
     }
 
     /** 撤回消息（群聊管理员 / 私聊 2 分钟内）。 */

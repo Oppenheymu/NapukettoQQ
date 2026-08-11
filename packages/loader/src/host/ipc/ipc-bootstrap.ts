@@ -40,6 +40,9 @@ export function startIpcMode(services: KernelServices): () => void {
         groupCache: services.groupCache as IpcApiContext["groupCache"],
         friendApi: services.friendApi as IpcApiContext["friendApi"],
         self: services.self,
+        session: services.session,
+        engine: services.engine,
+        util: services.util,
         ...(groupApi.uinToUid !== undefined ? { uinToUid: groupApi.uinToUid } : {}),
     });
     const stopServer = startIpcServer({ actions });

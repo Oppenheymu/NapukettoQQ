@@ -190,6 +190,8 @@ export interface RawMessage {
     peerName: string;
     sendNickName: string;
     sendMemberName?: string;
+    /** 发送状态（0=失败 1=发送中 2=成功 3=成功无seq）。onMsgInfoListUpdate 事件填充。 */
+    sendStatus?: number;
     elements: RawElement[];
     records?: RawMessage[];
     guildId?: string;

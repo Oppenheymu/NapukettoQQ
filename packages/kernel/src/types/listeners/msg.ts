@@ -34,4 +34,8 @@ export type MsgListener = {
     onRecvMsgReadReport: (reports: MsgReadReportItem[]) => void;
     /** 消息回执。 */
     onRecvMsgReceipt: (receipts: MsgReceipt[]) => void;
+    /** 消息列表更新（含发送状态变化：sendStatus 0=失败 1=发送中 2=成功 3=成功无seq）。
+     *  2026-08-11 补齐：sendMsg 发送结果以此事件为准（NapCat 同款），
+     *  sendMsg 返回值 result 可能非 0 但实际发送成功（异步确认）。 */
+    onMsgInfoListUpdate: (msgs: RawMessage[]) => void;
 };

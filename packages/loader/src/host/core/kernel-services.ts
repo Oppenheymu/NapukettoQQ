@@ -32,6 +32,12 @@ export interface KernelServices {
     webApi: unknown;
     /** 登录账号自身信息（login.getSelf）。 */
     self: { uin: string; nickname: string };
+    /** wrapper session（诊断用：IPC 动作表枚举/触发原生服务）。 */
+    session: unknown;
+    /** wrapper engine（诊断用：initLog 等初始化方法验证）。 */
+    engine: unknown;
+    /** NodeQQNTWrapperUtil（诊断用：原生 copyFile 验证富媒体文件放置）。 */
+    util: unknown;
 }
 
 /** 登录成功后创建 kernel 业务服务（channel/bridge/cache/apis）。失败返回 null。 */
@@ -54,7 +60,8 @@ export async function createKernelServices(
     setupMsgLogging(kernel, channel, logger);
     // kernel APIs
     const groupApi = new kernel.GroupApi(session);
-    const msgApi = new kernel.MsgApi(session);
+    // channel 传入 MsgApi：sendMsg 后等 onMsgInfoListUpdate 确认（NapCat 式，2026-08-11）
+    const msgApi = new kernel.MsgApi(session, channel);
     const friendApi = new kernel.FriendApi(session, {
         uidToUin: (uids: string[]) => groupApi.uidToUin(uids),
     });
@@ -90,5 +97,10 @@ export async function createKernelServices(
         profileLikeApi,
         webApi,
         self: { uin: loginResult.uin, nickname: loginResult.nick ?? "" },
+        session,
+        engine: ctx.engine,
+        // util：wrapper exports 上的 NodeQQNTWrapperUtil（诊断用原生 copyFile）
+        util: (ctx as unknown as { exports?: { NodeQQNTWrapperUtil?: unknown } }).exports
+            ?.NodeQQNTWrapperUtil,
     };
 }

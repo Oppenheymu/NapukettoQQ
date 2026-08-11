@@ -154,6 +154,8 @@ export interface NodeIQQNTWrapperSession {
     getBuddyService(): unknown;
     getTicketService(): unknown;
     getRichMediaService(): unknown;
+    /** 闪传服务（诊断用：调查 rich media transfer failed 时验证初始化触发点）。 */
+    getFlashTransferService(): unknown;
     getProfileService(): unknown;
     getProfileLikeService(): unknown;
     getTipOffService(): unknown;

@@ -152,7 +152,11 @@ export interface KernelLike {
     }) => LoggerLike;
     NTEventChannel: new (name: string) => EventChannelLike;
     MsgBridge: new (session: unknown, channel: EventChannelLike) => BridgeLike;
-    MsgApi: new (session: unknown) => MsgApiLike;
+    // channel 可选（NapCat 式发送确认，2026-08-11）
+    MsgApi: new (
+        session: unknown,
+        channel?: EventChannelLike,
+    ) => MsgApiLike;
     GroupApi: new (session: unknown) => GroupApiLike;
     FriendApi: new (
         session: unknown,

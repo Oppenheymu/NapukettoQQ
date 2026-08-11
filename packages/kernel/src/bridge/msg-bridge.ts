@@ -53,6 +53,8 @@ export class MsgBridge {
             onRecvMsg: (msgs) => this.channel.emit("Msg/onRecvMsg", msgs),
             onRecvMsgReadReport: (reports) => this.channel.emit("Msg/onRecvMsgReadReport", reports),
             onRecvMsgReceipt: (receipts) => this.channel.emit("Msg/onRecvMsgReceipt", receipts),
+            // 2026-08-11 补齐：发送状态更新（sendMsg 结果以此为准，NapCat 同款）
+            onMsgInfoListUpdate: (msgs) => this.channel.emit("Msg/onMsgInfoListUpdate", msgs),
         };
         this.listenerId = this.service.addKernelMsgListener(listener);
     }

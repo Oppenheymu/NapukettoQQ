@@ -39,6 +39,12 @@ export interface IpcApiContext {
     self: { uin: string; nickname: string };
     /** uin → uid 转换（Peer 目标解析；注入 groupApi.uinToUid）。 */
     uinToUid?: (uins: string[]) => Promise<Map<string, string>>;
+    /** wrapper session（诊断用：枚举/触发原生服务方法面，验证初始化链路）。 */
+    session?: unknown;
+    /** wrapper engine（诊断用：initLog 等初始化方法验证）。 */
+    engine?: unknown;
+    /** NodeQQNTWrapperUtil（诊断用：原生 copyFile 验证富媒体文件放置）。 */
+    util?: unknown;
 }
 
 /** 动作处理函数：params 宽松透传，返回值原样序列化（JSON 可序列化）。 */
@@ -118,7 +124,188 @@ export function createIpcActions(ctx: IpcApiContext): Map<string, IpcActionHandl
 
     actions.set("friend.getFriendList", async () => ctx.friendApi.getFriendList());
 
+    // ── 诊断动作（2026-08-11 重建：调查 rich media transfer failed）──
+    // 枚举富媒体/闪传服务方法面 + 调用候选 side-effect 方法，
+    // 观察 wrapper 日志是否出现 FlashTransferUploadManager Init / AllocDedicatedThread sucess。
+    actions.set("diag.richMediaTmpPaths", async () => runRichMediaDiag(ctx.session));
+
+    // 诊断：按方法名 + 参数数组调用 flash 服务任意方法（2 参数组合实验用）。
+    actions.set("diag.flashCall", async (params) => {
+        const sess = ctx.session as { getFlashTransferService?: () => unknown } | undefined;
+        if (sess === undefined) {
+            return { error: "session 未注入" };
+        }
+        const flash =
+            typeof sess.getFlashTransferService === "function"
+                ? sess.getFlashTransferService()
+                : null;
+        if (flash === null || flash === undefined) {
+            return { error: "flash 服务为 null" };
+        }
+        return callDiagnosticMethod(flash, params);
+    });
+
+    // 诊断：调用 session 任意方法（上线信号验证：onLine 可能触发模块初始化）。
+    actions.set("diag.sessionCall", async (params) => {
+        if (ctx.session === undefined) {
+            return { error: "session 未注入" };
+        }
+        return callDiagnosticMethod(ctx.session, params);
+    });
+
+    // 诊断：调用 engine 任意方法 + 枚举方法面（initLog 等初始化方法验证）。
+    actions.set("diag.engineCall", async (params) => {
+        if (ctx.engine === undefined) {
+            return { error: "engine 未注入" };
+        }
+        return callDiagnosticMethod(ctx.engine, params);
+    });
+
+    // 诊断：调用 richMediaService 任意方法（uploadRMFileWithoutMsg 等替代上传路径）。
+    actions.set("diag.richMediaCall", async (params) => {
+        const sess = ctx.session as { getRichMediaService?: () => unknown } | undefined;
+        if (sess === undefined) {
+            return { error: "session 未注入" };
+        }
+        const svc =
+            typeof sess.getRichMediaService === "function" ? sess.getRichMediaService() : null;
+        if (svc === null || svc === undefined) {
+            return { error: "richMedia 服务为 null" };
+        }
+        return callDiagnosticMethod(svc, params);
+    });
+
+    // 诊断：调用 msgService 任意方法（getRichMediaFilePathForGuild 等富媒体路径计算）。
+    actions.set("diag.msgServiceCall", async (params) => {
+        const sess = ctx.session as { getMsgService?: () => unknown } | undefined;
+        if (sess === undefined) {
+            return { error: "session 未注入" };
+        }
+        const svc = typeof sess.getMsgService === "function" ? sess.getMsgService() : null;
+        if (svc === null || svc === undefined) {
+            return { error: "msgService 为 null" };
+        }
+        return callDiagnosticMethod(svc, params);
+    });
+
+    // 诊断：调用 NodeQQNTWrapperUtil 任意方法（原生 copyFile 等）。
+    actions.set("diag.utilCall", async (params) => {
+        const util = ctx.util as { get?: () => unknown } | undefined;
+        if (util === undefined) {
+            return { error: "util 未注入" };
+        }
+        const instance = typeof util.get === "function" ? util.get() : util;
+        if (instance === null || instance === undefined) {
+            return { error: "util 实例为 null" };
+        }
+        return callDiagnosticMethod(instance, params);
+    });
+
     return actions;
+}
+
+/** 诊断：按方法名 + 参数数组调用对象任意方法（返回结构化结果，不抛）。 */
+async function callDiagnosticMethod(
+    obj: unknown,
+    params: Record<string, unknown>,
+): Promise<unknown> {
+    const method = typeof params["method"] === "string" ? params["method"] : "";
+    const args = Array.isArray(params["args"]) ? params["args"] : [];
+    const target = obj as Record<string, unknown>;
+    if (method === "__methods") {
+        return { methods: Object.getOwnPropertyNames(Object.getPrototypeOf(obj)) };
+    }
+    const fn = target[method];
+    if (typeof fn !== "function") {
+        return { error: `方法不存在: ${method}` };
+    }
+    try {
+        const r = await (fn as (...a: unknown[]) => unknown).apply(obj, args);
+        return { ok: true, ret: r };
+    } catch (e) {
+        return { ok: false, err: e instanceof Error ? e.message : String(e) };
+    }
+}
+
+/** 诊断：枚举富媒体临时路径（getPicTmpPath 等 0 参方法）。 */
+async function enumerateTmpPaths(svc: unknown): Promise<Record<string, unknown>> {
+    const tmp: Record<string, unknown> = {};
+    for (const name of [
+        "getPicTmpPath",
+        "getRichMeidaTmpPath",
+        "getPttTmpPath",
+        "getVideoTmpPath",
+        "getFileTmpPath",
+        "getTransferingTmpPath",
+    ]) {
+        const fn = (svc as Record<string, unknown>)[name];
+        if (typeof fn === "function") {
+            try {
+                tmp[name] = await (fn as () => unknown).call(svc);
+            } catch (e) {
+                tmp[name] = `调用失败: ${e instanceof Error ? e.message : String(e)}`;
+            }
+        } else {
+            tmp[name] = "方法缺失";
+        }
+    }
+    return tmp;
+}
+
+/** 诊断：闪传服务候选 side-effect 触发（§5.3 候选动作 1，参数宽松猜测）。 */
+async function probeFlashSideEffects(flash: unknown): Promise<Record<string, unknown>> {
+    const flashObj = flash as Record<string, unknown>;
+    const sideEffects: Record<string, unknown> = {};
+    const candidates: [string, unknown[]][] = [
+        ["addFileSetSimpleStatusListener", [() => undefined]],
+        ["setFlashTransferDir", [""]],
+        ["setFileSetDownloadDir", [""]],
+        ["getFileSetIdByCode", [""]],
+    ];
+    for (const [name, args] of candidates) {
+        const fn = flashObj[name];
+        if (typeof fn === "function") {
+            try {
+                const r = await (fn as (...a: unknown[]) => unknown).apply(flash, args);
+                sideEffects[name] = { ok: true, ret: r };
+            } catch (e) {
+                sideEffects[name] = {
+                    ok: false,
+                    err: e instanceof Error ? e.message : String(e),
+                };
+            }
+        } else {
+            sideEffects[name] = { missing: true };
+        }
+    }
+    return sideEffects;
+}
+
+/** 诊断主流程：session → 富媒体服务 + 闪传服务的方法面与触发结果。 */
+async function runRichMediaDiag(session: unknown): Promise<Record<string, unknown>> {
+    const sess = session as
+        | { getRichMediaService?: () => unknown; getFlashTransferService?: () => unknown }
+        | undefined;
+    if (sess === undefined) {
+        return { error: "session 未注入（IPC 上下文缺 session）" };
+    }
+    const out: Record<string, unknown> = {};
+    const svc = typeof sess.getRichMediaService === "function" ? sess.getRichMediaService() : null;
+    if (svc !== null && svc !== undefined) {
+        out["richMediaTmpPaths"] = await enumerateTmpPaths(svc);
+        out["richMediaMethods"] = Object.getOwnPropertyNames(Object.getPrototypeOf(svc));
+    } else {
+        out["richMediaService"] = "null";
+    }
+    const flash =
+        typeof sess.getFlashTransferService === "function" ? sess.getFlashTransferService() : null;
+    if (flash !== null && flash !== undefined) {
+        out["flashMethods"] = Object.getOwnPropertyNames(Object.getPrototypeOf(flash));
+        out["flashSideEffects"] = await probeFlashSideEffects(flash);
+    } else {
+        out["flashService"] = "null";
+    }
+    return out;
 }
 
 /** 统一动作调用：查找动作表 → 执行 → 返回结果或错误（不抛，调用方转 result）。 */
