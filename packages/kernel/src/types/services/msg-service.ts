@@ -93,6 +93,20 @@ export interface NodeIKernelMsgService {
     translatePtt2Text(msgId: string, peer: Peer, msgElement: unknown): Promise<GeneralCallResult>;
     /** 输入状态（set_input_status；eventType=1 输入中，0 停止）。 */
     sendShowInputStatusReq(chatType: number, eventType: number, toUid: string): Promise<unknown>;
+    /**
+     * 富媒体文件目标路径（NapCat 式发送图片前置：md5+文件名 → QQ 内部 Ori/Thumb 路径）。
+     * 返回纯文件名（相对 QQ 数据根），需配合 NodeQQNTWrapperUtil.copyFile 放置文件。
+     */
+    getRichMediaFilePathForGuild(req: {
+        md5HexStr: string;
+        fileName: string;
+        elementType: number;
+        elementSubType: number;
+        thumbSize: number;
+        needCreate: boolean;
+        downloadType: number;
+        file_uuid: string;
+    }): string;
     /** 合并转发组装（send_group/private_forward_msg；返回 MULTI_FORWARD 元素）。 */
     buildMultiForwardMsg(req: {
         srcMsgIds: string[];

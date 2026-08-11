@@ -204,7 +204,8 @@ export function createIpcActions(ctx: IpcApiContext): Map<string, IpcActionHandl
     return actions;
 }
 
-/** 诊断：按方法名 + 参数数组调用对象任意方法（返回结构化结果，不抛）。 */
+/** 诊断：按方法名 + 参数数组调用对象任意方法（返回结构化结果，不抛）。
+ * ⚠️ NAPI 对象方法挂在实例自身（非原型），__methods 须枚举实例 ownKeys。 */
 async function callDiagnosticMethod(
     obj: unknown,
     params: Record<string, unknown>,
@@ -213,7 +214,9 @@ async function callDiagnosticMethod(
     const args = Array.isArray(params["args"]) ? params["args"] : [];
     const target = obj as Record<string, unknown>;
     if (method === "__methods") {
-        return { methods: Object.getOwnPropertyNames(Object.getPrototypeOf(obj)) };
+        const own = Object.getOwnPropertyNames(obj);
+        const proto = Object.getOwnPropertyNames(Object.getPrototypeOf(obj) ?? {});
+        return { methods: [...new Set([...own, ...proto])] };
     }
     const fn = target[method];
     if (typeof fn !== "function") {

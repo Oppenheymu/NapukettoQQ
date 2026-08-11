@@ -40,6 +40,15 @@ export interface PicElement {
     fileName?: string;
     sourcePath?: string;
     thumbPath?: string;
+    // 发送用完整字段（NapCat 式，2026-08-11 实证：缺任一发送失败）
+    md5HexStr?: string;
+    fileSize?: string;
+    original?: boolean;
+    picSubType?: number;
+    fileUuid?: string;
+    fileSubId?: string;
+    thumbFileSize?: number;
+    summary?: string;
 }
 
 /** 语音元素（silk）。 */

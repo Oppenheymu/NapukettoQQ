@@ -61,7 +61,10 @@ export async function createKernelServices(
     // kernel APIs
     const groupApi = new kernel.GroupApi(session);
     // channel 传入 MsgApi：sendMsg 后等 onMsgInfoListUpdate 确认（NapCat 式，2026-08-11）
-    const msgApi = new kernel.MsgApi(session, channel);
+    // util 传入 MsgApi：富媒体发送 copyFile（NapCat 式图片预处理，2026-08-11）
+    const util = (ctx as unknown as { exports?: { NodeQQNTWrapperUtil?: unknown } }).exports
+        ?.NodeQQNTWrapperUtil;
+    const msgApi = new kernel.MsgApi(session, channel, util);
     const friendApi = new kernel.FriendApi(session, {
         uidToUin: (uids: string[]) => groupApi.uidToUin(uids),
     });

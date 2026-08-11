@@ -6,6 +6,9 @@
  *
  * 方法面（P2-1）：发送 / 撤回 / 拉历史 / 标记已读。group/friend 等后续 apis 同构。
  */
+import { createHash } from "node:crypto";
+import { readFile, stat } from "node:fs/promises";
+import { basename } from "node:path";
 import type { MsgEventChannel } from "../bridge/msg-bridge.js";
 import { kernelError } from "../infra/index.js";
 import type {
@@ -15,8 +18,9 @@ import type {
     Peer,
     RawElement,
     RawMessage,
+    SendMessageElement,
 } from "../types/index.js";
-import { toSendElements } from "../types/index.js";
+import { ElementType, toSendElements } from "../types/index.js";
 import { unwrapResult } from "./result.js";
 
 /** 发送状态（onMsgInfoListUpdate 事件 msg.sendStatus）。 */
@@ -25,21 +29,44 @@ const SEND_STATUS = { FAILED: 0, SENDING: 1, SUCCESS: 2, SUCCESS_NO_SEQ: 3 } as 
 /** 发送确认超时（毫秒）。 */
 const SEND_CONFIRM_TIMEOUT_MS = 15_000;
 
+/** 读文件 stat（富媒体发送预处理；文件不存在抛 INVALID_PARAM）。 */
+async function statFile(path: string): Promise<{ size: number }> {
+    try {
+        return await stat(path);
+    } catch {
+        throw kernelError(`图片文件不存在: ${path}`, "INVALID_PARAM");
+    }
+}
+
+/** 计算文件 md5（十六进制小写）。 */
+async function hashFile(path: string): Promise<string> {
+    try {
+        const buf = await readFile(path);
+        return createHash("md5").update(buf).digest("hex");
+    } catch {
+        throw kernelError(`图片文件读取失败: ${path}`, "INVALID_PARAM");
+    }
+}
+
 /** 消息 API：从 session 拿 msg service，包装成语义化方法。 */
 export class MsgApi {
     private readonly service: NodeIKernelMsgService;
     /** 消息事件通道（sendMsg 后等 onMsgInfoListUpdate 确认发送结果）。 */
     private readonly channel: MsgEventChannel | null;
+    /** NodeQQNTWrapperUtil（富媒体发送 copyFile 用；session 拿不到时可为 null）。 */
+    private readonly util: { get(): unknown } | null;
     /** 上次生成 msgId 的时间（单调递增，2026-08-07 防同毫秒并发碰撞）。 */
     private lastMsgTime = 0;
 
-    constructor(session: NodeIQQNTWrapperSession, channel?: MsgEventChannel) {
+    constructor(session: NodeIQQNTWrapperSession, channel?: MsgEventChannel, util?: unknown) {
         const service = session.getMsgService() as unknown as NodeIKernelMsgService | null;
         if (service === null || service === undefined) {
             throw kernelError("getMsgService() 返回空（session 未 init）", "INVALID_STATE");
         }
         this.service = service;
         this.channel = channel ?? null;
+        // util 传入形态：构造器（NodeQQNTWrapperUtil，含 get()）或实例，宽松兼容
+        this.util = util !== null && util !== undefined ? (util as { get(): unknown }) : null;
     }
 
     /**
@@ -70,7 +97,10 @@ export class MsgApi {
      *  - ⚠️ 必须先注册事件监听再调 sendMsg（事件可能在 sendMsg 返回前就触发）。
      */
     async sendMessage(target: Peer, elements: CanonicalElement[]): Promise<{ msgId: string }> {
-        const sendElements = toSendElements(elements);
+        // NapCat 式富媒体预处理：PIC 元素补 md5/fileName/sourcePath 并放置文件
+        // （getRichMediaFilePathForGuild → util.copyFile），否则发送器走未初始化
+        // 的 FlashFileUploadService 导致 rich media transfer failed。
+        const sendElements = await this.prepareSendElements(elements);
         const msgId = this.service.generateMsgUniqueId(target.chatType, this.nextMsgTime());
         // NapCat 同款：msgId 塞 guildId，第一参 '0'
         const sendPeer: Peer = { ...target, guildId: msgId };
@@ -86,6 +116,76 @@ export class MsgApi {
         await this.service.sendMsg("0", sendPeer, sendElements, new Map());
         await confirm;
         return { msgId };
+    }
+
+    /**
+     * canonical 元素 → 发送元素，PIC 做 NapCat 式预处理。
+     * 2026-08-11 修复（实测）：图片发送必须 elementType=2（PIC）+ 完整 picElement
+     * （md5HexStr/fileSize/fileName/sourcePath），且文件须经 getRichMediaFilePathForGuild
+     * 计算目标路径 + util.copyFile 放置——缺任一环节 sendMsg 返回 rich media transfer failed。
+     */
+    private async prepareSendElements(elements: CanonicalElement[]): Promise<SendMessageElement[]> {
+        const out: SendMessageElement[] = [];
+        for (const el of elements) {
+            if (el.type !== "image") {
+                out.push(...toSendElements([el]));
+                continue;
+            }
+            out.push(await this.prepareImageElement(el.path));
+        }
+        return out;
+    }
+
+    /** PIC 元素 NapCat 式预处理：md5 → 目标路径 → copyFile → 完整 picElement。 */
+    private async prepareImageElement(path: string): Promise<SendMessageElement> {
+        const service = this.service;
+        const util = this.util;
+        // 本地文件信息（node:fs + node:crypto，纯 Node）
+        const stat = await statFile(path);
+        const md5 = await hashFile(path);
+        const fileSize = stat.size;
+        const fileName = basename(path);
+        // getRichMediaFilePathForGuild：QQ 内部目标路径（纯文件名，相对数据根）
+        const relPath = service.getRichMediaFilePathForGuild({
+            md5HexStr: md5,
+            fileName,
+            elementType: ElementType.PIC,
+            elementSubType: 0,
+            thumbSize: 0,
+            needCreate: true,
+            downloadType: 1,
+            file_uuid: "",
+        });
+        if (util !== null) {
+            const instance = typeof util.get === "function" ? util.get() : util;
+            const copy = (instance as Record<string, unknown>)["copyFile"];
+            if (typeof copy === "function") {
+                await (copy as (a: string, b: string) => Promise<unknown>).call(
+                    instance,
+                    path,
+                    relPath,
+                );
+            }
+        }
+        return {
+            elementType: ElementType.PIC,
+            elementId: "",
+            picElement: {
+                md5HexStr: md5,
+                fileSize: String(fileSize),
+                picWidth: 0,
+                picHeight: 0,
+                fileName,
+                sourcePath: relPath,
+                original: true,
+                picType: 1000,
+                picSubType: 0,
+                fileUuid: "",
+                fileSubId: "",
+                thumbFileSize: 0,
+                summary: "",
+            },
+        };
     }
 
     /** 注册 onMsgInfoListUpdate 确认监听（返回 Promise，resolve 时发送成功）。 */
