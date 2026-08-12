@@ -5,7 +5,9 @@
     "type": "module",
     "files": [
         "dist",
-        "native/build/stub-test-env"
+        "native/build/stub-test-env",
+        "qq-releases.json",
+        "assets/7zip"
     ],
     "main": "./dist/index.mjs",
     "module": "./dist/index.mjs",

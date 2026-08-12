@@ -7,9 +7,13 @@
  *   L2: 数据根缓存 <数据根>/qq-files/<版本> —— 下载解包产物（P1 落地后才有）
  */
 import { execFileSync } from "node:child_process";
-import { existsSync, readdirSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, statSync } from "node:fs";
+import { rm } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import process from "node:process";
+import { downloadFile } from "./qq-download.js";
+import { clearCacheVersion, extractInstaller, extractWrapperFiles } from "./qq-extract.js";
+import { latestRelease, loadQqReleases, resolveDownloadUrl } from "./qq-releases.js";
 
 /** 数据根下 QQ 文件缓存目录名（<数据根>/qq-files/<版本>/，P1 下载解包产物）。 */
 export const QQ_FILES_DIR_NAME = "qq-files";
@@ -85,6 +89,10 @@ export interface ResolveQqFilesOptions {
     qqPath?: string;
     /** 数据根（L2 缓存扫描；缺省轻量解析 NAPKETTO_DATA ?? 项目根/.napuketto）。 */
     dataRoot?: string;
+    /** L0/L1/L2 全部失败时自动进入下载流程（P1；默认 true，测试可关）。 */
+    autoDownload?: boolean;
+    /** 7z 可执行文件路径（解包用；缺省自动探测）。 */
+    sevenZipPath?: string;
 }
 
 /** 找 QQ.exe 路径。 */
@@ -136,10 +144,11 @@ export function resolveQqInstall(qqPath?: string): QqInstallInfo {
 }
 
 /**
- * 多级来源定位 QQ 原生文件（P0：纯定位，自动下载在 P1）：
- *   L0 → L1 → L2 依次尝试，全部失败抛错。
+ * 多级来源定位 QQ 原生文件：
+ *   L0 → L1 → L2 依次尝试，全部失败且 autoDownload 时自动进入下载流程（ensureQqFiles）。
+ * ⚠️ async：自动下载为异步流程（P1 起）；纯定位场景用 resolveQqInstall（同步）。
  */
-export function resolveQqFiles(options: ResolveQqFilesOptions = {}): QqInstallInfo {
+export async function resolveQqFiles(options: ResolveQqFilesOptions = {}): Promise<QqInstallInfo> {
     // L0：显式文件根（参数 > 环境变量）
     const explicitDir = options.qqFilesDir ?? process.env["NAPUTO_QQ_FILES"];
     if (explicitDir !== undefined && explicitDir !== "") {
@@ -153,27 +162,93 @@ export function resolveQqFiles(options: ResolveQqFilesOptions = {}): QqInstallIn
     try {
         return resolveQqInstall();
     } catch {
-        // 本机未安装 → 落到 L2
+        // 本机未安装 → 落 L2
     }
     // L2：数据根缓存（P1 下载解包产物；结构 <数据根>/qq-files/<版本>/）
-    const cacheRoot = join(resolveDataRootLight(options.dataRoot), QQ_FILES_DIR_NAME);
-    if (existsSync(cacheRoot)) {
-        const versionDirs = readdirSync(cacheRoot)
-            .filter((v) => statSync(join(cacheRoot, v)).isDirectory())
-            .sort()
-            .reverse();
-        for (const versionDir of versionDirs) {
-            try {
-                return resolveFromRoot(join(cacheRoot, versionDir), "cached");
-            } catch {
-                // 该版本目录结构不完整（如下载中断残留），尝试下一个
-            }
-        }
+    const dataRoot = resolveDataRootLight(options.dataRoot);
+    const cached = tryResolveCached(dataRoot);
+    if (cached !== null) {
+        return cached;
+    }
+    // 全部缺失 → 自动下载（P1）
+    if (options.autoDownload !== false) {
+        const sevenZipPath =
+            options.sevenZipPath !== undefined ? { sevenZipPath: options.sevenZipPath } : {};
+        return ensureQqFiles({ dataRoot, ...sevenZipPath });
     }
     throw new Error(
         "未找到 QQ 原生文件（wrapper.node）：请安装 QQ、设置 NAPUTO_QQ_PATH/NAPUTO_QQ_FILES，" +
-            "或使用下载流程（P1）自动获取",
+            "或使用下载流程（ensureQqFiles）自动获取",
     );
+}
+
+/** 扫描数据根缓存（L2）；命中返回，未命中返回 null。 */
+function tryResolveCached(dataRoot: string): QqInstallInfo | null {
+    const cacheRoot = join(dataRoot, QQ_FILES_DIR_NAME);
+    if (!existsSync(cacheRoot)) {
+        return null;
+    }
+    const versionDirs = readdirSync(cacheRoot)
+        .filter((v) => statSync(join(cacheRoot, v)).isDirectory())
+        .sort()
+        .reverse();
+    for (const versionDir of versionDirs) {
+        try {
+            return resolveFromRoot(join(cacheRoot, versionDir), "cached");
+        } catch {
+            // 该版本目录结构不完整（如下载中断残留），尝试下一个
+        }
+    }
+    return null;
+}
+
+/**
+ * 确保 QQ 原生文件就绪（P1）：幂等缓存检查 → 下载官方安装包 → sha256 校验
+ * → 7z 解包 → 提取 wrapper.node/QQNT.dll → 缓存。返回缓存版本 QqInstallInfo。
+ */
+export async function ensureQqFiles(
+    options: {
+        /** 数据根（缓存 <数据根>/qq-files/）。 */
+        dataRoot?: string;
+        /** 7z 路径（缺省自动探测）。 */
+        sevenZipPath?: string;
+    } = {},
+): Promise<QqInstallInfo> {
+    const dataRoot = resolveDataRootLight(options.dataRoot);
+    const cacheRoot = join(dataRoot, QQ_FILES_DIR_NAME);
+    mkdirSync(cacheRoot, { recursive: true });
+
+    // 幂等：缓存已有完整版本 → 直接返回
+    const existing = tryResolveCached(dataRoot);
+    if (existing !== null) {
+        return existing;
+    }
+
+    // 1. 版本清单 → 最新可用版本
+    const releases = loadQqReleases();
+    const release = latestRelease(releases);
+    const url = resolveDownloadUrl(release);
+    const version = release.version;
+
+    // 2. 下载 + sha256 校验（清单无参考值时下载器跳过校验，完整性由解包/加载兜底）
+    const tmpDir = join(dataRoot, "tmp");
+    mkdirSync(tmpDir, { recursive: true });
+    const installerPath = join(tmpDir, `qq-installer-${version}.exe`);
+    await downloadFile({ dest: installerPath, url, expectedSha256: release.sha256 });
+
+    // 3. 解包 + 提取（失败清理缓存残留；临时文件无论如何清理）
+    const extractedDir = join(tmpDir, `qq-extracted-${version}`);
+    try {
+        await extractInstaller(installerPath, extractedDir, options.sevenZipPath);
+        const info = await extractWrapperFiles(extractedDir, version, cacheRoot);
+        return info;
+    } catch (err) {
+        await clearCacheVersion(cacheRoot, version);
+        throw err;
+    } finally {
+        await rm(installerPath, { force: true });
+        await rm(extractedDir, { recursive: true, force: true });
+    }
 }
 
 /**

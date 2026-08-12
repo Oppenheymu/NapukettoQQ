@@ -22,8 +22,25 @@ export type { LaunchOptions, LaunchResult } from "./launcher.js";
 export { defaultStubDir, ENV, launchSelfHost } from "./launcher.js";
 export type { QqFileSource, QqInstallInfo, ResolveQqFilesOptions } from "./locate-qq.js";
 export {
+    ensureQqFiles,
     locateQqPath,
     QQ_FILES_DIR_NAME,
     resolveQqFiles,
     resolveQqInstall,
 } from "./locate-qq.js";
+export type { DownloadOptions, DownloadResult } from "./qq-download.js";
+export { DownloadError, downloadFile } from "./qq-download.js";
+export type { ExtractOptions, SevenZipResult } from "./qq-extract.js";
+export {
+    clearCacheVersion,
+    extractInstaller,
+    extractWrapperFiles,
+    findSevenZip,
+} from "./qq-extract.js";
+export type { QqReleaseEntry, QqReleasesFile } from "./qq-releases.js";
+export {
+    latestRelease,
+    loadQqReleases,
+    QqReleasesError,
+    resolveDownloadUrl,
+} from "./qq-releases.js";

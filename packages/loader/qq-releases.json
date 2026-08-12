@@ -1,0 +1,13 @@
+{
+    "schema": 1,
+    "known": [
+        {
+            "version": "9.9.33-51802",
+            "url": "https://qqdl.gtimg.cn/qqfile/QQNT/9.9.33/release/a0ce07ad/QQ_9.9.33_260730_x64_01.exe",
+            "sha256": "7bcc1ad50c19d14c9aad17778a0359aacd84b4d6c54ef1c71d938e0a6e2f2f5d",
+            "appid": 537376818,
+            "source": "official",
+            "buildDate": "2026-07-30"
+        }
+    ]
+}
