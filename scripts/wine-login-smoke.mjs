@@ -94,13 +94,18 @@ const runtimeDir = join(dataRoot, "runtime", "smoke");
 mkdirSync(runtimeDir, { recursive: true });
 const selfHostPath = join(runtimeDir, "self-host.cjs");
 const kernelPath = join(runtimeDir, "kernel.mjs");
+const stubExt4 = join(runtimeDir, "stub");
+mkdirSync(stubExt4, { recursive: true });
 copyFileSync(srcSelfHost, selfHostPath);
 copyFileSync(srcKernel, kernelPath);
+copyFileSync(join(stubHost, "QQNT.dll"), join(stubExt4, "QQNT.dll"));
 console.log(`[wine-login] 运行时已复制到 ext4: ${runtimeDir}`);
 console.log(`[wine-login] wine 跑 self-host（路径 Z: 视角）…`);
 
-// 4.5 kernel entry 环境变量（指向 ext4 的 kernel.mjs，wine 视角 Z:）
+// 4.5 kernel entry 环境变量 + stub 重定向（stub 已复制到 ext4，wine 视角 Z:）
 env["NAPUTO_KERNEL_ENTRY"] = toWinePath(kernelPath);
+env["NAPUTO_STUB_DIR"] = toWinePath(stubExt4);
+env["PATH"] = [toWinePath(stubExt4), toWinePath(wrapperDir), process.env["PATH"] ?? ""].join(";");
 
 // 6. spawn wine + win-node + self-host.cjs（登录长驻，观察后退出）
 const wineBin = process.env["NAPUTO_WINE"] ?? "wine";
