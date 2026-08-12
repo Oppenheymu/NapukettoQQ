@@ -282,8 +282,8 @@ importers:
         specifier: ^5.30.9
         version: 5.30.11(@koishijs/client@5.30.11(@types/node@26.2.0)(postcss@8.5.26)(rollup@4.62.4)(typescript@7.0.2))(koishi@4.18.11(@cordisjs/plugin-http@0.6.3(cordis@3.18.1))(cordis@3.18.1))
       '@napuketto/kernel':
-        specifier: ~0.0.4
-        version: 0.0.4
+        specifier: ~0.0.5
+        version: 0.0.5
       '@napuketto/loader':
         specifier: ~0.0.7
         version: 0.0.7
@@ -1235,8 +1235,8 @@ packages:
     os: [linux]
     libc: [glibc]
 
-  '@napuketto/kernel@0.0.4':
-    resolution: {integrity: sha512-M/aSuZbb4IXeftafeLu1yB3tlh2UN2Jue6IGbbA9mryP8bcOBOai2oRKaWaf2tzJ8mL5MyZrDjIxmPhceavQRA==}
+  '@napuketto/kernel@0.0.5':
+    resolution: {integrity: sha512-77UMU2SLTeGc05cfwIbMg0ZgmJ39E3DZHlG48D1yJANlvKLkzLzx5UQPuARt8AdvRksFtfb88h1sMJYlpTkc7w==}
 
   '@napuketto/loader@0.0.7':
     resolution: {integrity: sha512-f0EU17tp5sTlwj97PpS+V8EZAOOhm2dIhDzSYGTKevnMrf9sQwmb3Sl9l0aGT0bZyWCJ3el69TKgdK+E1uwy8g==}
@@ -4642,7 +4642,7 @@ snapshots:
   '@napi-rs/lzma-linux-x64-gnu@1.5.1':
     optional: true
 
-  '@napuketto/kernel@0.0.4':
+  '@napuketto/kernel@0.0.5':
     dependencies:
       pino: 10.3.1
       pino-pretty: 13.1.3

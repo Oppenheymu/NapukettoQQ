@@ -1,5 +1,38 @@
 # @napuketto/kernel
 
+## 0.0.6
+
+### Patch Changes
+
+- d6f4b56: refactor(kernel): fallow 健康度重构——43 个 CRAP 超标函数降至 9（行为等价，2026-08-09）
+
+  - **降复杂度**：`wrapper-loader`（startNapuketto/createSession/startSession 回退链拆分）、
+    `session-resolver`（findMainSessionId 统一 firstStringId）、`probe` 探测子系统
+    （probeStartup/probeSession/enumerateSessionIds 拆小函数）、`login-connect`
+    （attemptQuickLogin 提取重试单次）、`lifecycle`（watchInitSignal/startSessionBestEffort）、
+    `core`（initLoginConfig/resolveCommonPath/waitQrLoggedIn）、`webapi`（honorTargets
+    映射表替代 if 链）、`stranger-info`（pickField 字段级回退）、`group/msg/friend/richmedia`
+    （extractGroupDetail/findPttElement/findForwardElement/toDoubtFriendRequestInfo 等纯函数提取）
+  - **补测试**（12 个新测试文件，201 → 454 用例全绿）：wrapper-loader / session-resolver /
+    probe-utils / event-channel / login-connect / group-cache / wrapper-version /
+    wrapper-config / group / friend / msg / richmedia 的 mock 基线测试
+  - 全部为行为等价重构（无 API 变化），`pnpm check` / 454 测试 / 全量构建全绿
+
+- f744cf7: fix(kernel): 修复图片发送失败（PIC 元素 NapCat 式预处理：elementType=2 + getRichMediaFilePathForGuild + copyFile + 完整 picElement）
+- 769d457: fix(kernel): 修复消息发送失败（sendMsg 返回 result=5 被误判失败）
+
+  问题根因：旧实现以 `sendMsg(msgId, peer, ...)` 调用并直接看返回值 `result===0` 判成败，
+  但 wrapper 对正确调用返回 `result=5`（文本/图片均失败）。按 NapCat 同款方式修复：
+
+  - sendMsg 第一参固定传 `'0'`，msgId 塞 `peer.guildId`
+  - 先注册 `onMsgInfoListUpdate` 事件监听再调 sendMsg，以事件 `sendStatus===2` 确认发送成功
+    （sendMsg 返回值 result 非 0 不立即判失败——富媒体异步上传时 result=5 常见）
+  - `MsgBridge` 补注册 `onMsgInfoListUpdate` 回调（此前缺失，发送状态事件不透传）
+  - `MsgApi` 构造支持注入消息事件通道；无通道时退化为旧行为
+
+  实测：文本消息成功发送到群（boot 日志确认）；图片发送错误从模糊的
+  `rich media transfer failed` 变为清晰的 `sendStatus=0`（图片仍失败，根因另查）。
+
 ## 0.0.5
 
 ### Patch Changes
