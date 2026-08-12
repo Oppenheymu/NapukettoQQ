@@ -20,5 +20,10 @@ export {
 } from "./instance-lock.js";
 export type { LaunchOptions, LaunchResult } from "./launcher.js";
 export { defaultStubDir, ENV, launchSelfHost } from "./launcher.js";
-export type { QqInstallInfo } from "./locate-qq.js";
-export { locateQqPath, resolveQqInstall } from "./locate-qq.js";
+export type { QqFileSource, QqInstallInfo, ResolveQqFilesOptions } from "./locate-qq.js";
+export {
+    locateQqPath,
+    QQ_FILES_DIR_NAME,
+    resolveQqFiles,
+    resolveQqInstall,
+} from "./locate-qq.js";
