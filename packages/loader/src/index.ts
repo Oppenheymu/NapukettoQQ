@@ -44,3 +44,7 @@ export {
     QqReleasesError,
     resolveDownloadUrl,
 } from "./qq-releases.js";
+export type { WinNodeInfo } from "./win-node.js";
+export { ensureWinNode, nodeZipUrl, WIN_NODE_DIR_NAME } from "./win-node.js";
+export type { SpawnCommand } from "./wine.js";
+export { buildSpawnCommand, isLinux, toWinePath, wineBinary } from "./wine.js";
