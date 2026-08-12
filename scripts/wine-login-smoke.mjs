@@ -15,7 +15,7 @@
  * ⚠️ 登录是长驻进程（协议服务在事件循环），脚本在 session READY 后观察 90s 退出。
  */
 import { spawn } from "node:child_process";
-import { existsSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -74,24 +74,33 @@ if (uin !== undefined) {
     env["NAPUTO_QUICK_UIN"] = uin;
 }
 
-// 5. 定位 self-host.cjs（loader dist）
-// ⚠️ 不用 import.meta.dirname（Node 20.11+ 才有；WSL 可能是 Node 18），
-//    用 fileURLToPath(import.meta.url) 兼容。
+// 5. 定位并复制运行时到 ext4（wine 读不了 /mnt/c DrvFS！）
+//    ⚠️ 2026-08-12 实测：wine 读 /mnt/c 会失败（同 wrapper.node 的坑）。
+//    self-host.cjs 是单文件 CJS bundle，kernel dist 是单文件 ESM bundle——
+//    复制到 ext4 运行时目录（wine 内路径过 toWinePath）。
 const scriptDir = dirname(fileURLToPath(import.meta.url));
-const selfHostPath = join(
-    resolve(scriptDir, ".."),
-    "packages",
-    "loader",
-    "dist",
-    "host",
-    "self-host.cjs",
-);
-if (!existsSync(selfHostPath)) {
-    console.log(`[wine-login] ❌ self-host.cjs 未找到: ${selfHostPath}`);
+const projectRoot = resolve(scriptDir, "..");
+const srcSelfHost = join(projectRoot, "packages", "loader", "dist", "host", "self-host.cjs");
+const srcKernel = join(projectRoot, "packages", "kernel", "dist", "index.mjs");
+if (!existsSync(srcSelfHost)) {
+    console.log(`[wine-login] ❌ self-host.cjs 未找到: ${srcSelfHost}`);
     process.exit(1);
 }
-console.log(`[wine-login] self-host.cjs: ${selfHostPath}`);
+if (!existsSync(srcKernel)) {
+    console.log(`[wine-login] ❌ kernel dist 未找到: ${srcKernel}`);
+    process.exit(1);
+}
+const runtimeDir = join(dataRoot, "runtime", "smoke");
+mkdirSync(runtimeDir, { recursive: true });
+const selfHostPath = join(runtimeDir, "self-host.cjs");
+const kernelPath = join(runtimeDir, "kernel.mjs");
+copyFileSync(srcSelfHost, selfHostPath);
+copyFileSync(srcKernel, kernelPath);
+console.log(`[wine-login] 运行时已复制到 ext4: ${runtimeDir}`);
 console.log(`[wine-login] wine 跑 self-host（路径 Z: 视角）…`);
+
+// 4.5 kernel entry 环境变量（指向 ext4 的 kernel.mjs，wine 视角 Z:）
+env["NAPUTO_KERNEL_ENTRY"] = toWinePath(kernelPath);
 
 // 6. spawn wine + win-node + self-host.cjs（登录长驻，观察后退出）
 const wineBin = process.env["NAPUTO_WINE"] ?? "wine";
