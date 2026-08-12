@@ -12,12 +12,13 @@
  *      └─ 登录（快速登录指定 uin / 未指定则交互）→ session READY → 协议装配
  *
  * ⚠️ 与 Step 1 相同的坑：数据根必须放 ext4（wine 读 /mnt/c 会 File not found）。
- * ⚠️ 登录是长驻进程（协议服务在事件循环），脚本在 session READY 后观察 30s 退出。
+ * ⚠️ 登录是长驻进程（协议服务在事件循环），脚本在 session READY 后观察 90s 退出。
  */
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import {
     defaultStubDir,
     ensureQqFiles,
@@ -74,8 +75,11 @@ if (uin !== undefined) {
 }
 
 // 5. 定位 self-host.cjs（loader dist）
+// ⚠️ 不用 import.meta.dirname（Node 20.11+ 才有；WSL 可能是 Node 18），
+//    用 fileURLToPath(import.meta.url) 兼容。
+const scriptDir = dirname(fileURLToPath(import.meta.url));
 const selfHostPath = join(
-    resolve(import.meta.dirname, ".."),
+    resolve(scriptDir, ".."),
     "packages",
     "loader",
     "dist",
@@ -87,7 +91,7 @@ if (!existsSync(selfHostPath)) {
     process.exit(1);
 }
 console.log(`[wine-login] self-host.cjs: ${selfHostPath}`);
-console.log(`[wine-login] wine 跑 self-host（路径 Z:\\ 视角）…`);
+console.log(`[wine-login] wine 跑 self-host（路径 Z:\ 视角）…`);
 
 // 6. spawn wine + win-node + self-host.cjs（登录长驻，观察后退出）
 const wineBin = process.env["NAPUTO_WINE"] ?? "wine";
