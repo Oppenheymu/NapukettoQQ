@@ -119,37 +119,117 @@ export class MsgApi {
     }
 
     /**
-     * canonical 元素 → 发送元素，PIC 做 NapCat 式预处理。
+     * canonical 元素 → 发送元素，富媒体（PIC/PTT）做 NapCat 式预处理。
      * 2026-08-11 修复（实测）：图片发送必须 elementType=2（PIC）+ 完整 picElement
      * （md5HexStr/fileSize/fileName/sourcePath），且文件须经 getRichMediaFilePathForGuild
      * 计算目标路径 + util.copyFile 放置——缺任一环节 sendMsg 返回 rich media transfer failed。
+     * 2026-08-12（语音）：PTT 同理——只给 filePath 触发 wrapper 内部
+     * "Cannot convert undefined or null to object"（缺字段转换失败）。
      */
     private async prepareSendElements(elements: CanonicalElement[]): Promise<SendMessageElement[]> {
         const out: SendMessageElement[] = [];
         for (const el of elements) {
-            if (el.type !== "image") {
-                out.push(...toSendElements([el]));
-                continue;
+            switch (el.type) {
+                case "image":
+                    out.push(await this.prepareImageElement(el.path));
+                    break;
+                case "voice":
+                    out.push(await this.preparePttElement(el.path));
+                    break;
+                default:
+                    out.push(...toSendElements([el]));
+                    break;
             }
-            out.push(await this.prepareImageElement(el.path));
         }
         return out;
     }
 
     /** PIC 元素 NapCat 式预处理：md5 → 目标路径 → copyFile → 完整 picElement。 */
     private async prepareImageElement(path: string): Promise<SendMessageElement> {
+        const file = await statFile(path);
+        const md5 = await hashFile(path);
+        const fileName = basename(path);
+        const relPath = await this.placeMediaFile(path, ElementType.PIC, md5, fileName);
+        return {
+            elementType: ElementType.PIC,
+            elementId: "",
+            picElement: {
+                md5HexStr: md5,
+                fileSize: String(file.size),
+                picWidth: 0,
+                picHeight: 0,
+                fileName,
+                sourcePath: relPath,
+                original: true,
+                picType: 1000,
+                picSubType: 0,
+                fileUuid: "",
+                fileSubId: "",
+                thumbFileSize: 0,
+                summary: "",
+            },
+        };
+    }
+
+    /**
+     * PTT 元素 NapCat 式预处理：md5 → 目标路径 → copyFile → 完整 pttElement。
+     *
+     * 2026-08-12（实测依据）：只给 filePath 时 wrapper 内部抛
+     * "Cannot convert undefined or null to object"（缺 md5HexStr/fileSize 等字段），
+     * 且发送后进程崩溃重启（supervisor 自动拉起）。完整字段（NapCat 同款，
+     * formatType/voiceType/canConvert2Text/waveAmplitudes 等）消除该错误。
+     *
+     * ⚠️ silk 格式：QQ 语音协议为 silk v3。传入非 silk（ogg/mp3 等）时发送器
+     * 可能拒绝上传（待实测）。转换点预留：此处直接放置原文件，后续接入
+     * ogg → PCM → silk 编码器（外部 ffmpeg + silk-wasm，见 docs/design.md）。
+     */
+    private async preparePttElement(path: string): Promise<SendMessageElement> {
+        const file = await statFile(path);
+        const md5 = await hashFile(path);
+        const fileName = basename(path);
+        const relPath = await this.placeMediaFile(path, ElementType.PTT, md5, fileName);
+        // 时长估算（NapCat 同款规则：~3KB/s 语音码率，缺 ffprobe 时兜底）
+        const duration = Math.max(1, Math.floor(file.size / 1024 / 3));
+        return {
+            elementType: ElementType.PTT,
+            elementId: "",
+            pttElement: {
+                fileName,
+                filePath: relPath,
+                md5HexStr: md5,
+                fileSize: String(file.size),
+                duration,
+                formatType: 1,
+                voiceType: 1,
+                voiceChangeType: 0,
+                canConvert2Text: true,
+                waveAmplitudes: [0, 18, 9, 23, 16, 17, 16, 15, 44, 17, 24, 20, 14, 15, 17],
+                fileSubId: "",
+                playState: 1,
+                autoConvertText: 0,
+                storeID: 0,
+                otherBusinessInfo: { aiVoiceType: 0 },
+            },
+        };
+    }
+
+    /**
+     * 富媒体文件放置（PIC/PTT 共用）：md5 + 文件名 → QQ 内部目标路径
+     * （getRichMediaFilePathForGuild）→ util.copyFile 放置 → 返回相对数据根路径。
+     */
+    private async placeMediaFile(
+        path: string,
+        elementType: ElementType,
+        md5: string,
+        fileName: string,
+    ): Promise<string> {
         const service = this.service;
         const util = this.util;
-        // 本地文件信息（node:fs + node:crypto，纯 Node）
-        const stat = await statFile(path);
-        const md5 = await hashFile(path);
-        const fileSize = stat.size;
-        const fileName = basename(path);
         // getRichMediaFilePathForGuild：QQ 内部目标路径（纯文件名，相对数据根）
         const relPath = service.getRichMediaFilePathForGuild({
             md5HexStr: md5,
             fileName,
-            elementType: ElementType.PIC,
+            elementType,
             elementSubType: 0,
             thumbSize: 0,
             needCreate: true,
@@ -167,25 +247,7 @@ export class MsgApi {
                 );
             }
         }
-        return {
-            elementType: ElementType.PIC,
-            elementId: "",
-            picElement: {
-                md5HexStr: md5,
-                fileSize: String(fileSize),
-                picWidth: 0,
-                picHeight: 0,
-                fileName,
-                sourcePath: relPath,
-                original: true,
-                picType: 1000,
-                picSubType: 0,
-                fileUuid: "",
-                fileSubId: "",
-                thumbFileSize: 0,
-                summary: "",
-            },
-        };
+        return relPath;
     }
 
     /** 注册 onMsgInfoListUpdate 确认监听（返回 Promise，resolve 时发送成功）。 */

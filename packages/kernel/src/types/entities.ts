@@ -59,6 +59,20 @@ export interface PttElement {
     duration?: number;
     /** 语音转文字结果（translatePtt2Text 异步写回）。 */
     text?: string;
+    // 发送用完整字段（NapCat 式，2026-08-12 实证：只给 filePath 会触发 wrapper
+    // 内部 "Cannot convert undefined or null to object"（缺字段转换失败））
+    md5HexStr?: string;
+    fileSize?: string;
+    formatType?: number;
+    voiceType?: number;
+    voiceChangeType?: number;
+    canConvert2Text?: boolean;
+    waveAmplitudes?: number[];
+    fileSubId?: string;
+    playState?: number;
+    autoConvertText?: number;
+    storeID?: number;
+    otherBusinessInfo?: { aiVoiceType: number };
 }
 
 /** 表情元素。 */
