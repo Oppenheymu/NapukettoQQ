@@ -91,7 +91,7 @@ if (!existsSync(selfHostPath)) {
     process.exit(1);
 }
 console.log(`[wine-login] self-host.cjs: ${selfHostPath}`);
-console.log(`[wine-login] wine 跑 self-host（路径 Z:\ 视角）…`);
+console.log(`[wine-login] wine 跑 self-host（路径 Z: 视角）…`);
 
 // 6. spawn wine + win-node + self-host.cjs（登录长驻，观察后退出）
 const wineBin = process.env["NAPUTO_WINE"] ?? "wine";
