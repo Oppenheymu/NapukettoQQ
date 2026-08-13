@@ -1,5 +1,40 @@
 # @napuketto/loader
 
+## 0.0.9
+
+### Patch Changes
+
+- affab05: feat(loader): QQ 官方安装包自动下载解包缓存（P1，本机无 QQ 场景可用）
+
+  - `qq-releases.json` 版本清单（含 9.9.33-51802 实测 sha256）
+  - `qq-download.ts`：https 下载 + sha256 校验（零第三方依赖，NAPUTO_QQ_URL 可覆盖）
+  - `qq-extract.ts`：完整版 7z 解 NSIS 安装包 + 提取 resources/app 顶层 `*.node`/`*.dll`（内置 assets/7zip，LGPL 合规；真实 QQNT.dll 由 stub 替代无需提取）
+  - `ensureQqFiles()`：下载 → 校验 → 解包 → 提取 → 缓存，幂等（缓存命中直接返回）
+  - `resolveQqFiles()` 改 async，L0/L1/L2 全部缺失时自动进入下载流程
+
+- fa2fb7c: feat(loader): QQ 原生文件多级来源定位（P0 跨平台前置）
+
+  新增 `resolveQqFiles()`：L0 `NAPUTO_QQ_FILES` 显式文件根 → L1 本机 QQ 安装（既有逻辑保留）→ L2 数据根缓存 `<数据根>/qq-files/<版本>/` 依次探测，为「本机无 QQ / Linux / Docker」场景铺路；`QqInstallInfo` 新增 `source: "local" | "cached"` 字段。`resolveQqInstall` 旧签名保留兼容。
+
+- 3507cdd: feat(loader): Linux/wine 完整链路登录冒烟脚本（P2 Step 2）
+
+  - `scripts/wine-login-smoke.mjs`：WSL2 一键完整链路冒烟——确保 QQ 文件 → 确保 Windows 版 node.exe → wine 跑 win-node 执行 self-host.cjs（dlopen wrapper.node → O3MiscService 激活 → 登录 → session READY → 协议装配），`--uin` 指定快速登录账号，90s 观察窗口
+  - 环境变量装配与 launcher.buildLaunchEnv 同构，路径全部过 toWinePath（Z:\ 视角）
+
+- 52c1519: feat(loader): Linux/wine 平台分支（P2 纯逻辑层）——toWinePath 路径映射 + win-node 下载
+
+  - `wine.ts`：`toWinePath()` Linux 路径 → wine `Z:\` 路径（幂等，含盘符保护）+ `buildSpawnCommand()` 平台分支（win32 本机 node / linux wine）
+  - `win-node.ts`：`ensureWinNode()` 下载 Windows 版 node.exe（nodejs.org 官方 zip → 7z 解压 → 缓存，幂等；NAPUTO_WIN_NODE_PATH/NAPUTO_WIN_NODE_VERSION 可覆盖）
+  - `launcher.ts`：`launchSelfHost` 变 async，linux 场景自动走 wine + win-node，传给子进程的所有路径过 toWinePath；win32 行为不变
+  - cli `boot.ts` 适配 async 调用
+  - 新增 `wine.test.ts`（9 单测：toWinePath 5 + buildSpawnCommand 3 + wineBinary 1）
+
+- de622f5: feat(loader): Linux/wine 冒烟脚本 + 实测验证记录（P2 Step 1 固化）
+
+  - `scripts/wine-smoke.mjs`：WSL2 一键冒烟——确保 QQ 文件（P1 自动下载解包）→ 确保 Windows 版 node.exe（P2）→ wine 跑 win-node → dlopen wrapper.node → 断言 98 exports
+  - 实测验证通过（2026-08-12 WSL2）：wine 跑 Windows node.exe ✅ / stub QQNT.dll PE 转发在 wine 下生效 ✅ / dlopen wrapper.node 98 exports ✅
+  - 设计文档 §3.3 记录实测坑：**wine 读 DrvFS（/mnt/c）会 "File not found"，QQ 文件必须放 ext4**（Docker 无此问题）；dlopen 参数形态 `const m={exports:{}}; process.dlopen(m, ...)`
+
 ## 0.0.8
 
 ### Patch Changes
