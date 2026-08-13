@@ -106,10 +106,21 @@ export class QrLoginSession {
         this.listenerId = this.loginService.addKernelLoginListener(this.buildListener());
         this.loginService.connect();
         if (opts.quickUin !== undefined && opts.quickUin !== "") {
-            this.loginService.quickLoginWithUin(opts.quickUin).catch(() => {
-                // 快速登录失败 → 回退二维码
-                this.refresh();
-            });
+            this.loginService
+                .quickLoginWithUin(opts.quickUin)
+                .then((result) => {
+                    // ⚠️ wrapper 契约（attemptQuickLogin 已实证）：快速登录失败是
+                    // resolve 带 loginErrorInfo.errMsg，**不是 reject**——只挂 .catch
+                    // 会永不触发 → 无凭据环境（WSL 扫码）永不 refresh → 二维码永不
+                    // 产生，完全静默阻塞（2026-08-13 WSL 扫码卡死根因）。
+                    if (result.loginErrorInfo.errMsg !== "") {
+                        this.refresh();
+                    }
+                })
+                .catch(() => {
+                    // reject（异常路径）同样回退二维码
+                    this.refresh();
+                });
         } else {
             this.refresh();
         }

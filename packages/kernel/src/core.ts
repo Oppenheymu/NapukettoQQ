@@ -216,11 +216,10 @@ export class NapukettoCore {
         this.subscribeQrProgress(session, opts, qrPath);
 
         // 启动 QR 登录（注册监听 → connect → getQRCodePicture）
-        const startOpts: { quickUin?: string } = {};
-        if (opts.quickUin !== undefined) {
-            startOpts.quickUin = opts.quickUin;
-        }
-        session.start(startOpts);
+        // ⚠️ 不传 quickUin（2026-08-13）：QR 回退路径下快速登录已在 core.login
+        // 失败过一次，这里再传会导致 QrLoginSession 二次快速登录——无凭据环境
+        // 直接 resolve 带 errMsg，白等一个周期才出二维码。QR 登录应直接出码。
+        session.start();
 
         await waitQrLoggedIn(session);
         const self = session.selfInfo;

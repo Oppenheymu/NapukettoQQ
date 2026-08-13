@@ -110,6 +110,16 @@
             }
         },
         {
+            "includes": ["packages/kernel/src/login/login.test.ts"],
+            "linter": {
+                "rules": {
+                    "style": {
+                        "useNamingConvention": "off"
+                    }
+                }
+            }
+        },
+        {
             "includes": ["**/*.test.ts", "**/*.test.tsx", "**/*.spec.ts", "**/__tests__/**"],
             "linter": {
                 "rules": {
