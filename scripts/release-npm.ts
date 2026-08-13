@@ -42,11 +42,11 @@ export function parseArgs(argv: readonly string[]): ReleaseArgs {
 /** 在包目录执行 npm publish，返回退出码。 */
 export function publishPkg(pkg: { name: string; dir: string }, dryRun: boolean): number {
     const args = ["publish", "--access", "public", ...(dryRun ? ["--dry-run"] : [])];
-    const res = spawnSync("npm", args, {
+    // Windows 下 npm 是 npm.cmd shim（可直接执行，无需 shell 展开——shell 传参有注入风险）
+    const npmBin = process.platform === "win32" ? "npm.cmd" : "npm";
+    const res = spawnSync(npmBin, args, {
         cwd: pkg.dir,
         stdio: "inherit",
-        // Windows 下 npm 是 npm.cmd，shell 展开保证可执行
-        shell: process.platform === "win32",
     });
     return res.status ?? 1;
 }
