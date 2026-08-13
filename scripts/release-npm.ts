@@ -42,12 +42,21 @@ export function parseArgs(argv: readonly string[]): ReleaseArgs {
 /** 在包目录执行 npm publish，返回退出码。 */
 export function publishPkg(pkg: { name: string; dir: string }, dryRun: boolean): number {
     const args = ["publish", "--access", "public", ...(dryRun ? ["--dry-run"] : [])];
-    // Windows 下 npm 是 npm.cmd shim（可直接执行，无需 shell 展开——shell 传参有注入风险）
-    const npmBin = process.platform === "win32" ? "npm.cmd" : "npm";
-    const res = spawnSync(npmBin, args, {
+    // Windows 上 npm 是 npm.cmd 批处理，CreateProcess 无法直接执行 .cmd（spawn
+    // 报 ENOENT）——必须经 cmd.exe（ComSpec）显式执行。参数数组原样传递，不经
+    // shell 展开，无注入面（规避 Node 对 shell:true 传参的 DEP0190 警告）。
+    const isWin = process.platform === "win32";
+    const cmd = isWin ? (process.env["ComSpec"] ?? "cmd.exe") : "npm";
+    const cmdArgs = isWin ? ["/d", "/s", "/c", "npm", ...args] : args;
+    const res = spawnSync(cmd, cmdArgs, {
         cwd: pkg.dir,
         stdio: "inherit",
     });
+    if (res.error !== undefined) {
+        // 进程启动失败（npm 不在 PATH 等）——不能只看 status，否则静默吞错
+        process.stderr.write(`[release-npm] ⚠️ 无法启动 npm: ${res.error.message}\n`);
+        return 1;
+    }
     return res.status ?? 1;
 }
 
