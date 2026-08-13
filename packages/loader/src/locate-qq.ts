@@ -21,6 +21,9 @@ export const QQ_FILES_DIR_NAME = "qq-files";
 /** 注册表 UninstallString 查询（QQ 官方安装路径）。 */
 const REG_QUERY_RE = /"([^"]+)"/;
 
+/** Windows 盘符路径正则（`C:/...` / `C:\...`，wslMappedPath 映射用，模块级常量）。 */
+const DRIVE_PATH_RE = /^([A-Za-z]):[\\/](.*)$/;
+
 /** 注册表 UninstallString 查询（QQ 官方安装路径）。 */
 function findQqViaRegistry(): string | null {
     try {
@@ -57,11 +60,39 @@ function findQqViaCommonPaths(): string | null {
         "C:/Dev/QQBot-Dev/QQNT/QQ.exe",
     ];
     for (const p of candidates) {
+        // WSL 场景：Windows 盘挂载在 /mnt/<盘符>/（如 C:\ → /mnt/c/），
+        // 同一候选同时探测 Linux 侧映射路径（2026-08-13 koishi-app 实测报「未找到 QQ.exe」）。
+        const wsl = wslMappedPath(p);
+        if (existsSync(wsl)) {
+            return wsl;
+        }
         if (existsSync(p)) {
             return p;
         }
     }
     return null;
+}
+
+/**
+ * Windows 路径 → WSL 挂载路径（`C:/...` → `/mnt/c/...`；非 Linux 或非盘符路径原样）。
+ * WSL 默认把 Windows 盘符挂载到 `/mnt/<小写盘符>/`，Linux 侧 `existsSync` 必须用映射路径。
+ * platform 参数可注入（测试用；缺省 process.platform）。
+ * 导出便于单测（locate-qq.test.ts）。
+ * ⚠️ 不用 join 拼 `/mnt/...`：测试在 Windows 跑，win32 join 会产生反斜杠；目标路径
+ * 是 Linux 侧路径（WSL 挂载点），必须恒正斜杠。
+ */
+export function wslMappedPath(
+    winPath: string,
+    platform: NodeJS.Platform = process.platform,
+): string {
+    if (platform !== "linux") {
+        return winPath;
+    }
+    const [, drive, rest] = DRIVE_PATH_RE.exec(winPath) ?? [];
+    if (drive === undefined || rest === undefined) {
+        return winPath;
+    }
+    return `/mnt/${drive.toLowerCase()}/${rest.replaceAll("\\", "/")}`;
 }
 
 /** QQ 文件来源。 */
@@ -139,7 +170,8 @@ function resolveFromRoot(rootDir: string, source: QqFileSource): QqInstallInfo {
 export function resolveQqInstall(qqPath?: string): QqInstallInfo {
     const qq = qqPath ?? process.env["NAPUTO_QQ_PATH"] ?? locateQqPath();
     // Windows 安装结构：<installDir>/versions/<版本>/resources/app/wrapper.node
-    const installDir = qq.slice(0, qq.lastIndexOf("\\"));
+    // ⚠️ dirname 跨平台：Linux/WSL 路径用正斜杠（lastIndexOf("\\") 会切错，2026-08-13 实测）
+    const installDir = dirname(qq);
     return resolveFromRoot(installDir, "local");
 }
 
