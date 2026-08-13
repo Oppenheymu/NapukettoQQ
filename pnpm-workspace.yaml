@@ -24,6 +24,7 @@ minimumReleaseAgeExclude:
   - '@napuketto/loader@0.0.9'
   - '@napuketto/kernel@0.0.8'
   - '@napuketto/loader@0.0.10'
+  - '@napuketto/loader@0.0.11'
 settings:
   # pnpm 11 的 verify-deps-before-run 预检：每次命令前自动 reinstall，在 git
   # submodule monorepo（koishi-plugin-adapter 子仓库）场景触发失败。关闭预检，
