@@ -14,7 +14,8 @@
  *   3. pnpm -r build —— 各包 dist 已构建
  *
  * 行为：
- *   - 拓扑序发布（被依赖者在前），每个包在其目录内执行 npm publish
+ *   - 发布前查询 registry：本地版本已存在（changeset 未 bump 的包）→ 跳过
+ *   - 仅对需要发布的包做拓扑排序（被依赖者在前）并逐个 npm publish
  *   - 任一包失败 → 立即中断，退出码非 0（避免后续包依赖残缺上游）
  *   - npm 7+ git-checks：发布前工作区必须已提交（dirty 会被拒绝）
  *
@@ -23,10 +24,11 @@
 import { spawnSync } from "node:child_process";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { discoverPackages, topoSort } from "./release-npm-core.ts";
+import { discoverPackages, planPublish, topoSort } from "./release-npm-core.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(__dirname, "..");
+const REGISTRY = process.env["NAPKETTO_REGISTRY"] ?? "https://registry.npmjs.org";
 
 /** 命令行参数解析结果。 */
 export interface ReleaseArgs {
@@ -37,6 +39,23 @@ export interface ReleaseArgs {
 /** 解析命令行参数（--dry-run）。 */
 export function parseArgs(argv: readonly string[]): ReleaseArgs {
     return { dryRun: argv.includes("--dry-run") };
+}
+
+/**
+ * 查询单个 npm 包在 registry 的所有已发布版本。
+ * 404（包从未发布）→ 空集；其他非 200 → 抛错（发布链中断）。
+ */
+export async function fetchPublishedVersions(pkgName: string): Promise<Set<string>> {
+    const url = `${REGISTRY}/${pkgName.replace("/", "%2F")}`;
+    const res = await fetch(url, { headers: { accept: "application/json" } });
+    if (res.status === 404) {
+        return new Set();
+    }
+    if (!res.ok) {
+        throw new Error(`registry 查询失败 ${pkgName}: HTTP ${res.status}`);
+    }
+    const json = (await res.json()) as { versions?: Record<string, unknown> };
+    return new Set(Object.keys(json["versions"] ?? {}));
 }
 
 /** 在包目录执行 npm publish，返回退出码。 */
@@ -60,7 +79,7 @@ export function publishPkg(pkg: { name: string; dir: string }, dryRun: boolean):
     return res.status ?? 1;
 }
 
-/** 主流程：发现 → 拓扑排序 → 逐个发布。 */
+/** 主流程：发现 → 查 registry 版本 → 过滤已发布 → 拓扑排序 → 逐个发布。 */
 export async function main(argv: readonly string[]): Promise<number> {
     const { dryRun } = parseArgs(argv);
     const pkgs = await discoverPackages(REPO_ROOT);
@@ -68,7 +87,28 @@ export async function main(argv: readonly string[]): Promise<number> {
         console.log("[release-npm] 未发现任何可发布包");
         return 0;
     }
-    const ordered = topoSort(pkgs);
+
+    // 发布前查询 registry，只发布版本有变化的包（changeset 未 bump 的跳过）
+    const published = new Map<string, Set<string>>();
+    await Promise.all(
+        pkgs.map(async (pkg) => {
+            published.set(pkg.name, await fetchPublishedVersions(pkg.name));
+        }),
+    );
+    const { toPublish, skipped } = planPublish(pkgs, published);
+
+    if (skipped.length > 0) {
+        console.log(`[release-npm] 跳过（版本已在 registry，${skipped.length} 个）:`);
+        for (const item of skipped) {
+            console.log(`  ⏭  ${item.pkg.name}@${item.pkg.version}（${item.reason}）`);
+        }
+    }
+    if (toPublish.length === 0) {
+        console.log("[release-npm] 无需发布，全部版本已在 registry");
+        return 0;
+    }
+
+    const ordered = topoSort(toPublish);
     console.log(
         `[release-npm] 发布顺序（${ordered.length} 个包，${dryRun ? "dry-run" : "publish"}）:`,
     );

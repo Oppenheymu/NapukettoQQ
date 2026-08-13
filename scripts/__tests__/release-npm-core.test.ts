@@ -5,7 +5,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { discoverPackages, topoSort, type WorkspacePkg } from "../release-npm-core.ts";
+import { discoverPackages, planPublish, topoSort, type WorkspacePkg } from "../release-npm-core.ts";
 
 let tmpRoot: string;
 
@@ -141,5 +141,41 @@ describe("topoSort", () => {
             dependencies: { a: "workspace:*" },
         };
         expect(() => topoSort([a, b])).toThrow(/环/);
+    });
+});
+
+describe("planPublish", () => {
+    const mk = (name: string, version: string): WorkspacePkg => ({
+        name,
+        dir: name,
+        version,
+        dependencies: {},
+    });
+
+    it("版本已存在于 registry → 跳过；新版本 → 发布", () => {
+        const pkgs = [mk("@napuketto/media", "0.0.1"), mk("@napuketto/adapter", "0.0.8")];
+        const published = new Map([
+            ["@napuketto/media", new Set(["0.0.1"])],
+            ["@napuketto/adapter", new Set(["0.0.7"])],
+        ]);
+        const { toPublish, skipped } = planPublish(pkgs, published);
+        expect(toPublish.map((p) => p.name)).toEqual(["@napuketto/adapter"]);
+        expect(skipped.map((s) => s.pkg.name)).toEqual(["@napuketto/media"]);
+        expect(skipped[0]?.reason).toContain("已在 registry");
+    });
+
+    it("registry 为空集（包从未发布）→ 全部发布", () => {
+        const pkgs = [mk("@napuketto/brand-new", "0.0.1")];
+        const { toPublish, skipped } = planPublish(
+            pkgs,
+            new Map([["@napuketto/brand-new", new Set()]]),
+        );
+        expect(toPublish.map((p) => p.name)).toEqual(["@napuketto/brand-new"]);
+        expect(skipped).toEqual([]);
+    });
+
+    it("缺少 registry 版本信息 → 抛错（发布前必须查询）", () => {
+        const pkgs = [mk("a", "0.0.1")];
+        expect(() => planPublish(pkgs, new Map())).toThrow(/registry 版本信息/);
     });
 });

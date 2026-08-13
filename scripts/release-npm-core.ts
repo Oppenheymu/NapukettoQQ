@@ -6,6 +6,10 @@
  * 逐个发包时解析到的是刚发布的新版本（npm 不像 pnpm -r 那样自动
  * 按拓扑序递归）。
  *
+ * 只发布版本有变化的包：本地版本已存在于 registry → 跳过（changeset
+ * 未 bump 的包版本不变，不应重复发布，否则 npm 报
+ * "cannot publish over the previously published versions"）。
+ *
  * 背景：pnpm -r publish 在部分环境存在上游 bug（用户侧无法修复），
  * 发布链的发布环节改用 `npm publish` 逐个执行。npm 不认识
  * pnpm-workspace.yaml 的 workspace:* 协议，因此必须先跑
@@ -85,6 +89,49 @@ export async function discoverPackages(root: string): Promise<WorkspacePkg[]> {
     ).flat();
     const pkgs = await Promise.all(dirs.map((dir) => loadPackage(dir)));
     return pkgs.filter((pkg): pkg is WorkspacePkg => pkg !== null);
+}
+
+/** 单个包跳过的原因（planPublish 产出）。 */
+export interface SkippedPkg {
+    /** 被跳过的包。 */
+    pkg: WorkspacePkg;
+    /** 跳过原因（如 "版本 0.0.1 已在 registry"）。 */
+    reason: string;
+}
+
+/** planPublish 的发布计划。 */
+export interface PublishPlan {
+    /** 需要发布的包（保持入参顺序）。 */
+    toPublish: WorkspacePkg[];
+    /** 已存在于 registry、无需发布的包。 */
+    skipped: SkippedPkg[];
+}
+
+/**
+ * 计算需要发布的包：本地版本不在 registry 已发布版本集合中 → 发布；
+ * 否则跳过。registry 首次发布（404 → 空集）→ 全部发布。
+ *
+ * @param pkgs 工作区全部可发布包
+ * @param published 包名 → 该包在 registry 的所有已发布版本集合
+ */
+export function planPublish(
+    pkgs: readonly WorkspacePkg[],
+    published: ReadonlyMap<string, ReadonlySet<string>>,
+): PublishPlan {
+    const toPublish: WorkspacePkg[] = [];
+    const skipped: SkippedPkg[] = [];
+    for (const pkg of pkgs) {
+        const versions = published.get(pkg.name);
+        if (versions === undefined) {
+            throw new Error(`缺少 ${pkg.name} 的 registry 版本信息（发布前必须查询）`);
+        }
+        if (versions.has(pkg.version)) {
+            skipped.push({ pkg, reason: `版本 ${pkg.version} 已在 registry` });
+        } else {
+            toPublish.push(pkg);
+        }
+    }
+    return { toPublish, skipped };
 }
 
 /**
