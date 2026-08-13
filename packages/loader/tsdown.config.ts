@@ -1,7 +1,11 @@
 /**
- * tsdown.config.ts：@napuketto/loader 双构建（2026-08-07 阶段 2）。
+ * tsdown.config.ts：@napuketto/loader 双构建（2026-08-07 阶段 2；2026-08-13 对外 API 双格式）。
  *
- * 配置 1 —— 对外 API（index）：ESM + d.mts，与阶段 1 前行为一致（构建时清 dist）。
+ * 配置 1 —— 对外 API（index）：**ESM + CJS 双格式** + d.mts/d.cts（2026-08-13）。
+ *   背景：koishi 适配器发布形态是 CJS，koishi loader 用 require() 加载 →
+ *   适配器 require loader。仅 ESM 会 ERR_REQUIRE_ESM，故与 kernel 同步输出
+ *   dist/index.cjs（exports.require 指向），ESM 消费方（apps/cli）仍走
+ *   dist/index.mjs。构建时清 dist。
  * 配置 2 —— 自建宿主引导运行时（host/self-host）：CJS 单文件 bundle，
  *   rolldown 将 src/host/ 依赖树（bootstrap/login/session/protocols/smoke/util/
  *   types/env）全部内联进 dist/host/self-host.cjs，node 内置模块保持 external。
@@ -12,9 +16,9 @@ import { defineConfig } from "tsdown";
 
 export default defineConfig([
     {
-        // 对外 API（apps/cli 消费）：ESM，保持现状
+        // 对外 API（apps/cli、koishi 适配器消费）：ESM + CJS 双格式
         entry: { index: "src/index.ts" },
-        format: ["esm"],
+        format: ["esm", "cjs"],
         platform: "node",
         clean: true,
     },
