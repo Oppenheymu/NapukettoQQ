@@ -7,7 +7,15 @@
 import { join } from "node:path";
 import process from "node:process";
 import { env } from "../env.js";
-import { sendLogin, sendQr, sendStatus, startIpcMode } from "../ipc/index.js";
+import {
+    attachIpcServices,
+    createIpcActionsForCore,
+    type IpcActionHandler,
+    sendLogin,
+    sendQr,
+    sendStatus,
+    startIpcServer,
+} from "../ipc/index.js";
 import type { CoreContextLike, CoreLike, KernelLike, LoginResultLike } from "../types.js";
 import { errMsg, log, type SharedState } from "../util.js";
 import { doLogin, type LoginTargetRef, pickLoginAccount } from "./login.js";
@@ -84,6 +92,7 @@ function buildLoginOpts(
         state: string;
         qr?: { pngBase64: string; qrcodeUrl: string };
         selfInfo?: { uin: string; uid: string; nick: string };
+        message?: string;
     }) => {
         if (progress.qr !== undefined) {
             if (ipcMode) {
@@ -98,7 +107,7 @@ function buildLoginOpts(
             }
         }
         if (ipcMode && isLoginState(progress.state)) {
-            sendLogin(progress.state, progress.selfInfo);
+            sendLogin(progress.state, progress.selfInfo, progress.message);
         }
     };
     return opts;
@@ -256,6 +265,17 @@ export async function bootstrapWithCore(
         paths: { dataRoot: bootEnv.dataDir },
         logLevel: "info",
     });
+
+    // ⭐ IPC 模式：登录前就启动 stdin 服务端（只含 login.refreshQr 动作）。
+    // 否则登录中（waiting_scan）前端刷新/control 指令堆积在 pipe 缓冲区，
+    // 子进程不读 stdin → 指令不可达；同时心跳 ping（15s）提前启动，
+    // 防扫码耗时超过 45s 被 driver 误判失联强杀（2026-08-13 结构性修复）。
+    let ipcActions: Map<string, IpcActionHandler> | null = null;
+    if (env.NAPUTO_IPC === "1") {
+        ipcActions = createIpcActionsForCore(core);
+        startIpcServer({ actions: ipcActions });
+    }
+
     // 不传 qqSession/qqLoginService（登录前捕获的旧实例已失效/会干扰；
     // framework 语义：登录成功后 kernel 自己 create+init）
     const ctx = core.attachWrapper(state.wrapperExports, { ...bootEnv });
@@ -316,8 +336,9 @@ export async function bootstrapWithCore(
 
     // 协议装配：IPC 模式返回 kernel 服务（bootstrap 装配 ipc-server），非 IPC 装配 OB11/Satori
     const services = await startProtocols(kernel, ctx, loginResult);
-    if (env.NAPUTO_IPC === "1" && services !== null) {
-        startIpcMode(services);
+    // 登录后把 kernel 服务动作并入登录期动作表（同一张 Map，服务端实时可见）
+    if (env.NAPUTO_IPC === "1" && services !== null && ipcActions !== null) {
+        attachIpcServices(ipcActions, services);
     }
     // 探测模式
     runProbePhase(kernel, ctx);

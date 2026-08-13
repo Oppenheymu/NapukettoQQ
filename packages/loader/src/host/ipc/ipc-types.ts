@@ -30,6 +30,8 @@ export interface IpcStatusPayload {
 export interface IpcLoginPayload {
     state: "idle" | "waiting_scan" | "scanned" | "logged_in" | "failed";
     selfInfo?: { uin: string; uid: string; nick: string };
+    /** 失败原因（state=failed 时；如「登录超时，请刷新页面重试」）。 */
+    message?: string;
 }
 
 /** event 消息 payload（kernel 事件通道形状，翻译层按 service/name 断言具体类型）。 */

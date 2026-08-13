@@ -2,7 +2,13 @@
  * ipc-actions.test.ts：IPC 动作表单测（mock kernel apis，不依赖真实 wrapper）。
  */
 import { describe, expect, it, vi } from "vitest";
-import { callIpcAction, createIpcActions, type IpcApiContext } from "./ipc-actions.js";
+import {
+    callIpcAction,
+    createIpcActions,
+    type IpcActionHandler,
+    type IpcApiContext,
+    registerLoginRefreshAction,
+} from "./ipc-actions.js";
 
 /** mock kernel apis 上下文。 */
 function mockCtx(): IpcApiContext {
@@ -162,5 +168,23 @@ describe("createIpcActions", () => {
             value: [{ groupCode: "10001", groupName: "测试群" }],
         });
         expect(ctx.groupCache.listGroupsRefreshed).toHaveBeenCalled();
+    });
+});
+
+describe("registerLoginRefreshAction", () => {
+    it("login.refreshQr 返回 refreshQr() 布尔结果", async () => {
+        const actions = new Map<string, IpcActionHandler>();
+        const refreshQr = vi.fn(() => true);
+        registerLoginRefreshAction(actions, refreshQr);
+        const result = await callIpcAction(actions, "login.refreshQr", undefined);
+        expect(result).toEqual({ ok: true, value: true });
+        expect(refreshQr).toHaveBeenCalledTimes(1);
+    });
+
+    it("refreshQr 返回 false 时透传 false（不在扫码态）", async () => {
+        const actions = new Map<string, IpcActionHandler>();
+        registerLoginRefreshAction(actions, () => false);
+        const result = await callIpcAction(actions, "login.refreshQr", undefined);
+        expect(result).toEqual({ ok: true, value: false });
     });
 });

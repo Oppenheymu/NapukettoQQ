@@ -92,6 +92,8 @@ export interface CoreLike {
     attachWrapper(wrapperExports: unknown, env: Record<string, unknown>): CoreContextLike;
     login(options: Record<string, unknown>): Promise<LoginResultLike | null>;
     setSession(session: unknown): void;
+    /** 手动刷新二维码（QR 登录期间可用；返回是否触发，false = 不在扫码态）。 */
+    refreshQr?: () => boolean;
 }
 
 /** kernel probeRuntime 结果。 */

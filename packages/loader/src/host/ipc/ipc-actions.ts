@@ -51,6 +51,18 @@ export interface IpcApiContext {
 export type IpcActionHandler = (params: Record<string, unknown>) => Promise<unknown>;
 
 /**
+ * 注册 login.refreshQr 动作（登录期即可用——不依赖 session 服务，只依赖
+ * core.refreshQr）。bootstrap 提前启动 IPC 服务端时先注册本动作，登录完成后
+ * 再把 kernel 服务的完整动作并入同一张表。
+ */
+export function registerLoginRefreshAction(
+    actions: Map<string, IpcActionHandler>,
+    refreshQr: () => boolean,
+): void {
+    actions.set("login.refreshQr", async () => refreshQr());
+}
+
+/**
  * 从宽松 params 构造 Peer（缺省 chatType=1 群聊）。
  * 优先 peerUid（uid 直通）；缺省时 peerUin 经 uinToUid 转换。
  *

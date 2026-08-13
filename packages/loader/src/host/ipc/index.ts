@@ -7,8 +7,9 @@ export {
     type IpcActionHandler,
     type IpcApiContext,
     type IpcPeer,
+    registerLoginRefreshAction,
 } from "./ipc-actions.js";
-export { startIpcMode } from "./ipc-bootstrap.js";
+export { attachIpcServices, createIpcActionsForCore } from "./ipc-bootstrap.js";
 export { decodeIpcMessage, encodeIpcMessage } from "./ipc-codec.js";
 export {
     enableIpc,

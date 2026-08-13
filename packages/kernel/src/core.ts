@@ -61,6 +61,8 @@ export interface LoginProgress {
     qr?: QrCodeData;
     /** 登录成功 selfInfo（state=logged_in 时有）。 */
     selfInfo?: SelfInfo;
+    /** 失败原因（state=failed 时有；如「登录超时，请刷新页面重试」）。 */
+    message?: string;
 }
 
 /** login 参数。 */
@@ -86,6 +88,9 @@ export interface CoreLoginOptions {
 export class NapukettoCore {
     /** 装配根（协议层 / apis / cache 的消费入口）。 */
     readonly ctx: CoreContext;
+
+    /** QR 登录会话句柄（登录期间非空；登录终态后清空）。refreshQr() 据此可达。 */
+    private qrSession: QrLoginSession | null = null;
 
     /** 由 create() 装配，不直接 new。 */
     private constructor(ctx: CoreContext) {
@@ -205,6 +210,18 @@ export class NapukettoCore {
         this.ctx.wrapper.session = session;
     }
 
+    /**
+     * 手动刷新二维码（QR 登录期间可用）。返回是否成功触发（false = 当前不在扫码态）。
+     * koishi 前端「刷新二维码」按钮经 loader IPC `login.refreshQr` 动作直达。
+     */
+    refreshQr(): boolean {
+        if (this.qrSession === null) {
+            return false;
+        }
+        this.qrSession.refresh();
+        return true;
+    }
+
     /** QR 登录：QrLoginSession 状态机 + 二维码写缓存目录（无 UI，cli 可打印路径）。 */
     private async loginByQr(opts: CoreLoginOptions): Promise<LoginResult> {
         const { wrapper } = this.ctx;
@@ -212,22 +229,28 @@ export class NapukettoCore {
             throw kernelError("wrapper/loginService 不可用，无法 QR 登录", "INVALID_STATE");
         }
         const session = new QrLoginSession(wrapper.loginService);
+        // 暴露句柄：登录期间外部可经 refreshQr() 手动刷新二维码（koishi 前端刷新按钮）。
+        this.qrSession = session;
         const qrPath = opts.qrCodePath ?? this.ctx.paths.file("cache", "qrcode.png");
         this.subscribeQrProgress(session, opts, qrPath);
 
-        // 启动 QR 登录（注册监听 → connect → getQRCodePicture）
-        // ⚠️ 不传 quickUin（2026-08-13）：QR 回退路径下快速登录已在 core.login
-        // 失败过一次，这里再传会导致 QrLoginSession 二次快速登录——无凭据环境
-        // 直接 resolve 带 errMsg，白等一个周期才出二维码。QR 登录应直接出码。
-        session.start();
+        try {
+            // 启动 QR 登录（注册监听 → connect → getQRCodePicture）
+            // ⚠️ 不传 quickUin（2026-08-13）：QR 回退路径下快速登录已在 core.login
+            // 失败过一次，这里再传会导致 QrLoginSession 二次快速登录——无凭据环境
+            // 直接 resolve 带 errMsg，白等一个周期才出二维码。QR 登录应直接出码。
+            session.start();
 
-        await waitQrLoggedIn(session);
-        const self = session.selfInfo;
-        if (self === null) {
-            throw kernelError("QR 登录成功但 selfInfo 为空", "INVALID_STATE");
+            await waitQrLoggedIn(session);
+            const self = session.selfInfo;
+            if (self === null) {
+                throw kernelError("QR 登录成功但 selfInfo 为空", "INVALID_STATE");
+            }
+            return { uin: self.uin, uid: self.uid, nick: self.nick };
+        } finally {
+            session.stop();
+            this.qrSession = null;
         }
-        session.stop();
-        return { uin: self.uin, uid: self.uid, nick: self.nick };
     }
 
     /** 订阅 QR 进度：二维码写盘 + 状态机经 onLoginProgress 转发。 */
@@ -245,7 +268,8 @@ export class NapukettoCore {
         });
         session.onStateChange((state) => {
             this.ctx.logger.info({ state }, "QR 登录状态");
-            opts.onLoginProgress?.({ state });
+            const message = state === "failed" ? (session.failureReason ?? undefined) : undefined;
+            opts.onLoginProgress?.({ state, ...(message !== undefined ? { message } : {}) });
         });
     }
 

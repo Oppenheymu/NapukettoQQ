@@ -51,6 +51,12 @@ interface LoginServiceLike {
 const QR_EXPIRED_ERR_TYPE = 1;
 const QR_EXPIRED_ERR_CODE = 3;
 
+/** 登录超时上限（毫秒，参考项目 60 次 × 2s = 120s，2026-08-13 用户拍板照搬）。 */
+export const QR_LOGIN_TIMEOUT_MS = 120_000;
+
+/** 登录超时提示（参考项目文案，前端 failed 态展示）。 */
+export const QR_LOGIN_TIMEOUT_MESSAGE = "登录超时，请刷新页面重试";
+
 /** 二维码过期判定。 */
 function isQrCodeExpired(errType: number, errCode: number): boolean {
     return errType === QR_EXPIRED_ERR_TYPE && errCode === QR_EXPIRED_ERR_CODE;
@@ -67,13 +73,20 @@ export class QrLoginSession {
     private self: SelfInfo | null = null;
     private readonly qrCodeHandlers = new Set<(qr: QrCodeData) => void>();
     private readonly stateHandlers = new Set<(state: LoginState) => void>();
+    /** 超时定时器（refresh 后启动，登录成功/失败/stop 清理）。 */
+    private timeoutTimer: ReturnType<typeof setTimeout> | null = null;
+    /** 失败原因（超时等，failed 态透出给上层提示文案）。 */
+    private failureReasonValue: string | null = null;
+    /** 超时上限（毫秒，默认 QR_LOGIN_TIMEOUT_MS）。 */
+    private readonly timeoutMs: number;
 
-    constructor(loginService: unknown) {
+    constructor(loginService: unknown, options: { timeoutMs?: number } = {}) {
         const svc = loginService as LoginServiceLike | null;
         if (svc === null || typeof svc.addKernelLoginListener !== "function") {
             throw kernelError("loginService 无效（缺 addKernelLoginListener）", "INVALID_STATE");
         }
         this.loginService = svc;
+        this.timeoutMs = options.timeoutMs ?? QR_LOGIN_TIMEOUT_MS;
     }
 
     /** 当前状态。 */
@@ -84,6 +97,11 @@ export class QrLoginSession {
     /** selfInfo（登录成功后有值）。 */
     get selfInfo(): SelfInfo | null {
         return this.self;
+    }
+
+    /** 失败原因（超时等；failed 态透出给上层提示文案）。 */
+    get failureReason(): string | null {
+        return this.failureReasonValue;
     }
 
     /** 订阅二维码（png base64 + url）。返回退订函数。 */
@@ -126,10 +144,12 @@ export class QrLoginSession {
         }
     }
 
-    /** 刷新二维码（手动 / 过期自动）。 */
+    /** 刷新二维码（手动 / 过期自动）。每次出码重启超时计时。 */
     refresh(): void {
+        this.failureReasonValue = null;
         this.setState("waiting_scan");
         this.loginService.getQRCodePicture();
+        this.restartTimeout();
     }
 
     /** 构建登录监听（普通 JS 对象，NAPI 反射）。 */
@@ -146,18 +166,23 @@ export class QrLoginSession {
             this.setState("scanned");
         };
         listener.onQRCodeLoginSucceed = (result) => {
+            this.clearTimeoutTimer();
             this.self = { uin: result.uin, uid: result.uid, nick: result.nick ?? "" };
             this.setState("logged_in");
         };
         listener.onQRCodeSessionFailed = (errType, errCode) => {
             if (isQrCodeExpired(errType, errCode)) {
-                // 二维码过期 → 自动刷新
+                // 二维码过期 → 自动刷新（2026-08-13 用户拍板保留自动刷新 + 手动刷新按钮）
                 this.refresh();
                 return;
             }
+            this.clearTimeoutTimer();
+            this.failureReasonValue = null;
             this.setState("failed");
         };
         listener.onLoginFailed = () => {
+            this.clearTimeoutTimer();
+            this.failureReasonValue = null;
             this.setState("failed");
         };
         return listener;
@@ -165,9 +190,28 @@ export class QrLoginSession {
 
     /** 停止：注销监听（登录成功后调用，防重复回调）。 */
     stop(): void {
+        this.clearTimeoutTimer();
         if (this.listenerId !== null) {
             this.loginService.removeKernelLoginListener(this.listenerId);
             this.listenerId = null;
+        }
+    }
+
+    /** 重启超时计时器：超时未登录 → failed + 超时提示。 */
+    private restartTimeout(): void {
+        this.clearTimeoutTimer();
+        this.timeoutTimer = setTimeout(() => {
+            this.timeoutTimer = null;
+            this.failureReasonValue = QR_LOGIN_TIMEOUT_MESSAGE;
+            this.setState("failed");
+        }, this.timeoutMs);
+    }
+
+    /** 清理超时计时器（幂等）。 */
+    private clearTimeoutTimer(): void {
+        if (this.timeoutTimer !== null) {
+            clearTimeout(this.timeoutTimer);
+            this.timeoutTimer = null;
         }
     }
 

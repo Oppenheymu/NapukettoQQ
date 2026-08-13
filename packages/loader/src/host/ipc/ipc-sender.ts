@@ -58,11 +58,16 @@ export function sendStatus(
 export function sendLogin(
     state: "idle" | "waiting_scan" | "scanned" | "logged_in" | "failed",
     selfInfo?: { uin: string; uid: string; nick: string },
+    message?: string,
 ): void {
     sendIpc({
         v: IPC_VERSION,
         type: "login",
-        payload: { state, ...(selfInfo !== undefined ? { selfInfo } : {}) },
+        payload: {
+            state,
+            ...(selfInfo !== undefined ? { selfInfo } : {}),
+            ...(message !== undefined ? { message } : {}),
+        },
     });
 }
 
