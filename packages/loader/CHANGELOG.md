@@ -1,5 +1,11 @@
 # @napuketto/loader
 
+## 0.0.11
+
+### Patch Changes
+
+- 5d4524f: fix(loader): WSL 下 QQ 安装定位——常见路径探测支持 `/mnt/<盘符>/` 挂载映射，installDir 推导改用 `dirname`（原反斜杠切分在 Linux 路径下切错字符）
+
 ## 0.0.10
 
 ### Patch Changes
