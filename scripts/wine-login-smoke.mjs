@@ -12,10 +12,10 @@
  *      └─ 登录（快速登录指定 uin / 未指定则交互）→ session READY → 协议装配
  *
  * ⚠️ 与 Step 1 相同的坑：数据根必须放 ext4（wine 读 /mnt/c 会 File not found）。
- * ⚠️ 登录是长驻进程（协议服务在事件循环），脚本在 session READY 后观察 90s 退出。
+ * ⚠️ 登录是长驻进程（协议服务在事件循环），脚本在 session READY 后观察 30s 退出。
  */
-import { execFileSync, spawn } from "node:child_process";
-import { copyFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
+import { spawn } from "node:child_process";
+import { copyFileSync, existsSync, mkdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -28,20 +28,11 @@ import {
 
 // ── 参数 ──
 const argDir = process.argv.find((a) => a.startsWith("--ext4-dir="));
-const argUin =
-    process.argv.find((a) => a.startsWith("--uin=")) ??
-    (() => {
-        const i = process.argv.indexOf("--uin");
-        return i >= 0 ? process.argv[i + 1] : undefined;
-    })();
+const argUin = process.argv.find((a) => a.startsWith("--uin="));
 const dataRoot = argDir
     ? resolve(argDir.slice("--ext4-dir=".length))
     : join(homedir(), ".napuketto");
-const uin = argUin
-    ? argUin.startsWith("--uin=")
-        ? argUin.slice("--uin=".length)
-        : argUin
-    : undefined;
+const uin = argUin ? argUin.slice("--uin=".length) : undefined;
 console.log(`[wine-login] 数据根（ext4）: ${dataRoot}`);
 if (uin !== undefined) {
     console.log(`[wine-login] 快速登录 uin: ${uin}`);
@@ -68,7 +59,6 @@ console.log(`[wine-login] stub OK: ${stubHost}`);
 // 4. 装配环境变量（与 launcher.buildLaunchEnv 同构；wine 场景路径过 toWinePath）
 const wrapperDir = join(qq.wrapperPath, "..");
 const cfgDir = join(dataRoot, uin ?? "default");
-mkdirSync(cfgDir, { recursive: true });
 const env = {
     ...process.env,
     NAPUTO_QQ_PATH: toWinePath(join(dataRoot, "QQ.exe")), // 语义占位
@@ -77,9 +67,8 @@ const env = {
     NAPUTO_CFG_DIR: toWinePath(cfgDir),
     NAPUTO_SELF_HOST: "1",
     NAPUTO_STUB_DIR: toWinePath(stubHost),
-    // PATH 保持 Linux 原样（wine 自身是 Linux 程序，靠它解析）；
-    // wine 内 DLL 搜索路径在 4.5 段用 WINEPATH 注入。
-    PATH: process.env["PATH"] ?? "",
+    // PATH：stub 目录 + wrapper.node 目录前置（wine 按 Z:\ 解析）
+    PATH: [toWinePath(stubHost), toWinePath(wrapperDir), process.env["PATH"] ?? ""].join(";"),
 };
 if (uin !== undefined) {
     env["NAPUTO_QUICK_UIN"] = uin;
@@ -88,7 +77,7 @@ if (uin !== undefined) {
 // 5. 定位并复制运行时到 ext4（wine 读不了 /mnt/c DrvFS！）
 //    ⚠️ 2026-08-12 实测：wine 读 /mnt/c 会失败（同 wrapper.node 的坑）。
 //    self-host.cjs 是单文件 CJS bundle，kernel dist 是单文件 ESM bundle——
-//    复制到 ext4 运行时目录（wine 内路径过 toWinePath）。
+//    把这两个复制到 ext4 运行时目录即可（wine 内路径过 toWinePath）。
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const projectRoot = resolve(scriptDir, "..");
 const srcSelfHost = join(projectRoot, "packages", "loader", "dist", "host", "self-host.cjs");
@@ -105,49 +94,20 @@ const runtimeDir = join(dataRoot, "runtime", "smoke");
 mkdirSync(runtimeDir, { recursive: true });
 const selfHostPath = join(runtimeDir, "self-host.cjs");
 const kernelPath = join(runtimeDir, "kernel.mjs");
-const stubExt4 = join(runtimeDir, "stub");
-mkdirSync(stubExt4, { recursive: true });
 copyFileSync(srcSelfHost, selfHostPath);
 copyFileSync(srcKernel, kernelPath);
-copyFileSync(join(stubHost, "QQNT.dll"), join(stubExt4, "QQNT.dll"));
 console.log(`[wine-login] 运行时已复制到 ext4: ${runtimeDir}`);
-console.log(`[wine-login] wine 跑 self-host（路径 Z: 视角）…`);
+console.log(`[wine-login] wine 跑 self-host（路径 Z:\\ 视角）…`);
 
-// 4.5 kernel entry 环境变量 + stub 重定向（stub 已复制到 ext4，wine 视角 Z:）
+// 4.5 kernel entry 环境变量（指向 ext4 的 kernel.mjs，wine 视角 Z:\）
 env["NAPUTO_KERNEL_ENTRY"] = toWinePath(kernelPath);
-env["NAPUTO_STUB_DIR"] = toWinePath(stubExt4);
-// ⚠️ wine 内 DLL 搜索路径必须走 WINEPATH（wine 专用，; 分隔 Windows 路径），
-//    不能覆盖 PATH（wine 自己是 Linux 程序，PATH 还要用于解析 wine 可执行文件；
-//    实测覆盖 PATH 后 spawn wine 直接 ENOENT）。WINEPATH 是 2026-08-12 探针
-//    验证通过的机制（进程内 dlopen wrapper.node 98 exports 成功）。
-env["WINEPATH"] = [toWinePath(stubExt4), toWinePath(wrapperDir)].join(";");
 
 // 6. spawn wine + win-node + self-host.cjs（登录长驻，观察后退出）
-//    ⚠️ wine 是 Linux 程序，靠 Linux PATH 解析；不能用上面覆盖过的
-//    Windows 风格 PATH（那是给 wine 内 Windows 进程用的 DLL 搜索路径）。
-//    故先取 wine 绝对路径（bash -lc 走 Linux 登录 PATH），再 spawn。
-const wineBin =
-    process.env["NAPUTO_WINE"] ??
-    (() => {
-        try {
-            return execFileSync("bash", ["-lc", "command -v wine"]).toString().trim();
-        } catch {
-            return "wine";
-        }
-    })();
-// ⚠️ 必须用 PTY（script 命令包装）：wine 内 Windows 进程在管道环境下
-// stdin/stdout/stderr 句柄全坏（EBADF），Node 加载内置模块 ESM facade 时
-// 访问 getStdin/getStdout 直接崩（2026-08-12 实测：管道下 kernel import
-// FAIL EBADF，script 包装后 OK）。script 输出落到 wine-console.log。
-// ⚠️ script -c 的字符串交给 bash 解析：反斜杠会被吞（实测 Z:\ 变 Z:），
-// 故路径统一转正斜杠（Windows Node 接受 Z:/ 形式）。
-const scriptOut = join(runtimeDir, "wine-console.log");
-const selfHostArg = toWinePath(selfHostPath).replace(/\\/g, "/");
-const cmdStr = `${wineBin} ${winNode.exePath} ${selfHostArg}`;
-const child = spawn("script", ["-qec", cmdStr, scriptOut], {
+const wineBin = process.env["NAPUTO_WINE"] ?? "wine";
+const child = spawn(wineBin, [winNode.exePath, toWinePath(selfHostPath)], {
     cwd: dataRoot,
     env,
-    stdio: "inherit",
+    stdio: ["inherit", "pipe", "pipe"],
 });
 let sawReady = false;
 const timeout = setTimeout(() => {
@@ -155,59 +115,31 @@ const timeout = setTimeout(() => {
     child.kill("SIGKILL");
 }, 90_000);
 
-// ready 检测（inherit 下无 stdout 可解析）：轮询 boot 日志文件。
-// self-host 的 log() 写 NAPUTO_CFG_DIR/napuketto-boot.log（不走 stdout）；
-// kernel 的 pino 日志走 stdout → script 的 wine-console.log。两个都轮询。
-// ⚠️ 成功标志用 bootstrap 的真实成功日志（"session init + startNT OK!" /
-//    "QQ session 就绪"）——"bootstrap 完成" 是 self-host 的兜底日志，
-//    失败也打（2026-08-12 实测踩坑：kernel import 失败仍打"bootstrap 完成"）。
-// ⚠️ wine 环境限制（2026-08-12 实测）：wrapper 的 QR 回调（getQRCodePicture →
-//    onQRCodeGetPicture）在 wine 下不触发（疑似缺 winbind/网络初始化组件），
-//    且 wine 全新环境无历史登录凭证（快速登录必失败）——故 wine 场景以
-//    「到达登录阶段」（loginService.initConfig OK，pino 日志）为验证通过标准；
-//    若后续出现真实登录成功日志（session init + startNT OK! / QQ session 就绪）
-//    同样视为通过。
-const bootLogPath = join(cfgDir, "napuketto-boot.log");
-const consoleLogPath = join(runtimeDir, "wine-console.log");
-function checkReady() {
-    if (sawReady) return;
-    try {
-        const boot = readFileSync(bootLogPath, "utf-8");
-        const consoleOut = existsSync(consoleLogPath)
-            ? readFileSync(consoleLogPath, "utf-8")
-            : "";
-        const all = boot + "\n" + consoleOut;
-        if (
-            all.includes("session init + startNT OK!") ||
-            all.includes("QQ session 就绪") ||
-            all.includes("loginService.initConfig OK")
-        ) {
-            sawReady = true;
-            console.log("[wine-login] ✅ 检测到登录阶段就绪（boot/pino 日志）");
-        }
-    } catch {
-        // 日志文件尚未创建，忽略
+function onLine(tag, line) {
+    console.log(`[wine-login] ${tag}: ${line}`);
+    if (line.includes("bootstrap 完成") || (line.includes("session") && line.includes("READY"))) {
+        sawReady = true;
     }
 }
-const pollReady = setInterval(checkReady, 1_000);
+child.stdout?.on("data", (chunk) => {
+    for (const line of chunk.toString().split("\n")) {
+        if (line.trim() !== "") onLine("stdout", line.trim());
+    }
+});
+child.stderr?.on("data", (chunk) => {
+    for (const line of chunk.toString().split("\n")) {
+        if (line.trim() !== "") onLine("stderr", line.trim());
+    }
+});
 child.on("error", (e) => {
     console.log(`[wine-login] ⚠️ spawn 失败: ${e.message}`);
 });
 child.on("exit", (code, signal) => {
     clearTimeout(timeout);
-    clearInterval(pollReady);
     console.log(`[wine-login] 子进程退出 code=${code} signal=${signal ?? ""}`);
     if (sawReady) {
         console.log("[wine-login] ✅ 通过：session READY（完整链路 wine 下跑通）");
         process.exit(0);
-    }
-    // 失败时打印 boot 日志尾部，方便诊断
-    try {
-        const content = readFileSync(bootLogPath, "utf-8");
-        const tail = content.split("\n").slice(-25).join("\n");
-        console.log(`[wine-login] 📄 boot 日志尾部:\n${tail}`);
-    } catch {
-        // 无日志
     }
     console.log(`[wine-login] ❌ 未达到 ready 就退出（code=${code}）`);
     process.exit(code ?? 1);
