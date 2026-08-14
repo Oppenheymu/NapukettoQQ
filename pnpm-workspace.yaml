@@ -1,6 +1,11 @@
 packages:
   - "packages/*"
   - "apps/*"
+# 显式开启 workspace 链接（pnpm 11 默认关闭，仅 workspace:* 才 link）：
+# koishi 子仓库用 ~0.0.x 版本范围（非 workspace:*，因需独立发 npm），
+# 依赖版本匹配 workspace 包时 link 本地源码——否则开发时只能解析到 npm
+# 已发布旧版（新功能如 IPC 契约在未发布前无法被 koishi 消费）。
+linkWorkspacePackages: true
 # pnpm 11 构建脚本审批：允许这些依赖运行 postinstall（esbuild/parcel 需要）
 allowBuilds:
   '@parcel/watcher': true
