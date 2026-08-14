@@ -1,5 +1,12 @@
 # @napuketto/cli
 
+## 0.0.17
+
+### Patch Changes
+
+- Updated dependencies [f42a50c]
+  - @napuketto/loader@0.0.13
+
 ## 0.0.16
 
 ### Patch Changes
