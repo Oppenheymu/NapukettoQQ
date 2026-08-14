@@ -8,7 +8,7 @@ import {
     type IpcActionHandler,
     type IpcApiContext,
     registerLoginRefreshAction,
-} from "./ipc-actions.js";
+} from "../ipc-actions.js";
 
 /** mock kernel apis 上下文。 */
 function mockCtx(): IpcApiContext {

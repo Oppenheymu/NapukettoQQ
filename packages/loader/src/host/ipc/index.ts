@@ -27,7 +27,6 @@ export {
     startIpcServer,
 } from "./ipc-server.js";
 export {
-    IPC_MESSAGE_TYPES,
     IPC_VERSION,
     type IpcActionMessage,
     type IpcActionPayload,

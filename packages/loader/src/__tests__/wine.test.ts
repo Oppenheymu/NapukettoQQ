@@ -3,7 +3,7 @@
  * 不依赖真实 wine——纯逻辑层，Windows 上即可验证（P2 分层策略）。
  */
 import { describe, expect, it } from "vitest";
-import { buildSpawnCommand, toWinePath, unixPathToWinePath, wineBinary } from "./wine.js";
+import { buildSpawnCommand, toWinePath, unixPathToWinePath, wineBinary } from "../wine.js";
 
 describe("toWinePath", () => {
     it("Linux 绝对路径转 Z: 反斜杠路径", () => {

@@ -22,11 +22,7 @@ import { createOb11ActionRegistry } from "./action/index.js";
 import type { OneBotApiOptions } from "./api/index.js";
 import { OneBotApi } from "./api/index.js";
 import type { OB11Config } from "./helper/index.js";
-import {
-    collectReceiveNeeds,
-    ob11ConfigSchema,
-    type ReceiveTranslateContext,
-} from "./helper/index.js";
+import { collectReceiveNeeds, type ReceiveTranslateContext } from "./helper/index.js";
 import { toOb11MessageEvent } from "./helper/message-event.js";
 import { collectGrayTipUids, hasGrayTip, toOb11NoticeEvent } from "./helper/notice.js";
 import type { Ob11TransportSet } from "./transport.js";
@@ -48,7 +44,6 @@ export interface OneBot11AdapterOptions extends OneBotApiOptions {
 /** OneBot 11 协议适配器。 */
 export class NapukettoOneBot11Adapter extends BaseProtocolAdapter<OB11Config> {
     readonly protocol = "onebot11";
-    readonly configSchema = ob11ConfigSchema;
 
     private readonly msgChannel: MsgEventChannel;
     private readonly selfUin: string;

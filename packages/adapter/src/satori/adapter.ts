@@ -23,7 +23,7 @@ import {
     toSatoriMessageEvent,
 } from "./event/index.js";
 import type { SatoriConfig } from "./helper/index.js";
-import { satoriConfigSchema, toLogin, toMinimalLogin } from "./helper/index.js";
+import { toLogin, toMinimalLogin } from "./helper/index.js";
 import type { SatoriTransportSet } from "./transport.js";
 import { assembleSatoriTransports, toEventSignal } from "./transport.js";
 import type { Event, Login } from "./types/index.js";
@@ -41,7 +41,6 @@ export interface SatoriAdapterOptions extends SatoriApiOptions {
 /** Satori 协议适配器。 */
 export class NapukettoSatoriAdapter extends BaseProtocolAdapter<SatoriConfig> {
     readonly protocol = "satori";
-    readonly configSchema = satoriConfigSchema;
 
     private readonly msgChannel: MsgEventChannel;
     private readonly api: SatoriApi;

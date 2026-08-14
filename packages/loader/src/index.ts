@@ -10,6 +10,43 @@
  * 本包不再编译 C++ 组件，业务层 100% 走 NAPI。
  */
 
+export type {
+    IpcActionMessage,
+    IpcActionPayload,
+    IpcBootPhase,
+    IpcControlMessage,
+    IpcControlPayload,
+    IpcEventMessage,
+    IpcEventPayload,
+    IpcLoginMessage,
+    IpcLoginPayload,
+    IpcLogLevel,
+    IpcLogMessage,
+    IpcLogPayload,
+    IpcMessage,
+    IpcPingMessage,
+    IpcPongMessage,
+    IpcQrMessage,
+    IpcResultMessage,
+    IpcResultPayload,
+    IpcStatusMessage,
+    IpcStatusPayload,
+} from "./host/ipc/ipc-types.js";
+// IPC 协议契约（koishi 插件 ↔ self-host 子进程，zod 单一来源）。
+// koishi 插件侧 import 同一份 schema/类型，替代原 src/ipc/types.ts 手工镜像。
+export {
+    IPC_VERSION,
+    IpcActionPayloadSchema,
+    IpcBootPhaseSchema,
+    IpcControlPayloadSchema,
+    IpcEventPayloadSchema,
+    IpcLoginPayloadSchema,
+    IpcLogLevelSchema,
+    IpcLogPayloadSchema,
+    IpcMessageSchema,
+    IpcResultPayloadSchema,
+    IpcStatusPayloadSchema,
+} from "./host/ipc/ipc-types.js";
 export type { InstanceLockCheck, InstanceLockInfo } from "./instance-lock.js";
 export {
     acquireInstanceLock,

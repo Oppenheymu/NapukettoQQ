@@ -6,7 +6,6 @@
  * 事件广播：协议层翻译 kernel 事件后经 `broadcastEvent` 推给 network。
  */
 import type { EventBroadcaster } from "@napuketto/network";
-import type { ZodType } from "zod";
 import type { ProtocolConfig } from "./config.js";
 
 /** 适配器生命周期钩子：由协议层实现（配置校验、初始化、资源清理）。 */
@@ -25,7 +24,6 @@ export interface ProtocolHooks {
  */
 export abstract class BaseProtocolAdapter<TConfig> {
     abstract readonly protocol: string;
-    abstract readonly configSchema: ZodType<TConfig>;
 
     protected readonly config: ProtocolConfig<TConfig>;
     protected readonly hooks: ProtocolHooks;

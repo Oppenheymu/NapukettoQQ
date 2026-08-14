@@ -62,3 +62,6 @@ docs/
 
 # token
 .npmrc
+
+
+.pnpm-store

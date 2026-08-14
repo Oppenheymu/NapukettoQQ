@@ -11,7 +11,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { linuxSevenZipUrl, resolveQqInstall, wslMappedPath } from "./locate-qq.js";
+import { linuxSevenZipUrl, resolveQqInstall, wslMappedPath } from "../locate-qq.js";
 
 /** 临时安装目录（每个测试独立，测后清理）。 */
 const tmpDirs: string[] = [];
