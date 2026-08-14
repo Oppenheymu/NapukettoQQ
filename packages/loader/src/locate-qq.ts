@@ -11,6 +11,7 @@ import { existsSync, mkdirSync, readdirSync, statSync } from "node:fs";
 import { chmod, rm } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import process from "node:process";
+import { fileURLToPath } from "node:url";
 import { resolveDataRoot } from "./data-root.js";
 import { downloadFile } from "./qq-download.js";
 import { clearCacheVersion, extractInstaller, extractWrapperFiles } from "./qq-extract.js";
@@ -19,8 +20,8 @@ import { latestRelease, loadQqReleases, resolveDownloadUrl } from "./qq-releases
 /** 数据根下 QQ 文件缓存目录名（<数据根>/qq-files/<版本>/，P1 下载解包产物）。 */
 export const QQ_FILES_DIR_NAME = "qq-files";
 
-/** 7-Zip 官方 Linux 版版本号（tar.xz 文件名组成部分，2026-08-14 起自动下载）。 */
-const SEVEN_ZIP_LINUX_VERSION = "2409";
+/** 7-Zip 官方 Linux 版版本号（tar.xz 文件名组成部分；兜底下载用，内置资产优先）。 */
+const SEVEN_ZIP_LINUX_VERSION = "2501";
 
 /** 注册表 UninstallString 查询（QQ 官方安装路径）。 */
 const REG_QUERY_RE = /"([^"]+)"/;
@@ -250,18 +251,29 @@ export function linuxSevenZipUrl(): string {
 }
 
 /**
- * 确保 Linux 7zz 就绪（2026-08-14 生产修复）：自动下载 7-Zip 官方 Linux 版。
+ * 确保 Linux 7zz 就绪（治本：内置资产优先，下载兜底）。
  *
- * 背景：内置 assets/7zip 的 7z.exe 是 Windows PE（Linux 不可用），此前 Linux 依赖
- * 系统 p7zip-full——生产环境未安装 → `7z 解包失败: No such file or directory`。
- * 7zz 是 7-Zip 完整版（支持 NSIS 解包，同 7z.exe 能力），官方静态二进制，
- * 免 root 免系统包，下载到 <数据根>/runtime/7zip/7zz（与 win-node 同模式）。
+ * 优先级：内置资产 assets/7zip/7zz（2026-08-14 治本——与 Windows 7z.exe 同模式，
+ * 7zz 静态二进制已打进发布包，LGPL 合规可分发，零运行时下载）> 数据根缓存
+ * runtime/7zip/7zz（历史下载产物复用）> 官网下载（兜底，NAPUTO_7Z_URL 可覆盖）。
  *
- * 幂等：缓存已存在直接返回；tar -xJf 解压（Linux 自带 tar；需 xz-utils）。
+ * 背景：7-Zip 官网只保留最新版 tar.xz，硬编码旧版本号（如 2409）会被删档 404，
+ * 运行时下载既脆弱又依赖外网。内置资产彻底消灭该依赖。
  */
 export async function ensureLinuxSevenZip(
     options: { dataRoot?: string } = {},
 ): Promise<{ exe: string; source: string }> {
+    // 1. 内置资产（治本）：dist 与 assets 同层（tsdown 构建后 dist/，资产在包根 assets/）
+    const bundled = join(dirname(fileURLToPath(import.meta.url)), "..", "assets", "7zip", "7zz");
+    if (existsSync(bundled)) {
+        // npm 安装可能丢失执行位，保险设置（失败不阻塞：execFile 报 EACCES 时由调用方提示）
+        await chmod(bundled, 0o755).catch(() => {
+            // 忽略：无执行位场景后续解包会明确报错，此处不静默吞掉主流程
+        });
+        return { exe: bundled, source: "内置资产 assets/7zip" };
+    }
+
+    // 2. 数据根缓存（历史下载产物复用）
     const dataRoot = resolveDataRoot(options.dataRoot);
     const cacheDir = join(dataRoot, "runtime", "7zip");
     const exe = join(cacheDir, "7zz");
@@ -269,6 +281,7 @@ export async function ensureLinuxSevenZip(
         return { exe, source: "数据根缓存 runtime/7zip" };
     }
 
+    // 3. 官网下载兜底（NAPUTO_7Z_URL 覆盖；仅当发布包缺失旧形态时触发）
     const archive = join(cacheDir, `7z${SEVEN_ZIP_LINUX_VERSION}-linux-x64.tar.xz`);
     mkdirSync(cacheDir, { recursive: true });
     await downloadFile({ dest: archive, url: linuxSevenZipUrl() });

@@ -51,8 +51,8 @@ export interface ExtractOptions {
 
 /**
  * 探测 7z 可执行文件：
- *   NAPUTO_7Z_PATH 环境变量 > 内置资产（assets/7zip/7z.exe，Windows）> 系统 PATH 7z。
- * Linux 上用 p7zip 提供的 7z 命令（系统 PATH）。
+ *   NAPUTO_7Z_PATH 环境变量 > 内置资产（Windows assets/7zip/7z.exe、Linux
+ *   assets/7zip/7zz——2026-08-14 治本，静态二进制已打进发布包）> 系统 PATH 7z。
  */
 export function findSevenZip(): SevenZipResult {
     const envPath = process.env["NAPUTO_7Z_PATH"];
@@ -60,13 +60,14 @@ export function findSevenZip(): SevenZipResult {
         return { exe: envPath, source: "环境变量 NAPUTO_7Z_PATH" };
     }
     // 内置资产：dist 与 assets 同层（tsdown 构建后 dist/，资产在包根 assets/）
-    if (process.platform === "win32") {
+    if (process.platform === "win32" || process.platform === "linux") {
+        const exeName = process.platform === "win32" ? "7z.exe" : "7zz";
         const bundled = join(
             dirname(fileURLToPath(import.meta.url)),
             "..",
             "assets",
             "7zip",
-            "7z.exe",
+            exeName,
         );
         if (existsSync(bundled)) {
             return { exe: bundled, source: "内置资产 assets/7zip" };
