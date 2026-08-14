@@ -11,7 +11,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { resolveQqInstall, wslMappedPath } from "./locate-qq.js";
+import { linuxSevenZipUrl, resolveQqInstall, wslMappedPath } from "./locate-qq.js";
 
 /** 临时安装目录（每个测试独立，测后清理）。 */
 const tmpDirs: string[] = [];
@@ -34,6 +34,27 @@ afterEach(() => {
         // eslint-disable-next-line @typescript-eslint/no-require-imports
         void import("node:fs/promises").then(({ rm }) => rm(dir, { recursive: true, force: true }));
     }
+});
+
+describe("linuxSevenZipUrl", () => {
+    it("缺省：7-Zip 官方 linux 版 tar.xz", () => {
+        const url = linuxSevenZipUrl();
+        expect(url).toMatch(/^https:\/\/www\.7-zip\.org\/a\/7z\d+-linux-x64\.tar\.xz$/);
+    });
+
+    it("NAPUTO_7Z_URL 覆盖下载地址", () => {
+        const saved = process.env["NAPUTO_7Z_URL"];
+        process.env["NAPUTO_7Z_URL"] = "https://mirror.example/7zz.tar.xz";
+        try {
+            expect(linuxSevenZipUrl()).toBe("https://mirror.example/7zz.tar.xz");
+        } finally {
+            if (saved === undefined) {
+                delete process.env["NAPUTO_7Z_URL"];
+            } else {
+                process.env["NAPUTO_7Z_URL"] = saved;
+            }
+        }
+    });
 });
 
 describe("wslMappedPath", () => {
@@ -61,6 +82,27 @@ describe("wslMappedPath", () => {
         expect(wslMappedPath("C:/Program Files/Tencent/QQNT/QQ.exe", "win32")).toBe(
             "C:/Program Files/Tencent/QQNT/QQ.exe",
         );
+    });
+});
+
+describe("linuxSevenZipUrl", () => {
+    it("缺省：7-Zip 官方 linux 版 tar.xz", () => {
+        const url = linuxSevenZipUrl();
+        expect(url).toMatch(/^https:\/\/www\.7-zip\.org\/a\/7z\d+-linux-x64\.tar\.xz$/);
+    });
+
+    it("NAPUTO_7Z_URL 覆盖下载地址", () => {
+        const saved = process.env["NAPUTO_7Z_URL"];
+        process.env["NAPUTO_7Z_URL"] = "https://mirror.example/7zz.tar.xz";
+        try {
+            expect(linuxSevenZipUrl()).toBe("https://mirror.example/7zz.tar.xz");
+        } finally {
+            if (saved === undefined) {
+                delete process.env["NAPUTO_7Z_URL"];
+            } else {
+                process.env["NAPUTO_7Z_URL"] = saved;
+            }
+        }
     });
 });
 

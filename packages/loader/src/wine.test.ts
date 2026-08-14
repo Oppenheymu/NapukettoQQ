@@ -3,7 +3,7 @@
  * 不依赖真实 wine——纯逻辑层，Windows 上即可验证（P2 分层策略）。
  */
 import { describe, expect, it } from "vitest";
-import { buildSpawnCommand, toWinePath, wineBinary } from "./wine.js";
+import { buildSpawnCommand, toWinePath, unixPathToWinePath, wineBinary } from "./wine.js";
 
 describe("toWinePath", () => {
     it("Linux 绝对路径转 Z: 反斜杠路径", () => {
@@ -57,6 +57,22 @@ describe("buildSpawnCommand", () => {
             selfHostPath: "/s.cjs",
         });
         expect(cmd.command).toBe("/opt/wine/bin/wine");
+    });
+});
+
+describe("unixPathToWinePath", () => {
+    it("Unix PATH（冒号分隔）转 wine Windows PATH（分号分隔 + Z:\\ 条目）", () => {
+        expect(unixPathToWinePath("/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin")).toBe(
+            "Z:\\usr\\local\\sbin;Z:\\usr\\local\\bin;Z:\\usr\\sbin;Z:\\usr\\bin",
+        );
+    });
+
+    it("过滤空条目（连续冒号 / 尾部冒号）", () => {
+        expect(unixPathToWinePath("/usr/bin::/bin:")).toBe("Z:\\usr\\bin;Z:\\bin");
+    });
+
+    it("空 PATH 返回空串", () => {
+        expect(unixPathToWinePath("")).toBe("");
     });
 });
 

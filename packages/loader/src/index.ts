@@ -22,7 +22,9 @@ export type { LaunchOptions, LaunchResult } from "./launcher.js";
 export { defaultStubDir, ENV, launchSelfHost } from "./launcher.js";
 export type { QqFileSource, QqInstallInfo, ResolveQqFilesOptions } from "./locate-qq.js";
 export {
+    ensureLinuxSevenZip,
     ensureQqFiles,
+    linuxSevenZipUrl,
     locateQqPath,
     QQ_FILES_DIR_NAME,
     resolveQqFiles,

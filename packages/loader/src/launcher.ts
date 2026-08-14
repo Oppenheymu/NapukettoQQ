@@ -17,7 +17,7 @@ import process from "node:process";
 import { fileURLToPath } from "node:url";
 import type { QqInstallInfo } from "./locate-qq.js";
 import { ensureWinNode } from "./win-node.js";
-import { buildSpawnCommand, isLinux, toWinePath } from "./wine.js";
+import { buildSpawnCommand, isLinux, toWinePath, unixPathToWinePath } from "./wine.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -153,7 +153,13 @@ function applyPathEnv(
     opts: { stub: string; wrapperPath: string; useWine: boolean },
 ): void {
     const p = (linuxPath: string): string => (opts.useWine ? toWinePath(linuxPath) : linuxPath);
-    const pathEntries = [p(opts.stub), p(dirname(opts.wrapperPath)), process.env["PATH"] ?? ""]
+    // ⚠️ wine 场景 PATH 必须纯 Windows 风格（全部 Z:\ 条目 + 分号分隔）：混入
+    // Unix PATH（冒号分隔）会让 wine 按错误分隔符拆分，盘符路径（Z:\...）被拆散，
+    // stub 目录丢失 → wrapper.node 依赖的 QQNT.dll 找不到（2026-08-14 生产实测
+    // "import_dll Library QQNT.dll not found"）。Unix PATH 逐条转 Z:\ 再并入。
+    const unixPath = process.env["PATH"] ?? "";
+    const winPath = opts.useWine ? unixPathToWinePath(unixPath) : unixPath;
+    const pathEntries = [p(opts.stub), p(dirname(opts.wrapperPath)), winPath]
         .filter((entry) => entry !== undefined && entry !== "")
         .join(";");
     env["PATH"] = pathEntries;

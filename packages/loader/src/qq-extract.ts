@@ -95,7 +95,8 @@ export async function extractInstaller(
                     const hint =
                         code === "ENOENT"
                             ? `未找到 7z 可执行文件: ${sevenZip}\n` +
-                              "（Windows 请安装 7-Zip 或用 NAPUTO_7Z_PATH 指定；Linux 请安装 p7zip-full）"
+                              "（Windows 请安装 7-Zip 或用 NAPUTO_7Z_PATH 指定；" +
+                              "Linux 自动下载失败时请安装 p7zip-full 或用 NAPUTO_7Z_PATH 指定）"
                             : "（QQ 安装包是 NSIS 格式，需完整版 7z 而非 7za）";
                     reject(new Error(`7z 解包失败: ${installerPath}\n${stderr.trim()}\n${hint}`));
                     return;

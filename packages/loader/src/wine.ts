@@ -32,6 +32,21 @@ export function isLinux(): boolean {
     return process.platform === "linux";
 }
 
+/**
+ * Unix PATH（冒号分隔）→ wine Windows PATH（分号分隔 + 全部 Z:\ 条目）。
+ *
+ * ⚠️ 混入 Unix PATH 会让 wine 按错误分隔符拆分盘符路径（Z:\...），stub 目录
+ * 丢失 → wrapper.node 依赖的 QQNT.dll 找不到（2026-08-14 生产实测
+ * "import_dll Library QQNT.dll not found"）。wine 场景 PATH 必须纯 Windows 风格。
+ */
+export function unixPathToWinePath(unixPath: string): string {
+    return unixPath
+        .split(":")
+        .filter((entry) => entry !== "")
+        .map((entry) => toWinePath(entry))
+        .join(";");
+}
+
 /** wine 可执行文件（Linux 上 spawn 用；可被 NAPUTO_WINE 覆盖）。 */
 export function wineBinary(): string {
     return process.env["NAPUTO_WINE"] ?? "wine";

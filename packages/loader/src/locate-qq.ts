@@ -8,7 +8,7 @@
  */
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, statSync } from "node:fs";
-import { rm } from "node:fs/promises";
+import { chmod, rm } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import process from "node:process";
 import { downloadFile } from "./qq-download.js";
@@ -17,6 +17,9 @@ import { latestRelease, loadQqReleases, resolveDownloadUrl } from "./qq-releases
 
 /** 数据根下 QQ 文件缓存目录名（<数据根>/qq-files/<版本>/，P1 下载解包产物）。 */
 export const QQ_FILES_DIR_NAME = "qq-files";
+
+/** 7-Zip 官方 Linux 版版本号（tar.xz 文件名组成部分，2026-08-14 起自动下载）。 */
+const SEVEN_ZIP_LINUX_VERSION = "2409";
 
 /** 注册表 UninstallString 查询（QQ 官方安装路径）。 */
 const REG_QUERY_RE = /"([^"]+)"/;
@@ -235,6 +238,60 @@ function tryResolveCached(dataRoot: string): QqInstallInfo | null {
 }
 
 /**
+ * 7-Zip 官方 Linux 版下载地址（纯函数，可单测）。
+ * 环境变量 NAPUTO_7Z_URL 可覆盖（同 QQ 下载 NAPUTO_QQ_URL 模式）。
+ */
+export function linuxSevenZipUrl(): string {
+    return (
+        process.env["NAPUTO_7Z_URL"] ??
+        `https://www.7-zip.org/a/7z${SEVEN_ZIP_LINUX_VERSION}-linux-x64.tar.xz`
+    );
+}
+
+/**
+ * 确保 Linux 7zz 就绪（2026-08-14 生产修复）：自动下载 7-Zip 官方 Linux 版。
+ *
+ * 背景：内置 assets/7zip 的 7z.exe 是 Windows PE（Linux 不可用），此前 Linux 依赖
+ * 系统 p7zip-full——生产环境未安装 → `7z 解包失败: No such file or directory`。
+ * 7zz 是 7-Zip 完整版（支持 NSIS 解包，同 7z.exe 能力），官方静态二进制，
+ * 免 root 免系统包，下载到 <数据根>/runtime/7zip/7zz（与 win-node 同模式）。
+ *
+ * 幂等：缓存已存在直接返回；tar -xJf 解压（Linux 自带 tar；需 xz-utils）。
+ */
+export async function ensureLinuxSevenZip(
+    options: { dataRoot?: string } = {},
+): Promise<{ exe: string; source: string }> {
+    const dataRoot = resolveDataRootLight(options.dataRoot);
+    const cacheDir = join(dataRoot, "runtime", "7zip");
+    const exe = join(cacheDir, "7zz");
+    if (existsSync(exe)) {
+        return { exe, source: "数据根缓存 runtime/7zip" };
+    }
+
+    const archive = join(cacheDir, `7z${SEVEN_ZIP_LINUX_VERSION}-linux-x64.tar.xz`);
+    mkdirSync(cacheDir, { recursive: true });
+    await downloadFile({ dest: archive, url: linuxSevenZipUrl() });
+    try {
+        // tar -xJf 解压（Linux 自带 tar；7-Zip 官方 tar.xz 根目录含 7zz）
+        try {
+            execFileSync("tar", ["-xJf", archive, "-C", cacheDir], { stdio: "pipe" });
+        } catch (err) {
+            const message = err instanceof Error ? err.message : String(err);
+            throw new Error(
+                `7z linux 解压失败: ${message}（需 tar + xz-utils；或设 NAPUTO_7Z_PATH 指定系统 7z）`,
+            );
+        }
+    } finally {
+        await rm(archive, { force: true });
+    }
+    if (!existsSync(exe)) {
+        throw new Error(`7z linux 解压后未找到 7zz: ${exe}`);
+    }
+    await chmod(exe, 0o755); // 官方 tar.xz 内已有执行位，保险设置
+    return { exe, source: "自动下载（7-Zip 官方 linux 版）" };
+}
+
+/**
  * 确保 QQ 原生文件就绪（P1）：幂等缓存检查 → 下载官方安装包 → sha256 校验
  * → 7z 解包 → 提取 wrapper.node/QQNT.dll → 缓存。返回缓存版本 QqInstallInfo。
  */
@@ -269,9 +326,15 @@ export async function ensureQqFiles(
     await downloadFile({ dest: installerPath, url, expectedSha256: release.sha256 });
 
     // 3. 解包 + 提取（失败清理缓存残留；临时文件无论如何清理）
+    //    Linux 分支：确保 7zz（自动下载 7-Zip 官方 linux 版，2026-08-14 生产修复——
+    //    此前依赖系统 p7zip-full，未安装则 7z 解包失败、QQ 文件无法就绪）
+    let sevenZipPath = options.sevenZipPath;
+    if (sevenZipPath === undefined && process.platform === "linux") {
+        sevenZipPath = (await ensureLinuxSevenZip({ dataRoot })).exe;
+    }
     const extractedDir = join(tmpDir, `qq-extracted-${version}`);
     try {
-        await extractInstaller(installerPath, extractedDir, options.sevenZipPath);
+        await extractInstaller(installerPath, extractedDir, sevenZipPath);
         const info = await extractWrapperFiles(extractedDir, version, cacheRoot);
         return info;
     } catch (err) {
