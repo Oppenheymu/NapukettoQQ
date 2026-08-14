@@ -36,13 +36,13 @@ export interface WorkspacePkg {
 }
 
 /** 扫描的子目录（相对仓库根，各自展开一层通配）。 */
-export const WORKSPACE_GLOBS = ["packages", "apps"] as const;
+const WORKSPACE_GLOBS = ["packages", "apps"] as const;
 
 /**
  * 展开根目录下一个 base（packages/apps）下的子目录列表。
  * base 不存在或不可读 → 空数组（工作区可能只有 packages）。
  */
-export async function expandGlobDirs(root: string, base: string): Promise<string[]> {
+async function expandGlobDirs(root: string, base: string): Promise<string[]> {
     const full = join(root, base);
     let entries: Dirent<string>[];
     try {
@@ -57,7 +57,7 @@ export async function expandGlobDirs(root: string, base: string): Promise<string
  * 读取单目录下的 package.json。
  * 无 package.json / 无 name / private 包 → null（不可发布）。
  */
-export async function loadPackage(dir: string): Promise<WorkspacePkg | null> {
+async function loadPackage(dir: string): Promise<WorkspacePkg | null> {
     let raw: string;
     try {
         raw = await readFile(join(dir, "package.json"), "utf8");

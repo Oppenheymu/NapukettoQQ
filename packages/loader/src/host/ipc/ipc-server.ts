@@ -15,7 +15,7 @@ import { sendPing, sendPong, sendResult } from "./ipc-sender.js";
 import type { IpcControlPayload } from "./ipc-types.js";
 
 /** 心跳间隔（毫秒）。 */
-export const HEARTBEAT_INTERVAL_MS = 15_000;
+const HEARTBEAT_INTERVAL_MS = 15_000;
 
 /** IPC 服务端选项。 */
 export interface IpcServerOptions {

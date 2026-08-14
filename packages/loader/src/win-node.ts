@@ -10,8 +10,9 @@
  */
 import { existsSync, mkdirSync } from "node:fs";
 import { copyFile, readdir, rm } from "node:fs/promises";
-import { dirname, join, resolve } from "node:path";
+import { join, resolve } from "node:path";
 import process from "node:process";
+import { resolveDataRoot } from "./data-root.js";
 import { downloadFile } from "./qq-download.js";
 import { extractInstaller } from "./qq-extract.js";
 
@@ -97,28 +98,3 @@ async function unzipNode(zipPath: string, cacheDir: string): Promise<void> {
 
 /** 默认 Windows node 版本（latest v24，LTS 线；可被环境变量/参数覆盖）。 */
 const DEFAULT_WIN_NODE_VERSION = "v24.16.0";
-
-/** 轻量数据根解析（与 locate-qq 内同构，避免循环依赖）。 */
-function resolveDataRoot(dataRoot?: string): string {
-    const explicit = dataRoot ?? process.env["NAPKETTO_DATA"];
-    if (explicit !== undefined && explicit !== "") {
-        return resolve(explicit);
-    }
-    const projectRoot = findProjectRoot(process.cwd()) ?? process.cwd();
-    return join(projectRoot, ".napuketto");
-}
-
-/** 向上探测项目根（含 pnpm-workspace.yaml 或 package.json 的目录）。 */
-function findProjectRoot(start: string): string | null {
-    let dir = resolve(start);
-    for (;;) {
-        if (existsSync(join(dir, "pnpm-workspace.yaml")) || existsSync(join(dir, "package.json"))) {
-            return dir;
-        }
-        const parent = dirname(dir);
-        if (parent === dir) {
-            return null;
-        }
-        dir = parent;
-    }
-}

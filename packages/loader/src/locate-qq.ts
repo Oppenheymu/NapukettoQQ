@@ -11,6 +11,7 @@ import { existsSync, mkdirSync, readdirSync, statSync } from "node:fs";
 import { chmod, rm } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import process from "node:process";
+import { resolveDataRoot } from "./data-root.js";
 import { downloadFile } from "./qq-download.js";
 import { clearCacheVersion, extractInstaller, extractWrapperFiles } from "./qq-extract.js";
 import { latestRelease, loadQqReleases, resolveDownloadUrl } from "./qq-releases.js";
@@ -200,7 +201,7 @@ export async function resolveQqFiles(options: ResolveQqFilesOptions = {}): Promi
         // 本机未安装 → 落 L2
     }
     // L2：数据根缓存（P1 下载解包产物；结构 <数据根>/qq-files/<版本>/）
-    const dataRoot = resolveDataRootLight(options.dataRoot);
+    const dataRoot = resolveDataRoot(options.dataRoot);
     const cached = tryResolveCached(dataRoot);
     if (cached !== null) {
         return cached;
@@ -261,7 +262,7 @@ export function linuxSevenZipUrl(): string {
 export async function ensureLinuxSevenZip(
     options: { dataRoot?: string } = {},
 ): Promise<{ exe: string; source: string }> {
-    const dataRoot = resolveDataRootLight(options.dataRoot);
+    const dataRoot = resolveDataRoot(options.dataRoot);
     const cacheDir = join(dataRoot, "runtime", "7zip");
     const exe = join(cacheDir, "7zz");
     if (existsSync(exe)) {
@@ -303,7 +304,7 @@ export async function ensureQqFiles(
         sevenZipPath?: string;
     } = {},
 ): Promise<QqInstallInfo> {
-    const dataRoot = resolveDataRootLight(options.dataRoot);
+    const dataRoot = resolveDataRoot(options.dataRoot);
     const cacheRoot = join(dataRoot, QQ_FILES_DIR_NAME);
     mkdirSync(cacheRoot, { recursive: true });
 
@@ -343,33 +344,5 @@ export async function ensureQqFiles(
     } finally {
         await rm(installerPath, { force: true });
         await rm(extractedDir, { recursive: true, force: true });
-    }
-}
-
-/**
- * 轻量数据根解析（loader 侧，避免新增 kernel 依赖；P2 若需完整语义再切换）。
- * 优先级：显式参数 > NAPKETTO_DATA > 项目根/.napuketto > cwd 兜底。
- */
-function resolveDataRootLight(dataRoot?: string): string {
-    const explicit = dataRoot ?? process.env["NAPKETTO_DATA"];
-    if (explicit !== undefined && explicit !== "") {
-        return resolve(explicit);
-    }
-    const projectRoot = findProjectRoot(process.cwd()) ?? process.cwd();
-    return join(projectRoot, ".napuketto");
-}
-
-/** 向上探测项目根（含 pnpm-workspace.yaml 或 package.json 的目录）。 */
-function findProjectRoot(start: string): string | null {
-    let dir = resolve(start);
-    for (;;) {
-        if (existsSync(join(dir, "pnpm-workspace.yaml")) || existsSync(join(dir, "package.json"))) {
-            return dir;
-        }
-        const parent = dirname(dir);
-        if (parent === dir) {
-            return null;
-        }
-        dir = parent;
     }
 }

@@ -20,13 +20,8 @@ export function enableIpc(): void {
     enabled = true;
 }
 
-/** 是否启用。 */
-export function isIpcEnabled(): boolean {
-    return enabled;
-}
-
 /** 发送一条 IPC 消息（JSON 行）。失败静默（不阻塞引导）。 */
-export function sendIpc(message: IpcMessage): void {
+function sendIpc(message: IpcMessage): void {
     if (!enabled) {
         return;
     }

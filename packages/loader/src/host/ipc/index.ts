@@ -13,9 +13,7 @@ export { attachIpcServices, createIpcActionsForCore } from "./ipc-bootstrap.js";
 export { decodeIpcMessage, encodeIpcMessage } from "./ipc-codec.js";
 export {
     enableIpc,
-    isIpcEnabled,
     sendEvent,
-    sendIpc,
     sendLog,
     sendLogin,
     sendPing,
@@ -25,7 +23,6 @@ export {
     sendStatus,
 } from "./ipc-sender.js";
 export {
-    HEARTBEAT_INTERVAL_MS,
     type IpcServerOptions,
     startIpcServer,
 } from "./ipc-server.js";
