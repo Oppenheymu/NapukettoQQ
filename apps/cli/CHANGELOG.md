@@ -1,5 +1,12 @@
 # @napuketto/cli
 
+## 0.0.18
+
+### Patch Changes
+
+- Updated dependencies [fa86aef]
+  - @napuketto/loader@0.0.14
+
 ## 0.0.17
 
 ### Patch Changes
