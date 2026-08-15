@@ -285,7 +285,7 @@ importers:
         specifier: ~0.0.10
         version: link:../../packages/kernel
       '@napuketto/loader':
-        specifier: ~0.0.15
+        specifier: ~0.0.14
         version: link:../../packages/loader
     devDependencies:
       '@biomejs/biome':

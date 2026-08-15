@@ -1,5 +1,11 @@
 # create-napukettoqq
 
+## 0.2.18
+
+### Patch Changes
+
+- @napuketto/cli@0.0.19
+
 ## 0.2.17
 
 ### Patch Changes
