@@ -135,7 +135,7 @@ cli 默认路线 B；修正 worker 模式登录数据路径 + session 挂载方�
 QQ env 天然带 cpp_impl，vehicle 仅无头用）。
 
 **⚠️ 2026-08-06 深夜存疑（最重要的转折）**：
-研究 `C:\Dev\NapCat.Shell.Windows.Node1`（NapCat Shell Windows 部署包）后发现 **NapCat 也有纯 Node
+研究 `<NapCat Shell 部署包目录>`（NapCat Shell Windows 部署包）后发现 **NapCat 也有纯 Node
 自建宿主模式（node.exe ./index.js），无 QQ 进程无 UI，双进程仅 ~237MB，且能登录**（部署包自带 9.9.27
 资源 + napi2native bypass 库）。napi2native 真实职责是反风控/环境模拟（进程名伪装、隐藏模块、
 Base_PowerMessageWindow 窗口类、数据包层 hook）——**不是 env 兼容层**。
@@ -205,7 +205,7 @@ initializeSession 顺序）。此前失败原因：① 先 `ssw.start()` 再 ini
   msg.msgId/elements 全 undefined）；boot-protocols 控制台消息日志上线（NapCat 同款，独立订阅）
 - **结论：业务基本实现**——kernel（12 apis + bridge + cache + login）→ adapter（onebot11 79 动作（含别名变体））→
   network/media → loader 自建宿主引导 → cli 唯一启动方式，全部落地。端到端实测：自动定位 QQ →
-  登录 3567141148 → session READY → 冒烟收发 → onebot11 adapter → **群消息真实接收并打印**（群「晓工坊」）
+  登录 <测试QQ号> → session READY → 冒烟收发 → onebot11 adapter → **群消息真实接收并打印**（群「<测试群>」）
 
 ---
 

@@ -106,7 +106,7 @@ pnpm start（apps/cli）→ launchSelfHost → 标准 Node 自建宿主进程（
   ├── process.dlopen(wrapper.node) → exports 98 个（标准 node 可完整加载，无需 IAT 改写）
   ├── NodeIO3MiscService.get() + addO3MiscListener 激活事件分发（否则 getLoginList 永不 resolve）
   ├── commonPath/desktopGlobalPath = 数据根/nt_qq/global（三要素之三）
-  ├── 登录（快速 3567141148 / QR）→ session.init(config) → startupSession.start()（先 init 后 start！）
+  ├── 登录（快速 <测试QQ号> / QR）→ session.init(config) → startupSession.start()（先 init 后 start！）
   ├── 等 onOpentelemetryInit(is_init=true) → 业务 service 全 READY（getMsgService 298 方法）
   └── boot-bootstrap 复用 → kernel 装配 → onebot11 协议装配 → 收发/事件监听
 ```
@@ -215,8 +215,8 @@ wrapper.node 原生回调
 
 ### 9.1 逆向分析（仅在需要时，路线 B 已无需）
 
-- Ghidra 12.1.2（`C:\Dev\Tools\ghidra_12.1.2_PUBLIC\`）+ GhidraMCP 1.4（`C:\Dev\Tools\GhidraMCP-1-4\`）
-- 项目：`C:\Dev\Tools\ghidra-project\NapukettoWrapper.gpr`（wrapper.node 已全量分析）
+- Ghidra 12.1.2（`<逆向工具目录>\ghidra_12.1.2_PUBLIC\`）+ GhidraMCP 1.4（`<逆向工具目录>\GhidraMCP-1-4\`）
+- 项目：`<逆向工具目录>\ghidra-project\NapukettoWrapper.gpr`（wrapper.node 已全量分析）
 - 用法见子仓库 `packages/loader/native/docs/ghidra-mcp-guide.md`（2026-08-07 移入闭源子仓库）
 - **⚠️ 2026-08-07 更新**：自建宿主（唯一路线）已全链路实测通过，**不需要**激活 session cpp_impl；
   窗口类（Base_PowerMessageWindow）已验证非必要。Ghidra 现仅用于远期数据包层（packet 后端）与
@@ -229,7 +229,7 @@ wrapper.node 原生回调
 
 ### 9.3 环境事实
 
-- QQ 9.9.33-51802：`C:\Dev\QQBot-Dev\QQNT\`（wrapper.node 114MB，exports 98 个；9.9.27/9.9.31 登录服务已下线勿用）
-- QQ 登录数据：`C:\Users\xiaoxiaochen\Documents\Tencent Files\`（含 7 账号；快速登录用 **3567141148**）
+- QQ 9.9.33-51802：`<项目/工作目录>\QQNT\`（wrapper.node 114MB，exports 98 个；9.9.27/9.9.31 登录服务已下线勿用）
+- QQ 登录数据：`<用户目录>\Documents\Tencent Files\`（含 7 账号；快速登录用 **<测试QQ号>**）
 - 自建宿主 stub：`packages/loader/native/build/stub-test-env/`（默认 stub 目录，llvm-mingw 编译）
-- NapCat 参考部署包：`C:\Dev\NapCat.Shell.Windows.Node1`（仅参考，已不依赖）
+- NapCat 参考部署包：`<NapCat Shell 部署包目录>`（仅参考，已不依赖）
