@@ -45,6 +45,7 @@ export interface NodeQQNTWrapperUtil {
 export interface EnginInitDesktopConfig {
     base_path_prefix: string;
     platform_type: PlatformType;
+    /** 桌面端应用类型（engine.initWithDeskTopConfig 契约，桌面端固定 4；移动端为其它值）。 */
     app_type: 4;
     app_version: string;
     os_version: string;
@@ -53,6 +54,10 @@ export interface EnginInitDesktopConfig {
     global_path_config: {
         desktopGlobalPath: string;
     };
+    /**
+     * 缩略图生成参数（wrapper 契约）：maxSide 最长边上限 / minSide 最短边下限 /
+     * longLimit 长图最长短边比例上限 / density 像素密度倍数。
+     */
     thumb_config: { maxSide: 324; minSide: 48; longLimit: 6; density: 2 };
 }
 

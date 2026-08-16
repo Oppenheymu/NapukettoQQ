@@ -137,8 +137,8 @@ export interface KernelLike {
     ): Promise<unknown>;
     waitSessionReady(ctx: CoreContextLike, options: { timeoutMs: number }): Promise<unknown>;
     // 路径 / appid
-    parseAppidFromMajor?: (majorPath: string) => number | undefined;
-    resolveAppidQua?: (qqVersion: string) => { appid: number };
+    parseAppidFromMajor?: (majorPath: string) => string | null;
+    resolveAppidQua?: (fullVersion: string, majorPath?: string) => { appid: string; qua: string };
     resolveQqUserDataRoot?: (wrapperExports: unknown) => string | null;
     resolveQqGlobalPath?: (qqDataRoot: string) => string;
     // 探测

@@ -10,6 +10,7 @@ import { rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { KernelError } from "../../infra/index.js";
 import {
     buildSessionConfig,
     parseAppidFromMajor,
@@ -59,10 +60,17 @@ describe("resolveAppidQua", () => {
         expect(result.qua).toContain("9.9.33-51802");
     });
 
-    it("major 解析失败回退硬编码表", () => {
-        const result = resolveAppidQua("9.9.31-49919", undefined);
-        expect(result.appid).toBe("537237765");
-        expect(result.qua).toContain("9.9.31-49919");
+    it("major 路径缺省 → 抛 KernelError（不再静默回退）", () => {
+        expect(() => resolveAppidQua("9.9.31-49919", undefined)).toThrowError(KernelError);
+        expect(() => resolveAppidQua("9.9.31-49919", undefined)).toThrowError(
+            /无法从 major.node 解析 appid/,
+        );
+    });
+
+    it("major 文件无 QQAppId/ 标记 → 抛 KernelError", () => {
+        majorPath = join(tmpdir(), `major-${Date.now()}-${Math.random()}.node`);
+        writeFileSync(majorPath, Buffer.from("no marker here"));
+        expect(() => resolveAppidQua("9.9.33-51802", majorPath)).toThrowError(KernelError);
     });
 });
 

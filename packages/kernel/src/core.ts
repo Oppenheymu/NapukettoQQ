@@ -7,7 +7,8 @@
  * 典型用法（boot.cjs 截获 exports 后）：
  *   const core = await NapukettoCore.create({ dataRoot, account });
  *   core.attachWrapper(wrapperExports, { qqVersion, dataDir });
- *   await core.login({ appid: "537237765" });
+ *   // appid 由 resolveAppidQua 从 major.node 动态解析（版本绑定，不写死）
+ *   await core.login({ appid });
  *
  * 与手动拼 startNapuketto/quickLogin/initAndStartSession 等价，但把装配状态
  * （ctx）集中管理，协议层直接消费 core.ctx。
@@ -67,7 +68,7 @@ export interface LoginProgress {
 
 /** login 参数。 */
 export interface CoreLoginOptions {
-    /** appid（登录握手，兜底 537237765）。 */
+    /** appid（登录握手，由 resolveAppidQua 从 major.node 动态解析，不写死）。 */
     appid: string;
     /** session.init 超时（毫秒），默认 15s。 */
     initTimeoutMs?: number;

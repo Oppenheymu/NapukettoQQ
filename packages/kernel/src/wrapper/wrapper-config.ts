@@ -8,10 +8,14 @@
  *
  * 与 lifecycle.ts（流程编排）解耦：本模块只回答「配置长什么样」，不管流程怎么走。
  * 字段为 wrapper.node 外部契约（appid/qua/版本），运行时实测确认，自研描述。
+ * appid 唯一来源是 major.node 动态解析（每版本不同）；解析失败显式抛 KernelError，
+ * 不再静默回退过期 appid（2026-08 硬编码审计：537237765 是 9.9.31 的 appid，该版本
+ * 登录服务已被腾讯下线，静默用它会导致扫码「请下载最新版」且极难排查）。
  */
 
 import { existsSync, readFileSync } from "node:fs";
-import { hostname } from "node:os";
+import { hostname, type as osType, version as osVersionString, platform, release } from "node:os";
+import { kernelError } from "../infra/index.js";
 import type {
     DeviceInfo,
     EnginInitDesktopConfig,
@@ -19,13 +23,61 @@ import type {
 } from "../types/index.js";
 import { PlatformType as PlatformTypeValue, VendorType } from "../types/index.js";
 
-/** 系统信息（先用 fixed 值，真实环境探测后补）。 */
+/** app_type=4：桌面端应用类型（engine.initWithDeskTopConfig 契约；移动端为其它值）。 */
+const APP_TYPE_DESKTOP = 4;
+
+/**
+ * 缩略图生成参数（thumb_config，engine 契约）：
+ * maxSide 最长边像素上限 / minSide 最短边像素下限 / longLimit 长图最长短边比例上限 /
+ * density 像素密度倍数。
+ */
+const THUMB_CONFIG = {
+    maxSide: 324,
+    minSide: 48,
+    longLimit: 6,
+    density: 2,
+} as const;
+
+/**
+ * session.init 的 deviceConfig（wrapper 契约，JSON 字符串字面量）：
+ * appearance.isSplitViewMode 分屏模式开关，msg 空对象为占位。自建宿主无 UI，保持最小可用。
+ */
+const DEVICE_CONFIG_JSON = '{"appearance":{"isSplitViewMode":true},"msg":{}}';
+
+/** localId=2052：zh-CN（简体中文）locale 码（Windows LCID，deviceInfo.localId 契约）。 */
+const ZH_CN_LOCALE_ID = 2052;
+
+/** 平台名映射：os.platform() → wrapper devType 契约值（不写死具体构建号）。 */
+const DEV_TYPE_BY_PLATFORM: Record<string, string> = {
+    win32: "Windows",
+    darwin: "Mac",
+    linux: "Linux",
+    android: "Android",
+    freebsd: "FreeBSD",
+    openbsd: "OpenBSD",
+    sunos: "SunOS",
+    aix: "AIX",
+};
+
+/**
+ * 系统信息运行时探测（wrapper 契约：platVer / osVersion / devType）。
+ * 旧实现写死 "Windows 10.0.22631"/"Windows 10 Pro"——换机即失真（2026-08 硬编码审计整改）。
+ * 探测失败时给通用值兜底，但不写死具体 Windows 构建号。
+ */
 function systemInfo(): { platVer: string; osVersion: string; devType: string } {
-    return {
-        platVer: "Windows 10.0.22631",
-        osVersion: "Windows 10 Pro",
-        devType: "Windows",
-    };
+    let devType = "Unknown";
+    let platVer = "Unknown";
+    let osVersion = "Unknown";
+    try {
+        devType = DEV_TYPE_BY_PLATFORM[platform()] ?? platform();
+        // platVer 契约形如 "Windows 10.0.22631" = "<平台名> <内核版本号>"。
+        platVer = `${devType} ${release()}`;
+        // osVersion 优先 os.version()（Windows 返回 "Windows 11 Pro" 等），空则用 os.type()。
+        osVersion = osVersionString() || osType();
+    } catch {
+        // 探测失败：保留通用兜底值。
+    }
+    return { platVer, osVersion, devType };
 }
 
 /** 纯数字串（major.node 提取的 appid 判定）。 */
@@ -34,7 +86,7 @@ const DIGITS_ONLY_RE = /^\d+$/;
 /**
  * 从 major.node 提取 appid（NapCat parseAppidFromMajorV2 的自研等价实现）。
  * major.node 含 `QQAppId/` 标记后跟数字（腾讯工具链产物，实测确认）。
- * 返回 null 表示解析失败（调用方回退硬编码表）。
+ * 返回 null 表示解析失败（调用方应显式报错，不再回退硬编码 appid）。
  */
 export function parseAppidFromMajor(majorPath: string): string | null {
     if (!existsSync(majorPath)) {
@@ -76,37 +128,30 @@ function readMarkerValue(buf: Buffer, start: number): string {
     return buf.subarray(start, end).toString("utf-8");
 }
 
-/** Windows 兜底 appid / qua（major.node 解析失败时）。 */
-function fallbackAppidQua(fullVersion: string): { appid: string; qua: string } {
-    return {
-        appid: "537237765",
-        qua: `V1_WIN_NQ_${fullVersion}_${fullVersion.split("-")[1] ?? ""}_GW_B`,
-    };
-}
-
 /**
  * 解析 appid / qua（自研，参考 NapCat QQBasicInfoWrapper 思路但独立实现）：
- *  1. 优先从 major.node 提取 appid（实测 9.9.33-51802 = 537376818）
- *  2. 回退硬编码表（旧版 537237765）
- * majorPath 传 wrapper.node 同目录 major.node；不传则跳过 major 解析。
+ * appid 唯一来源 = major.node 提取（实测 9.9.33-51802 = 537376818）。
+ * majorPath 缺省或解析失败时抛 KernelError——不再静默回退过期 appid。
+ * majorPath 传 wrapper.node 同目录 major.node。
  */
 export function resolveAppidQua(
     fullVersion: string,
     majorPath?: string,
 ): { appid: string; qua: string } {
-    if (majorPath !== undefined) {
-        const appid = parseAppidFromMajor(majorPath);
-        if (appid !== null) {
-            return {
-                appid,
-                qua: `V1_WIN_NQ_${fullVersion}_${fullVersion.split("-")[1] ?? ""}_GW_B`,
-            };
-        }
+    const appid = majorPath !== undefined ? parseAppidFromMajor(majorPath) : null;
+    if (appid === null) {
+        throw kernelError(
+            "无法从 major.node 解析 appid，请确认 wrapper.node/major.node 完整，或更新 qq-releases.json",
+            "INVALID_STATE",
+        );
     }
-    return fallbackAppidQua(fullVersion);
+    return {
+        appid,
+        qua: `V1_WIN_NQ_${fullVersion}_${fullVersion.split("-")[1] ?? ""}_GW_B`,
+    };
 }
 
-/** 生成 engine 桌面配置（wrapper 契约字段）。majorPath 可选（解析 appid/qua）。 */
+/** 生成 engine 桌面配置（wrapper 契约字段）。majorPath 可选（缺失/解析失败会抛错）。 */
 export function buildEngineConfig(
     fullVersion: string,
     dataPathGlobal: string,
@@ -117,7 +162,7 @@ export function buildEngineConfig(
     return {
         base_path_prefix: "",
         platform_type: PlatformTypeValue.KWINDOWS,
-        app_type: 4,
+        app_type: APP_TYPE_DESKTOP,
         app_version: fullVersion,
         os_version: osVersion,
         use_xlog: true,
@@ -125,7 +170,7 @@ export function buildEngineConfig(
         global_path_config: {
             desktopGlobalPath: dataPathGlobal,
         },
-        thumb_config: { maxSide: 324, minSide: 48, longLimit: 6, density: 2 },
+        thumb_config: THUMB_CONFIG,
     };
 }
 
@@ -168,7 +213,7 @@ export function buildSessionConfig(options: SessionConfigOptions): WrapperSessio
         // 设备指纹 guid：loginService.getMachineGuid()（wrapper 探测确认，无 getMachineId 方法）。
         guid: machineGuid ?? "",
         buildVer: fullVersion,
-        localId: 2052,
+        localId: ZH_CN_LOCALE_ID,
         devName: hostname(),
         devType,
         vendorName: "",
@@ -208,7 +253,7 @@ export function buildSessionConfig(options: SessionConfigOptions): WrapperSessio
         },
         defaultFileDownloadPath: downloadPath,
         deviceInfo,
-        deviceConfig: '{"appearance":{"isSplitViewMode":true},"msg":{}}',
+        deviceConfig: DEVICE_CONFIG_JSON,
     };
 }
 
