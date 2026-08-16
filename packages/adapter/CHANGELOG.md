@@ -1,5 +1,12 @@
 # @napuketto/adapter
 
+## 0.0.12
+
+### Patch Changes
+
+- Updated dependencies [2c099aa]
+  - @napuketto/media@0.0.2
+
 ## 0.0.11
 
 ### Patch Changes
