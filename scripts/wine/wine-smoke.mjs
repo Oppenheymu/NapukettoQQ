@@ -2,7 +2,7 @@
  * wine-smoke.mjs：Linux/wine 自建宿主加载冒烟（P2 Step 1 固化成果）。
  *
  * 用法（WSL2 内，从项目根）：
- *   node scripts/wine-smoke.mjs [--ext4-dir <dir>]
+ *   node scripts/wine/wine-smoke.mjs [--ext4-dir <dir>]
  *
  * 流程：
  *   1. 确保 QQ 文件（P1 ensureQqFiles：本机无 QQ 则自动下载官方安装包 → 7z 解包 → 缓存）
@@ -17,7 +17,12 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
-import { defaultStubDir, ensureQqFiles } from "../packages/loader/dist/index.mjs";
+import {
+    defaultStubDir,
+    ensureQqFiles,
+    ensureWinNode,
+    toWinePath,
+} from "../../packages/loader/dist/index.mjs";
 
 // ── 参数 ──
 const argDir = process.argv.find((a) => a.startsWith("--ext4-dir="));
@@ -34,7 +39,6 @@ console.log(`[wine-smoke] QQ 文件 OK: version=${qq.version} wrapper=${qq.wrapp
 
 // 2. 确保 Windows 版 node.exe（P2）
 console.log("[wine-smoke] 确保 Windows 版 node.exe…");
-const { ensureWinNode, toWinePath } = await import("../packages/loader/dist/index.mjs");
 const winNode = await ensureWinNode({ dataRoot });
 console.log(`[wine-smoke] win-node OK: ${winNode.exePath} (${winNode.version})`);
 

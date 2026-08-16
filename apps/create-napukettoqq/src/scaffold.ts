@@ -168,9 +168,18 @@ function renderTemplate(content: string, vars: Record<string, string>): string {
 /**
  * 生成 NapukettoQQ 项目骨架到当前目录下的 <dirName>/。
  * 目标目录已存在且非空：overwrite=false → 抛错；overwrite=true → 清空后生成。
- * 模板与写入目标一一对应（同文件名）。
+ * 模板与写入目标一一对应（同文件名）。pm 为调用方包管理器：yarn 时额外生成
+ * 空 yarn.lock 把用户项目隔离成独立项目——yarn install 会向上探测父目录的
+ * package.json/yarn.lock，若用户父目录（如 ~）恰好有这些文件，yarn 会把生成
+ * 目录误当作其 workspace 子包并报「nearest package directory doesn't seem to
+ * be part of the project declared in <父目录>」。空 yarn.lock 让 yarn 把生成
+ * 目录视为独立项目根（yarn 自身报错信息也建议此做法），pnpm/npm 无此问题。
  */
-export async function scaffoldProject(dirName: string, overwrite = false): Promise<ScaffoldResult> {
+export async function scaffoldProject(
+    dirName: string,
+    overwrite = false,
+    pm: PackageManager = "pnpm",
+): Promise<ScaffoldResult> {
     const name = validateProjectName(dirName);
     const packageName = derivePackageName(name);
     const dir = resolveTargetDir(name);
@@ -196,6 +205,12 @@ export async function scaffoldProject(dirName: string, overwrite = false): Promi
     for (const file of files) {
         const rendered = renderTemplate(await readTemplate(`${file}.tmpl`), vars);
         await writeFile(path.join(dir, file), rendered, "utf8");
+    }
+
+    // yarn：写空 yarn.lock 隔离成独立项目（见函数 JSDoc）。yarn install 会重写
+    // 该文件为真实锁文件；空文件只用于阻断向上探测，无运行时副作用。
+    if (pm === "yarn") {
+        await writeFile(path.join(dir, "yarn.lock"), "", "utf8");
     }
 
     return { dir, packageName };
