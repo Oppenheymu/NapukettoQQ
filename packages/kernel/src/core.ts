@@ -75,6 +75,8 @@ export interface CoreLoginOptions {
     quickUin?: string;
     /** 快速登录失败时回退 QR 登录（二维码写缓存目录），默认 false。 */
     qrFallback?: boolean;
+    /** 强制扫码：跳过快速登录，直接走 QR 登录（koishi 强制扫码 / 切账号）。默认 false。 */
+    qrOnly?: boolean;
     /** QR 二维码图片保存路径（默认缓存目录 qrcode.png）。 */
     qrCodePath?: string;
     /** 登录进度回调（QR 阶段：二维码数据 + 状态变化）。子进程 IPC 模式转发用。 */
@@ -153,6 +155,13 @@ export class NapukettoCore {
 
         // 1. loginService.initConfig（wrapper 流程：addKernelLoginListener 前）
         this.initLoginConfig(wrapper, opts.appid);
+
+        // 强制扫码（qrOnly）：跳过快速登录，直接 QR 登录（koishi 强制扫码 / 切账号）。
+        if (opts.qrOnly === true) {
+            const loginResult = await this.loginByQr(opts);
+            this.ctx.login = loginResult;
+            return loginResult;
+        }
 
         // 2. 登录：快速登录（优先）→ QR 回退。登录成功前不碰 session。
         let loginResult: LoginResult;

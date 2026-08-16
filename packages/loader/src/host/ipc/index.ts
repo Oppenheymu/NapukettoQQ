@@ -23,6 +23,8 @@ export {
     sendStatus,
 } from "./ipc-sender.js";
 export {
+    handleControl,
+    type IpcLoginControlPayload,
     type IpcServerOptions,
     startIpcServer,
 } from "./ipc-server.js";

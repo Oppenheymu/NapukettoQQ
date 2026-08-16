@@ -113,6 +113,53 @@ function buildLoginOpts(
     return opts;
 }
 
+/** control login 指令 → 重新登录（qr=true 强制扫码跳过快速登录，uin 指定账号）。 */
+function createLoginControlHandler(
+    core: CoreLike,
+    Appid: string | number,
+): (payload: { uin?: string; qr?: boolean }) => void {
+    return (payload) => {
+        const ipcMode = env.NAPUTO_IPC === "1";
+        const opts: Record<string, unknown> = {
+            appid: String(Appid),
+            initTimeoutMs: 20000,
+            qrFallback: true,
+            ...(payload.uin !== undefined ? { quickUin: payload.uin } : {}),
+            ...(payload.qr === true ? { qrOnly: true } : {}),
+            onLoginProgress: (progress: {
+                state: string;
+                qr?: { pngBase64: string; qrcodeUrl: string };
+                selfInfo?: { uin: string; uid: string; nick: string };
+                message?: string;
+            }) => {
+                if (ipcMode && progress.qr !== undefined) {
+                    sendQr(progress.qr.pngBase64, progress.qr.qrcodeUrl);
+                }
+                if (ipcMode && isLoginState(progress.state)) {
+                    sendLogin(progress.state, progress.selfInfo, progress.message);
+                }
+            },
+        };
+        void core
+            .login(opts)
+            .then((result) => {
+                if (ipcMode && result !== null) {
+                    sendLogin("logged_in", {
+                        uin: result.uin,
+                        uid: result.uid,
+                        nick: result.nick ?? "",
+                    });
+                }
+            })
+            .catch((err) => {
+                log(`bootstrap: control login 失败: ${errMsg(err)}`);
+                if (ipcMode) {
+                    sendLogin("failed", undefined, errMsg(err));
+                }
+            });
+    };
+}
+
 /** V2 登录后替换 session：优先 QQ 主 session，其次 vehicle 单例表；自建宿主例外。 */
 function replaceSession(
     kernel: KernelLike,
@@ -279,7 +326,10 @@ export async function bootstrapWithCore(
     let ipcActions: Map<string, IpcActionHandler> | null = null;
     if (env.NAPUTO_IPC === "1") {
         ipcActions = createIpcActionsForCore(core);
-        startIpcServer({ actions: ipcActions });
+        startIpcServer({
+            actions: ipcActions,
+            onLogin: createLoginControlHandler(core, Appid),
+        });
     }
 
     // 不传 qqSession/qqLoginService（登录前捕获的旧实例已失效/会干扰；

@@ -5,6 +5,7 @@
  *  - stdin readline 收 action / control / ping
  *  - action → 动作表执行 → result 响应（请求 id 匹配）
  *  - control stop/restart → 退出回调（默认 process.exit(0)，由驱动层重启）
+ *  - control login → onLogin 回调（触发重新登录 / 强制扫码）
  *  - ping → 自动回 pong
  *  - 心跳：定期发 ping（koishi 插件探活）
  */
@@ -17,6 +18,12 @@ import type { IpcControlPayload } from "./ipc-types.js";
 /** 心跳间隔（毫秒）。 */
 const HEARTBEAT_INTERVAL_MS = 15_000;
 
+/** control login 指令 payload（uin 指定账号，qr=true 强制扫码）。 */
+export interface IpcLoginControlPayload {
+    uin?: string;
+    qr?: boolean;
+}
+
 /** IPC 服务端选项。 */
 export interface IpcServerOptions {
     /** 动作表（createIpcActions 产物）。 */
@@ -25,6 +32,8 @@ export interface IpcServerOptions {
     heartbeatMs?: number;
     /** control stop/restart 退出回调（默认 process.exit(0)，由驱动层重启）。 */
     onExit?: () => void;
+    /** control login 回调（触发重新登录 / 强制扫码；未提供则忽略）。 */
+    onLogin?: (payload: IpcLoginControlPayload) => void;
 }
 
 /** 启动 IPC 服务端（stdin 接收 + 心跳）。返回停止函数。 */
@@ -48,7 +57,7 @@ export function startIpcServer(options: IpcServerOptions): () => void {
                 );
                 break;
             case "control":
-                handleControl(message.payload, onExit);
+                handleControl(message.payload, onExit, options.onLogin);
                 break;
             case "ping":
                 sendPong();
@@ -78,10 +87,21 @@ async function handleAction(
     sendResult(id, result);
 }
 
-/** 控制指令处理（stop/restart 退出；login 预留——引导期登录由 bootstrap 内部驱动）。 */
-function handleControl(payload: IpcControlPayload, onExit: () => void): void {
+/** 控制指令处理（stop/restart 退出；login 触发重新登录 / 强制扫码）。 */
+export function handleControl(
+    payload: IpcControlPayload,
+    onExit: () => void,
+    onLogin?: (payload: IpcLoginControlPayload) => void,
+): void {
     if (payload.command === "stop" || payload.command === "restart") {
         onExit();
+        return;
     }
-    // login 控制指令：本轮预留（引导期登录在 bootstrap 内完成）
+    // login：透传 uin/qr（可选字段用条件展开，exactOptionalPropertyTypes 不显式赋 undefined）
+    if (payload.command === "login") {
+        onLogin?.({
+            ...(payload.uin !== undefined ? { uin: payload.uin } : {}),
+            ...(payload.qr !== undefined ? { qr: payload.qr } : {}),
+        });
+    }
 }
