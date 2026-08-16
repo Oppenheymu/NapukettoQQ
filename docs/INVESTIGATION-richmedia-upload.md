@@ -40,7 +40,7 @@
 
 ## 3. wrapper.node 二进制关键证据（字符串上下文）
 
-wrapper.node 路径：`C:\Dev\QQBot-Dev\QQNT\versions\9.9.33-51802\resources\app\wrapper.node`（114MB）。
+wrapper.node 路径：`<项目/工作目录>\QQNT\versions\9.9.33-51802\resources\app\wrapper.node`（114MB）。
 
 ### 3.1 上传链路日志（sendMsg 内部）
 
@@ -193,7 +193,7 @@ CreateFlashUploadTask name:{} totalFileCount:{} totalFileSize:{}
 
 ### 5.5 2026-08-11 重大发现：文本发送已修复（NapCat 式调用）
 
-**调研 NapCat 新版源码（`C:\Dev\QQBot-Dev\NapCatQQ-main`）发现关键差异**——**sendMsg 调用方式不对**！
+**调研 NapCat 新版源码（`<项目/工作目录>\NapCatQQ-main`）发现关键差异**——**sendMsg 调用方式不对**！
 
 | | NapCat 方式（实测有效） | 我们旧 kernel 方式（实测失败） |
 |---|---|---|
@@ -205,7 +205,7 @@ CreateFlashUploadTask name:{} totalFileCount:{} totalFileSize:{}
 **实证（diag16/diag20，2026-08-11）**：
 - 旧方式：`sendMsg(msgId, peer, ...)` → 文本也返回 `result=5`（**文本之前也失败**，并非「只有图片失败」）
 - NapCat 式：`sendMsg('0', peer+guildId, ...)` + 先注册 `onMsgInfoListUpdate` 再发送 → **文本 `result=0` + 事件 `sendStatus=2` 成功**
-- **boot 日志实证**：`接收 <- 群聊 [群1071284605] [用户3567141148]： napuketto-fixed-...`——文本真实发到群里！
+- **boot 日志实证**：`接收 <- 群聊 [群<测试群号>] [用户<测试QQ号>]： napuketto-fixed-...`——文本真实发到群里！
 
 **修复落地（kernel）**：
 1. `MsgListener` 补 `onMsgInfoListUpdate`（发送状态更新事件）
@@ -272,7 +272,7 @@ enum ElementType {
 
 **实证（diag 脚本直测，未动 koishi）**：
 - 发送返回 `ok:true` + msgId `7747252779790436789`
-- 拉群消息确认：`sendStatus:2`、`transferStatus:2`、真实 `fileUuid`（`EhS167QftZ7yY5RxqxmMPNEYkifNYBiK9hsg-woox...`）、`duration:148`、群「晓工坊」
+- 拉群消息确认：`sendStatus:2`、`transferStatus:2`、真实 `fileUuid`（`EhS167QftZ7yY5RxqxmMPNEYkifNYBiK9hsg-woox...`）、`duration:148`、群「<测试群>」
 - 进程 25s 未崩溃（旧 bug 约 15s 崩）
 
 **关键事实**：**非 silk 输入（ogg）可直接发送**——wrapper 内部把 ogg 转码为 amr 落盘 `Ptt\2026-08\Ori\{md5}.amr` 并上传，**无需外部 silk 转换**（NapCat 强制转 silk 是产品兼容性选择，非协议必需）。
@@ -287,19 +287,19 @@ enum ElementType {
 
 ## 6. 环境信息（诊断复现用）
 
-- QQ 版本：`9.9.33-51802`（`C:\Dev\QQBot-Dev\QQNT\versions\9.9.33-51802`）
-- wrapper.node：`C:\Dev\QQBot-Dev\QQNT\versions\9.9.33-51802\resources\app\wrapper.node`
-- stub 目录：`C:\Dev\QQBot-Dev\NapukettoQQ\packages\loader\native\build\stub-test-env`
-- 登录账号：`3567141148`（`u_KSEYJ2lejWKobbyGp25ShQ`）
-- 测试目标群：`1071284605`（chatType=2）
-- 测试图片：`C:\Dev\QQBot-Dev\koishi-dev\data\redseries\redposter\e12-697.jpg`（145871 字节合法 JPEG）
-- QQ 数据根：`C:\Users\xiaoxiaochen\Documents\Tencent Files\nt_qq\global`
-- 账号数据目录：`C:\Users\xiaoxiaochen\Documents\Tencent Files\nt_qq\global\3567141148\nt_qq`
-- boot 日志：`C:\Dev\QQBot-Dev\NapukettoQQ\.napuketto\3567141148\napuketto-boot.log`
+- QQ 版本：`9.9.33-51802`（`<项目/工作目录>\QQNT\versions\9.9.33-51802`）
+- wrapper.node：`<项目/工作目录>\QQNT\versions\9.9.33-51802\resources\app\wrapper.node`
+- stub 目录：`<项目/工作目录>\NapukettoQQ\packages\loader\native\build\stub-test-env`
+- 登录账号：`<测试QQ号>`（`<uid>`）
+- 测试目标群：`<测试群号>`（chatType=2）
+- 测试图片：`<项目/工作目录>\koishi-dev\data\redseries\redposter\e12-697.jpg`（145871 字节合法 JPEG）
+- QQ 数据根：`<用户目录>\Documents\Tencent Files\nt_qq\global`
+- 账号数据目录：`<用户目录>\Documents\Tencent Files\nt_qq\global\<测试QQ号>\nt_qq`
+- boot 日志：`<项目/工作目录>\NapukettoQQ\.napuketto\<测试QQ号>\napuketto-boot.log`
 
 ## 6.5 逆向工具链（2026-08-10 会话搭建，`%TEMP%` 下脚本可复用）
 
-- **MCP 服务器**：Ghidra 本体在 `C:\Dev\QQBot-Dev\ReversingTools\ghidra_12.1.2_PUBLIC`（GUI 已开，`javaw` 进程），HTTP bridge 在 `127.0.0.1:8080`（GhidraMCP 插件）；外部 MCP 服务器 = `C:\Dev\QQBot-Dev\ReversingTools\GhidraMCP-1-4\GhidraMCP-release-1-4\bridge_mcp_ghidra.py`（`python bridge_mcp_ghidra.py --transport sse --mcp-port 8081`），VS Code `.vscode/mcp.json` 连 `http://127.0.0.1:8081/sse`。
+- **MCP 服务器**：Ghidra 本体在 `<项目/工作目录>\ReversingTools\ghidra_12.1.2_PUBLIC`（GUI 已开，`javaw` 进程），HTTP bridge 在 `127.0.0.1:8080`（GhidraMCP 插件）；外部 MCP 服务器 = `<项目/工作目录>\ReversingTools\GhidraMCP-1-4\GhidraMCP-release-1-4\bridge_mcp_ghidra.py`（`python bridge_mcp_ghidra.py --transport sse --mcp-port 8081`），VS Code `.vscode/mcp.json` 连 `http://127.0.0.1:8081/sse`。
 - **磁盘二进制分析（本次主力，Ghidra 版本不对时用这个）**：Python + `capstone` + 手写 PE 解析（`%TEMP%\peinfo.py` / `find_refs_fixed.py` 等）。**关键坑**：① `SizeOfOptionalHeader` 从 COFF header 偏移 20 读（`pe_off+20`），不是固定 240；② Ghidra MCP 返回的地址是**十六进制字符串**（无 `0x` 前缀），且与磁盘 VA 可能不一致（版本差异）；③ RIP-relative 引用扫描必须区分 REX 前缀（`48 8D modrm disp32`，7 字节）与无前缀（`8D modrm disp32`，6 字节），两者都扫；④ PE section 的 RVA 是相对 image base（`0x180000000`）的。
 
 ## 7. 代码改动状态（交接时）

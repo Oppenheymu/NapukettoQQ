@@ -47,8 +47,8 @@
 > → **`startupSession.start()`**（先 init 后 start！）→ 等 `onOpentelemetryInit(is_init=true)`。
 >
 > 下一步：kernel 落地（修正 lifecycle initAndStartSession 顺序）→ 冒烟收发 → 内存实测 → loader
-> 自建宿主引导（NAPUTO_SELF_HOST 分支）。账号注意：快速登录 3054108135 会挂起（账号风控），
-> 测试用 **3567141148**（已验证成功）。
+> 自建宿主引导（NAPUTO_SELF_HOST 分支）。账号注意：快速登录 <测试QQ号> 会挂起（账号风控），
+> 测试用 **<测试QQ号>**（已验证成功）。
 
 **功能范围（用户拍板）**：**NapCat 全部能力（协议 + API）− WebUI − 插件系统**。
 **逆向边界（用户拍板：非 0 逆向）**：允许必要逆向——环境模拟/反风控（进程名伪装、
@@ -200,15 +200,15 @@ msgService 299 方法**（addKernelMsgListener/sendMsg/fetchMsgList 全在）。
 
 ## ⚠️ 关键环境事实（务必记住）
 
-- **QQ 已升级 9.9.33-51802**：`C:\Dev\QQBot-Dev\QQNT\`（wrapper.node 114MB，exports **98 个**）。
+- **QQ 已升级 9.9.33-51802**：`<项目/工作目录>\QQNT\`（wrapper.node 114MB，exports **98 个**）。
   旧 9.9.31 在 `C:\Program Files\Tencent\QQNT\`（登录服务已被腾讯下线，扫码「请下载最新版」）
 - **appid 机制**：每版本从 major.node 的 `QQAppId/` 标记提取。9.9.33-51802 = 537376818；9.9.31 = 537237765
 - **session 必须 NapCat 方式**：`getNTWrapperSession("nt_1")` 或 `StartupSessionWrapper.create()`，
   不要 `new NodeIQQNTWrapperSession()`（cpp_impl 断言失败）
 - **initConfig 必须 `externalVersion: false`**（扫码兼容）
 - **commonPath** 用 `getNTUserDataInfoConfig()` 返回路径的 `nt_qq/global`，engine desktopGlobalPath 同
-- **QQ 登录数据**：`C:\Users\xiaoxiaochen\Documents\Tencent Files\`（含 7 个账号）
-- **NapCat 参考**：`C:\Dev\NapCat.Shell.Windows.Node1`（Shell 部署包，纯 Node 模式实证 ~237MB）
+- **QQ 登录数据**：`<用户目录>\Documents\Tencent Files\`（含 7 个账号）
+- **NapCat 参考**：`<NapCat Shell 部署包目录>`（Shell 部署包，纯 Node 模式实证 ~237MB）
 
 ---
 
