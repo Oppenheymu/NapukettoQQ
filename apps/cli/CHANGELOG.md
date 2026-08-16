@@ -1,5 +1,19 @@
 # @napuketto/cli
 
+## 0.1.0
+
+### Minor Changes
+
+- 6903386: feat(cli): 启动接入 QQ 多级来源 + 自动下载管线（resolveQqFiles）——本机未装 QQ 时自动下载官方安装包并缓存，下载失败给出可操作提示
+
+### Patch Changes
+
+- 27a37df: fix(cli): 拒绝占位 QQ 号（123456 / 654321），配置模板护栏硬校验——qq 校验收紧为 5-11 位纯数字并拒绝占位值，占位常量单点定义，两处模板占位注释统一措辞
+- Updated dependencies [abbde2f]
+  - @napuketto/kernel@0.0.12
+  - @napuketto/loader@0.0.17
+  - @napuketto/adapter@0.0.15
+
 ## 0.0.22
 
 ### Patch Changes

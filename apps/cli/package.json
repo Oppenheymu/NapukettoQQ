@@ -1,6 +1,6 @@
 {
     "name": "@napuketto/cli",
-    "version": "0.0.22",
+    "version": "0.1.0",
     "description": "Command line interface for NapukettoQQ",
     "type": "module",
     "files": [
