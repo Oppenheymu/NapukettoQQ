@@ -1,5 +1,15 @@
 # @napuketto/adapter
 
+## 0.0.14
+
+### Patch Changes
+
+- 45af90f: feat(adapter): Satori guild.member.mute 从 501 桩转真实现——接入 kernel GroupApi.setMemberShutUp（Satori duration 毫秒 → QQ 秒），群成员禁言能力接通。
+- f807879: fix(adapter): OB11 record 段发送语音时，非 silk 音频自动转码为 silk（QQ 语音格式）再送 kernel；ensureSilk 上移为 adapter core 共享 helper（onebot11/satori 共用），kernel 不 import media 的解耦红线不变。
+- Updated dependencies [555e284]
+- Updated dependencies [ebc59b5]
+  - @napuketto/kernel@0.0.11
+
 ## 0.0.13
 
 ### Patch Changes

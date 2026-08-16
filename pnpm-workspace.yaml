@@ -1,6 +1,15 @@
 packages:
   - "packages/*"
   - "apps/*"
+# typescript-eslint 与 TS7 原生编译器不兼容（TS7 无 JS API）。把 @typescript-eslint/*
+# 的 typescript peer 重定向到 TS6 桥接包 @typescript/typescript6，与项目的
+# typescript@7.0.2 并存（tsc --noEmit 仍走 TS7 原生）。见
+# https://github.com/typescript-eslint/typescript-eslint/issues/10940
+overrides:
+  '@typescript-eslint/parser>typescript': 'npm:@typescript/typescript6@6.0.2'
+  '@typescript-eslint/project-service>typescript': 'npm:@typescript/typescript6@6.0.2'
+  '@typescript-eslint/tsconfig-utils>typescript': 'npm:@typescript/typescript6@6.0.2'
+  '@typescript-eslint/typescript-estree>typescript': 'npm:@typescript/typescript6@6.0.2'
 # 显式开启 workspace 链接（pnpm 11 默认关闭，仅 workspace:* 才 link）：
 # koishi 子仓库用 ~0.0.x 版本范围（非 workspace:*，因需独立发 npm），
 # 依赖版本匹配 workspace 包时 link 本地源码——否则开发时只能解析到 npm
