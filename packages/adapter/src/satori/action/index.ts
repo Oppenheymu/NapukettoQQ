@@ -24,6 +24,7 @@ import {
     GuildMemberGetAction,
     GuildMemberKickAction,
     GuildMemberListAction,
+    GuildMemberMuteAction,
 } from "./guild.js";
 import { type LoginActionDeps, LoginGetAction } from "./login.js";
 import {
@@ -51,7 +52,6 @@ const NOT_IMPLEMENTED = [
     "channel.update",
     "channel.delete",
     "channel.mute",
-    "guild.member.mute", // QQ 群禁言在 kernel 未暴露（TODO P3）
     "guild.member.role.set",
     "guild.member.role.unset",
     "guild.role.list",
@@ -88,6 +88,7 @@ export function createSatoriActionRegistry(deps: SatoriActionDeps): SatoriAction
     registry.register(new GuildMemberGetAction(guildDeps));
     registry.register(new GuildMemberListAction(guildDeps));
     registry.register(new GuildMemberKickAction(guildDeps));
+    registry.register(new GuildMemberMuteAction(guildDeps));
     registry.register(new GuildMemberApproveAction(guildDeps));
 
     const friendDeps: FriendActionDeps = api;

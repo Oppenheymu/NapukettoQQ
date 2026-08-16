@@ -1,7 +1,7 @@
 /**
  * Satori 群组动作：guild.get / guild.list / guild.approve
- * + guild.member.get / list / kick / approve
- * （guild.member.mute / role.set / role.unset / guild.role.*：501，见 registry）
+ * + guild.member.get / list / kick / mute / approve
+ * （role.set / role.unset / guild.role.*：501，见 registry）
  */
 import type { GroupMember, GroupNotify } from "@napuketto/kernel";
 import { NTGroupRequestOperateTypes } from "@napuketto/kernel";
@@ -225,6 +225,43 @@ export class GuildMemberKickAction extends BaseSatoriAction<
         const uidMap = await this.deps.uinToUid([userId]);
         const uid = uidMap.get(userId) ?? userId;
         await this.deps.groupApi.kickMember(guildId, [uid], permanent === true);
+    }
+}
+
+/** 毫秒 → 秒（QQ setMemberShutUp 单位；向下取整，0 解除禁言）。 */
+function msToSeconds(ms: number): number {
+    return Math.max(0, Math.floor(ms / 1000));
+}
+
+/** guild.member.mute 参数。 */
+const guildMemberMuteSchema = z.object({
+    guild_id: z.string(),
+    user_id: z.string(),
+    /** 禁言时长（毫秒，Satori 规范）；0 解除禁言。 */
+    duration: z.number(),
+});
+
+/** 群成员禁言（Satori duration 毫秒 → kernel setMemberShutUp 秒）。 */
+export class GuildMemberMuteAction extends BaseSatoriAction<
+    z.infer<typeof guildMemberMuteSchema>,
+    void
+> {
+    readonly name = "guild.member.mute";
+    readonly schema = guildMemberMuteSchema;
+    private readonly deps: GuildActionDeps;
+
+    constructor(deps: GuildActionDeps) {
+        super();
+        this.deps = deps;
+    }
+
+    protected async _handle(payload: z.infer<typeof guildMemberMuteSchema>): Promise<void> {
+        const { guild_id: guildId, user_id: userId, duration } = payload;
+        const uidMap = await this.deps.uinToUid([userId]);
+        const uid = uidMap.get(userId) ?? userId;
+        await this.deps.groupApi.setMemberShutUp(guildId, [
+            { uid, duration: msToSeconds(duration) },
+        ]);
     }
 }
 
