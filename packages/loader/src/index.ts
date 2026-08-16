@@ -2,7 +2,7 @@
  * @napuketto/loader 入口
  *
  * 职责：自建宿主引导（2026-08-07 唯一路线）——标准 node + stub QQNT.dll 直接
- * dlopen wrapper.node 并启动 kernel（launchSelfHost → runtime/self-host.cjs）。
+ * dlopen wrapper.node 并启动 kernel（launchSelfHost → dist/host/self-host.cjs）。
  *  - locate-qq：定位 QQ 安装 + 版本
  *  - launcher：装配环境变量 + PATH 前置 stub + spawn 标准 node
  *

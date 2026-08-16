@@ -1,5 +1,5 @@
 /**
- * Satori 频道/登录 ID 构造（QQ 平台语义，docs/design.md §9.3）
+ * Satori 频道/登录 ID 构造（QQ 平台语义）
  *
  * - 群聊：guild.id = channel.id = 群号，channel.type = TEXT（guild.plain）
  * - 私聊：channel.id = 对端 uin，channel.type = DIRECT，无 guild

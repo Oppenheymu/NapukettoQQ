@@ -4,7 +4,7 @@
  * 当前导出：类型化错误（ADR-017）、路径装配（ADR-016）、pino 日志（ADR-007）、
  * JSON 配置基类（ADR-012）、类型化事件通道（ADR-003）、QQ 版本探测（ADR-018）、
  * wrapper NAPI 引导（P1，2026-08-05 重构：loader 截获 exports 后初始化，无 koffi）。
- * 后续模块（apis / cache / login）按 docs/design.md §9 依次接入。
+ * apis / cache / login / bridge 均已接入（见下方导出）。
  */
 
 export type {

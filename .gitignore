@@ -53,13 +53,6 @@ coverage/
 # 归档区
 archive/
 
-# AI提示词区域，这些文件实际上不应该被同步
-AGENTS.md
-docs/
-
-# 设计文档
-**/docs/design.md
-
 # token
 .npmrc
 

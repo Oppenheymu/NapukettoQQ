@@ -20,7 +20,7 @@
 - **原生 API 直接交互** — 直接调用 `wrapper.node` 官方 NAPI 导出接口（`getMsgService` 等），不经过代理层，稳定高效
 - **高性能自建宿主** — 标准 Node 进程 + stub QQNT.dll 符号转发，直接加载原生模块，内存占用目标百兆级，远低于注入方案
 - **无侵入运行** — 不拉起 QQ 客户端、不注入任何进程、零磁盘篡改；仅运行期内存加载，升级/卸载零残留
-- **OneBot 11 深度兼容** — 60+ 动作覆盖消息/群/好友/系统管理，HTTP / WebSocket / 反向 WebSocket 多实例
+- **OneBot 11 深度兼容** — 79 动作（含别名变体）覆盖消息/群/好友/系统管理，HTTP / WebSocket / 反向 WebSocket 多实例
 - **多账号 Supervisor** — 单进程编排多账号，崩溃自动重启
 - **单一 TOML 配置** — 项目根 `napuketto.toml`，配置与数据目录解耦
 
@@ -38,7 +38,7 @@ flowchart TD
     end
 
     subgraph PROTO["协议 / 传输层"]
-        adapter["@napuketto/adapter<br/>OneBot 11 协议适配（core 框架 + 60+ 动作）"]
+        adapter["@napuketto/adapter<br/>OneBot 11 协议适配（core 框架 + 79 动作）"]
         network["@napuketto/network<br/>协议无关传输（HTTP / WebSocket / 广播）"]
         media["@napuketto/media<br/>媒体转码（silk / ffmpeg）"]
     end
@@ -71,7 +71,7 @@ flowchart TD
 
 | 包 | 职责 |
 |---|---|
-| [@napuketto/adapter](./packages/adapter) | 协议适配器：core 框架 + onebot11（60+ 动作） |
+| [@napuketto/adapter](./packages/adapter) | 协议适配器：core 框架 + onebot11（79 动作，含别名变体） |
 | [@napuketto/network](./packages/network) | 协议无关传输层（HTTP / WebSocket / 广播） |
 | [@napuketto/media](./packages/media) | 媒体转码（silk / ffmpeg） |
 

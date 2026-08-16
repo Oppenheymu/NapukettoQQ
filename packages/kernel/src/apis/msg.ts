@@ -181,7 +181,7 @@ export class MsgApi {
      *
      * ⚠️ silk 格式：QQ 语音协议为 silk v3。传入非 silk（ogg/mp3 等）时发送器
      * 可能拒绝上传（待实测）。转换点预留：此处直接放置原文件，后续接入
-     * ogg → PCM → silk 编码器（外部 ffmpeg + silk-wasm，见 docs/design.md）。
+     * ogg → PCM → silk 编码器（外部 ffmpeg + silk-wasm；@napuketto/media 的 `encodePcmToSilk` 已实现，本路径未接线）。
      */
     private async preparePttElement(path: string): Promise<SendMessageElement> {
         const file = await statFile(path);

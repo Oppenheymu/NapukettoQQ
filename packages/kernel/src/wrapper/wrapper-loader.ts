@@ -253,7 +253,7 @@ export function startSession(ctx: WrapperContext): void {
  *  2. createSession（`new NodeIQQNTWrapperSession()`）——实测可用，默认路径
  *  （getMainSession 实测为空壳：service 全 null + 缺 startNT，仅 probe 探测参考）
  *
- * 由 loader runtime/boot.cjs 在 QQ 主进程内调用（import kernel dist 后）。
+ * 由 kernel NapukettoCore（core.ts）装配调用；loader 自建宿主 bootstrap 也直接调用作回退。
  * 返回 WrapperContext；失败抛 KernelError。
  */
 export function startNapuketto(options: StartNapukettoOptions): WrapperContext {
