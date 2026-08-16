@@ -2,7 +2,7 @@
  * Satori 发方向资源处理（从 element-convert.ts 拆分，2026-08-08 FTA 优化）
  *
  * - resolveAsset：internal: 路径 / http(s) 下载 / 本地路径原样
- * - ensureSilk：非 silk 语音（wav/pcm）转 silk（QQ 语音格式，失败原样返回）
+ * - ensureSilk：非 silk 语音（任意音频格式）转 silk（QQ 语音格式，失败原样返回）
  */
 import { mkdir, open, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -59,14 +59,14 @@ async function downloadAsset(url: string, cacheDir: string): Promise<string> {
     return filePath;
 }
 
-/** 语音转码：非 silk 输入（wav/pcm）转 silk（QQ 语音格式）。 */
+/** 语音转码：非 silk 输入（任意音频格式，经 media 归一化）转 silk（QQ 语音格式）。 */
 export async function ensureSilk(path: string): Promise<string> {
     try {
         const header = await readFileHead(path);
         if (header.startsWith("#!SILK")) {
             return path;
         }
-        // wav/pcm → silk（转码失败原样返回，由 kernel 发送时兜底）
+        // 任意音频 → silk（转码失败原样返回，由 kernel 发送时兜底）
         return await encodePcmToSilk(path);
     } catch {
         return path;
