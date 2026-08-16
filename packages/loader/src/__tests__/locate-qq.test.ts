@@ -11,7 +11,14 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { linuxSevenZipUrl, resolveQqInstall, wslMappedPath } from "../locate-qq.js";
+import {
+    ensureQqFiles,
+    linuxSevenZipUrl,
+    QQ_FILES_DIR_NAME,
+    resolveQqFiles,
+    resolveQqInstall,
+    wslMappedPath,
+} from "../locate-qq.js";
 
 /** 临时安装目录（每个测试独立，测后清理）。 */
 const tmpDirs: string[] = [];
@@ -26,6 +33,23 @@ function makeFakeInstall(): { root: string; version: string } {
     writeFileSync(join(wrapperDir, "wrapper.node"), "");
     writeFileSync(join(root, "QQ.exe"), "");
     return { root, version };
+}
+
+/** 构造数据根下 QQ 文件缓存（L2 命中用）：<dataRoot>/qq-files/<v>/versions/<v>/resources/app/wrapper.node。 */
+function makeFakeCache(dataRoot: string): string {
+    const version = "9.9.33-51802";
+    const appDir = join(
+        dataRoot,
+        QQ_FILES_DIR_NAME,
+        version,
+        "versions",
+        version,
+        "resources",
+        "app",
+    );
+    mkdirSync(appDir, { recursive: true });
+    writeFileSync(join(appDir, "wrapper.node"), "");
+    return version;
 }
 
 afterEach(() => {
@@ -123,5 +147,50 @@ describe("resolveQqInstall", () => {
         const info = resolveQqInstall(`${root}\\QQ.exe`);
         expect(info.installDir).toBe(root);
         expect(info.version).toBe(version);
+    });
+});
+
+describe("resolveQqFiles", () => {
+    it("L0：qqFilesDir 显式文件根 → cached", async () => {
+        const { root, version } = makeFakeInstall();
+        const info = await resolveQqFiles({ qqFilesDir: root });
+        expect(info.source).toBe("cached");
+        expect(info.version).toBe(version);
+        expect(info.wrapperPath).toBe(
+            join(root, "versions", version, "resources", "app", "wrapper.node"),
+        );
+    });
+
+    it("L1：qqPath 显式安装 → local", async () => {
+        const { root, version } = makeFakeInstall();
+        const info = await resolveQqFiles({ qqPath: join(root, "QQ.exe") });
+        expect(info.source).toBe("local");
+        expect(info.version).toBe(version);
+        expect(info.wrapperPath).toBe(
+            join(root, "versions", version, "resources", "app", "wrapper.node"),
+        );
+    });
+});
+
+describe("ensureQqFiles", () => {
+    it("L2 缓存命中：已有完整版本 → cached 且不触发下载", async () => {
+        const dataRoot = mkdtempSync(join(tmpdir(), "napuketto-data-"));
+        tmpDirs.push(dataRoot);
+        const version = makeFakeCache(dataRoot);
+        const info = await ensureQqFiles({ dataRoot });
+        expect(info.source).toBe("cached");
+        expect(info.version).toBe(version);
+        expect(info.wrapperPath).toBe(
+            join(
+                dataRoot,
+                QQ_FILES_DIR_NAME,
+                version,
+                "versions",
+                version,
+                "resources",
+                "app",
+                "wrapper.node",
+            ),
+        );
     });
 });
