@@ -165,14 +165,24 @@ function brandColor(pm: PackageManager): (text: string) => string {
     }
 }
 
-/** 生成后的项目骨架文件树（提升完成感，dim 树枝 + 品牌色勾）。 */
-function renderTree(dirName: string, brand: (t: string) => string): string {
-    return [
+/**
+ * 生成后的项目骨架文件树（提升完成感，dim 树枝 + 品牌色勾）。
+ * yarn 时多一项空 yarn.lock（隔离独立项目，见 scaffold.ts 注释），树枝符按是否
+ * 含该文件调整（末项用 └──，其余用 ├──）。
+ */
+function renderTree(dirName: string, brand: (t: string) => string, pm: PackageManager): string {
+    const hasLock = pm === "yarn";
+    const tomlBranch = hasLock ? "  ├── " : "  └── ";
+    const lines = [
         brand("✓") + dim(" 生成的文件："),
         dim(`  ${dirName}/`),
         dim("  ├── ") + cyan("package.json"),
-        dim("  └── ") + cyan("napuketto.toml"),
-    ].join("\n");
+        dim(tomlBranch) + cyan("napuketto.toml"),
+    ];
+    if (hasLock) {
+        lines.push(dim("  └── ") + cyan("yarn.lock") + dim("  # 空：隔离独立项目"));
+    }
+    return lines.join("\n");
 }
 
 /** 询问是否移除现有文件并继续（目标目录非空时）。 */
@@ -198,6 +208,36 @@ function quoteShellArg(arg: string): string {
     return SHELL_WHITESPACE_RE.test(arg) ? `"${arg.replace(QUOTE_RE, '\\"')}"` : arg;
 }
 
+/**
+ * 去掉 NODE_OPTIONS 里 yarn dlx 注入的 PnP 加载器条目（--require/--import 后跟
+ * .pnp.cjs / .pnp.loader.mjs 路径），其余选项原样保留。
+ *
+ * 背景：`yarn create napukettoqq` 实为 `yarn dlx`，脚手架本身跑在临时 PnP
+ * 项目里，其 PnP 钩子经 NODE_OPTIONS 注入进程环境。install 子进程若继承该变量，
+ * corepack 解析 yarn 版本时 `require("corepack/package.json")` 会被 PnP 拦截，
+ * 报「tried to access corepack, but it isn't declared in your dependencies」。
+ * 生成的用户项目与脚手架的 PnP 上下文无关，剥掉即可恢复标准 Node 解析。
+ */
+function subprocessEnv(): NodeJS.ProcessEnv {
+    const env = { ...process.env };
+    const nodeOptions = env["NODE_OPTIONS"];
+    if (nodeOptions !== undefined) {
+        // 逐个剥掉 PnP 加载器条目（路径含空格时 Yarn 不生成，\S* 足够）
+        const cleaned = nodeOptions
+            .replace(/(?:^|\s)--(?:require|import)(?:=|\s+)\S*\.pnp\.(?:cjs|loader\.mjs)/g, "")
+            .replace(/\s{2,}/g, " ")
+            .trim();
+        if (cleaned !== nodeOptions) {
+            if (cleaned === "") {
+                delete env["NODE_OPTIONS"];
+            } else {
+                env["NODE_OPTIONS"] = cleaned;
+            }
+        }
+    }
+    return env;
+}
+
 /** 前台执行命令（stdio 继承，用户可见进度/交互），返回退出码。 */
 function runInteractive(bin: string, args: string[], cwd: string): Promise<number> {
     return new Promise((resolve) => {
@@ -211,6 +251,7 @@ function runInteractive(bin: string, args: string[], cwd: string): Promise<numbe
             shell ? [] : args,
             {
                 cwd,
+                env: subprocessEnv(),
                 stdio: "inherit",
                 windowsHide: false,
                 shell,
@@ -285,9 +326,9 @@ async function main(): Promise<void> {
     // 生成骨架（spinner 进度）
     const s = spinner();
     s.start(`正在生成项目骨架 ${dirName} ...`);
-    const result = await scaffoldProject(dirName, overwrite);
+    const result = await scaffoldProject(dirName, overwrite, pm);
     s.stop(`项目骨架已生成：${dirName}`);
-    log.message(renderTree(dirName, brand));
+    log.message(renderTree(dirName, brand, pm));
     log.success(`位置：${result.dir}`);
 
     // 自动安装依赖（用调用方包管理器）

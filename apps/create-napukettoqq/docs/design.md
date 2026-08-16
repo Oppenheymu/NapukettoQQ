@@ -57,6 +57,45 @@
 - 生成的项目本身与包管理器无关（仅依赖 + scripts），只是脚手架的 install/start
   命令按检测结果动态生成。**脚手架代码写死 pnpm 是缺陷，已修。**
 
+### 3.1 yarn dlx 的 PnP 环境污染（2026-08-XX 修复）
+
+`yarn create napukettoqq` 实为 `yarn dlx`：脚手架本身跑在 yarn 临时创建的 PnP
+项目里，其 PnP 钩子（`--require .../.pnp.cjs` / `--import .../.pnp.loader.mjs`）
+经 **NODE_OPTIONS** 注入并随环境变量传给子进程。若 install 子进程（`yarn install`）
+继承该变量，corepack 解析 yarn 版本时 `require("corepack/package.json")` 会被 PnP
+拦截，报「Your application tried to access corepack, but it isn't declared in your
+dependencies」。
+
+修复：`runInteractive` 的 install spawn 传入 `env: subprocessEnv()`——把
+NODE_OPTIONS 里 PnP 加载器条目剥掉（其余选项原样保留），恢复标准 Node 解析。
+生成的用户项目与脚手架 PnP 上下文无关，剥除无副作用；pnpm/npm create 不注入
+PnP，该函数对它们等价于原样透传。
+
+### 3.2 yarn install 向上探测父目录 workspace（2026-08-17 修复）
+
+`yarn install` 在子目录执行时会向上探测父目录的 `package.json`/`yarn.lock`，
+若用户父目录（典型如 `~`，开发者常因历史操作遗落 `package.json`）含这些文件，
+yarn 会把生成目录误当作其 workspace 子包并报：
+
+```
+Usage Error: The nearest package directory (<生成目录>) doesn't seem to be
+part of the project declared in <父目录>.
+- If <父目录> isn't intended to be a project, remove any yarn.lock and/or
+  package.json file there.
+- Finally, if <父目录> is fine and you intend <生成目录> to be treated as
+  a completely separate project (not even a workspace), create an empty
+  yarn.lock file in it.
+```
+
+修复：`scaffoldProject` 在 `pm === "yarn"` 时额外写一个**空 `yarn.lock`** 到
+生成目录——yarn 自身报错信息也建议此做法。空锁文件让 yarn 把生成目录视为独立
+项目根，阻断向上探测；`yarn install` 随后会把它重写为真实锁文件，无运行时
+副作用。pnpm/npm 无此向上探测行为，不写。
+
+> 注：此前 `scaffoldProject` 的 JSDoc 已声称「yarn 时额外生成空 yarn.lock」，
+> 但代码未实现（文档谎言），且 `index.ts` 调用时也没把 `pm` 传入（默认 pnpm），
+> 双重失效。本次修复同步补齐代码与调用链。
+
 ## 4. CLI 参数与交互（2026-08-07 美化 v3，交互层用 @clack/prompts）
 
 ```bash
@@ -122,11 +161,14 @@ create-napukettoqq -h             # 打印 usage 退出
 <目标目录>/
 ├── package.json      # name=派生名；dependencies: { "@napuketto/cli": "<版本>" }
 │                     # scripts.start = "napuketto"（经 node_modules/.bin）
-└── napuketto.toml    # 与 cli configTemplate 同款内容（dataDir = ~/.napuketto 插值）
+├── napuketto.toml    # 与 cli configTemplate 同款内容（dataDir = ~/.napuketto 插值）
+└── yarn.lock         # 仅 yarn 生成（空文件，隔离独立项目，见 §3.2）
 ```
 
-**仅两个文件**（2026-08-07 用户质疑后精简）：用户项目是「运行壳」，生成后不写
-代码、不开仓库，readme/.gitignore 是死文件，已移除。启动指引由脚手架交互直接打印。
+**默认两个文件**（pnpm/npm）：用户项目是「运行壳」，生成后不写代码、不开仓库，
+readme/.gitignore 是死文件，已移除。启动指引由脚手架交互直接打印。**yarn 多一个
+空 `yarn.lock`**（§3.2，阻断向上探测父目录 workspace），`yarn install` 会重写为
+真实锁文件。
 
 **模板独立化（2026-08-07）**：模板文件放 `apps/create-napukettoqq/templates/`（随
 npm 包发布，`files` 含 `templates/`），运行时 `scaffold.ts` 读取 + `{{key}}`

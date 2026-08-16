@@ -1,5 +1,11 @@
 # create-napukettoqq
 
+## 0.2.23
+
+### Patch Changes
+
+- fix(create): 修复 `yarn create napukettoqq` 自动 install 时 corepack 报「tried to access corepack, but it isn't declared in your dependencies」——install 子进程剥离继承的 PnP 加载器条目（NODE_OPTIONS 中的 `--require/--import .../.pnp.cjs|.pnp.loader.mjs`），避免脚手架临时 PnP 上下文拦截 corepack 的 `require("corepack/package.json")`，其余 NODE_OPTIONS 原样保留。
+
 ## 0.2.22
 
 ### Patch Changes
