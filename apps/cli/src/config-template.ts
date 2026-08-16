@@ -6,6 +6,10 @@
  * 账号内**（[accounts.onebot11] / [accounts.satori]）；账号必填（至少一个）。
  * dataDir 不再写死（缺省 = 项目根/.napuketto，跨平台），模板保持可移植。
  */
+
+/** 保留占位 QQ 号（模板默认值）：必须替换为真实 QQ 号，否则启动校验报错。 */
+export const RESERVED_PLACEHOLDER_QINS = ["123456", "654321"] as const;
+
 export function configTemplate(): string {
     return `# ============================================================
 # NapukettoQQ 全局配置文件
@@ -37,7 +41,7 @@ restartDelayMs = 2000
 # ------------------------------------------------------------
 
 [[accounts]]
-qq = "123456"            # QQ 号（必填）
+qq = "${RESERVED_PLACEHOLDER_QINS[0]}"            # 占位值，必须替换为你的 QQ 号，否则启动报错
 enabled = true           # 是否启用（可选，缺省 true）
 
 [accounts.onebot11]      # 该账号的 OneBot 11 配置（无此段 = 不启用 OB11）
@@ -91,7 +95,7 @@ port = 3001
 
 # 第二个账号示例（只开 Satori）：
 # [[accounts]]
-# qq = "654321"
+# qq = "${RESERVED_PLACEHOLDER_QINS[1]}"
 # [accounts.satori]
 # # token = ""                           # 可选：Satori 鉴权 token
 # [[accounts.satori.httpServers]]        # HTTP RPC（POST /v1/{resource}.{method}）

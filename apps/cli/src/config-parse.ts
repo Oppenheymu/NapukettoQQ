@@ -7,11 +7,15 @@
  * 协议段为宽松对象，装配时由对应协议包的 zod schema 严格校验。
  */
 import { kernelError, resolveDataRoot } from "@napuketto/kernel";
+import { RESERVED_PLACEHOLDER_QINS } from "./config-template.js";
 
 /** 默认自动重启。 */
 const DEFAULT_AUTO_RESTART = true;
 /** 默认重启延迟（毫秒）。 */
 const DEFAULT_RESTART_DELAY_MS = 2000;
+
+/** QQ 号格式：纯数字 5-11 位（QQ 号合法范围，勿写死 11 位）。 */
+const QQ_IN_FORMAT_RE = /^\d{5,11}$/;
 
 /** 协议段键（宽松对象，装配时 zod 严格校验）。 */
 type ProtocolKey = "onebot11" | "satori";
@@ -123,6 +127,15 @@ function parseAccount(item: unknown): CliAccountConfig {
     const { qq, enabled } = item as { qq?: unknown; enabled?: unknown };
     if (typeof qq !== "string" || qq === "") {
         throw kernelError("主配置账号缺少非空 qq", "INVALID_PARAM");
+    }
+    if (!QQ_IN_FORMAT_RE.test(qq)) {
+        throw kernelError("主配置账号 qq 必须是 5-11 位纯数字 QQ 号", "INVALID_PARAM");
+    }
+    if (RESERVED_PLACEHOLDER_QINS.some((placeholder) => placeholder === qq)) {
+        throw kernelError(
+            `主配置账号 qq "${qq}" 是模板占位值，请编辑配置文件填入真实 QQ 号后再启动`,
+            "INVALID_PARAM",
+        );
     }
     const out: CliAccountConfig = { qq };
     if (enabled !== undefined) {
