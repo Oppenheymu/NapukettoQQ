@@ -8,6 +8,14 @@
             "appid": 537376818,
             "source": "official",
             "buildDate": "2026-07-30"
+        },
+        {
+            "version": "9.9.33-52230",
+            "url": "https://qqdl.gtimg.cn/qqfile/QQNT/9.9.33/release/497e2f1f/QQ_9.9.33_260813_x64_01.exe",
+            "sha256": "b25c0d3ce9df764074a9118d0ded927e1b2d7ebf60e306112e8df18a040ec492",
+            "appid": 0,
+            "source": "official",
+            "buildDate": "2026-08-13"
         }
     ]
 }
