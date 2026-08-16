@@ -29,6 +29,35 @@ const SEND_STATUS = { FAILED: 0, SENDING: 1, SUCCESS: 2, SUCCESS_NO_SEQ: 3 } as 
 /** 发送确认超时（毫秒）。 */
 const SEND_CONFIRM_TIMEOUT_MS = 15_000;
 
+/**
+ * PIC 元素发送契约值（NapCat 同款发送契约值，未逐字段校准）。
+ * 下列固定值均为实测调通的 wrapper 发送契约（picType / picSubType /
+ * picWidth / picHeight / original / thumbFileSize），只抽常量不改值——改值会破坏图片发送。
+ */
+const PIC_TYPE = 1000;
+const PIC_SUB_TYPE = 0;
+const PIC_WIDTH = 0;
+const PIC_HEIGHT = 0;
+const PIC_ORIGINAL = true;
+const PIC_THUMB_FILE_SIZE = 0;
+
+/**
+ * PTT 元素发送契约值（NapCat 同款发送契约值，未逐字段校准）。
+ * silk v3 协议：下列固定值均为实测调通的 wrapper 发送契约（formatType / voiceType /
+ * voiceChangeType / canConvert2Text / playState / autoConvertText / storeID /
+ * otherBusinessInfo.aiVoiceType），只抽常量不改值——改值会破坏语音发送。
+ */
+const PTT_FORMAT_TYPE = 1;
+const PTT_VOICE_TYPE = 1;
+const PTT_VOICE_CHANGE_TYPE = 0;
+const PTT_CAN_CONVERT_2_TEXT = true;
+const PTT_PLAY_STATE = 1;
+const PTT_AUTO_CONVERT_TEXT = 0;
+const PTT_STORE_ID = 0;
+const PTT_AI_VOICE_TYPE = 0;
+/** 假波形数组（占位波形）：无真实振幅数据时发送的固定占位，silk v3 协议契约值。 */
+const PTT_WAVE_AMPLITUDES = [0, 18, 9, 23, 16, 17, 16, 15, 44, 17, 24, 20, 14, 15, 17];
+
 /** 读文件 stat（富媒体发送预处理；文件不存在抛 INVALID_PARAM）。 */
 async function statFile(path: string): Promise<{ size: number }> {
     try {
@@ -156,16 +185,16 @@ export class MsgApi {
             picElement: {
                 md5HexStr: md5,
                 fileSize: String(file.size),
-                picWidth: 0,
-                picHeight: 0,
+                picWidth: PIC_WIDTH,
+                picHeight: PIC_HEIGHT,
                 fileName,
                 sourcePath: relPath,
-                original: true,
-                picType: 1000,
-                picSubType: 0,
+                original: PIC_ORIGINAL,
+                picType: PIC_TYPE,
+                picSubType: PIC_SUB_TYPE,
                 fileUuid: "",
                 fileSubId: "",
-                thumbFileSize: 0,
+                thumbFileSize: PIC_THUMB_FILE_SIZE,
                 summary: "",
             },
         };
@@ -199,16 +228,16 @@ export class MsgApi {
                 md5HexStr: md5,
                 fileSize: String(file.size),
                 duration,
-                formatType: 1,
-                voiceType: 1,
-                voiceChangeType: 0,
-                canConvert2Text: true,
-                waveAmplitudes: [0, 18, 9, 23, 16, 17, 16, 15, 44, 17, 24, 20, 14, 15, 17],
+                formatType: PTT_FORMAT_TYPE,
+                voiceType: PTT_VOICE_TYPE,
+                voiceChangeType: PTT_VOICE_CHANGE_TYPE,
+                canConvert2Text: PTT_CAN_CONVERT_2_TEXT,
+                waveAmplitudes: PTT_WAVE_AMPLITUDES,
                 fileSubId: "",
-                playState: 1,
-                autoConvertText: 0,
-                storeID: 0,
-                otherBusinessInfo: { aiVoiceType: 0 },
+                playState: PTT_PLAY_STATE,
+                autoConvertText: PTT_AUTO_CONVERT_TEXT,
+                storeID: PTT_STORE_ID,
+                otherBusinessInfo: { aiVoiceType: PTT_AI_VOICE_TYPE },
             },
         };
     }
@@ -225,15 +254,17 @@ export class MsgApi {
     ): Promise<string> {
         const service = this.service;
         const util = this.util;
-        // getRichMediaFilePathForGuild：QQ 内部目标路径（纯文件名，相对数据根）
+        // getRichMediaFilePathForGuild：QQ 内部目标路径（纯文件名，相对数据根）。
+        // 固定入参 elementSubType / thumbSize / downloadType 为 NapCat 同款发送契约值
+        // （未逐字段校准），发送方向固定，改值会破坏富媒体路径计算。
         const relPath = service.getRichMediaFilePathForGuild({
             md5HexStr: md5,
             fileName,
             elementType,
-            elementSubType: 0,
-            thumbSize: 0,
+            elementSubType: 0, // 元素子类型（发送固定 0）
+            thumbSize: 0, // 缩略图尺寸（发送固定 0，不预生成缩略图）
             needCreate: true,
-            downloadType: 1,
+            downloadType: 1, // 下载类型（发送固定 1）
             file_uuid: "",
         });
         if (util !== null) {
