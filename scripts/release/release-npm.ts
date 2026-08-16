@@ -3,11 +3,11 @@
  * release-npm.ts：npm 逐个发布 CLI（发布链最后一环）。
  *
  * 用法（Node 22.7+ 原生 type stripping，零构建直接跑）：
- *   node scripts/release-npm.ts            # 拓扑序逐个 npm publish --access public
- *   node scripts/release-npm.ts --dry-run  # 只跑 npm publish --dry-run（打包检查，不发布）
+ *   node scripts/release/release-npm.ts            # 拓扑序逐个 npm publish --access public
+ *   node scripts/release/release-npm.ts --dry-run  # 只跑 npm publish --dry-run（打包检查，不发布）
  *
  * 前置（由根 package.json 的 release 链保证）：
- *   1. node scripts/sync-adapter-deps.ts —— koishi 适配器的 kernel/loader
+ *   1. node scripts/release/sync-adapter-deps.ts —— koishi 适配器的 kernel/loader
  *      依赖已刷成 ~latest
  *   2. pnpm -r build —— 各包 dist 已构建
  *
@@ -39,7 +39,7 @@ import {
 } from "./release-npm-core.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const REPO_ROOT = resolve(__dirname, "..");
+const REPO_ROOT = resolve(__dirname, "../..");
 const REGISTRY = process.env["NAPKETTO_REGISTRY"] ?? "https://registry.npmjs.org";
 
 /** 命令行参数解析结果。 */

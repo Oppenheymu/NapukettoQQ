@@ -2,7 +2,7 @@
  * wine-login-smoke.mjs：Linux/wine 完整链路登录冒烟（P2 Step 2）。
  *
  * 用法（WSL2 内，从项目根）：
- *   node scripts/wine-login-smoke.mjs [--ext4-dir <dir>] [--uin <QQ号>]
+ *   node scripts/wine/wine-login-smoke.mjs [--ext4-dir <dir>] [--uin <QQ号>]
  *
  * 流程（复用自建宿主全链路，与 Windows 完全一致，仅换宿主为 wine + win-node）：
  *   1. 确保 QQ 文件（P1 ensureQqFiles）
@@ -24,7 +24,7 @@ import {
     ensureQqFiles,
     ensureWinNode,
     toWinePath,
-} from "../packages/loader/dist/index.mjs";
+} from "../../packages/loader/dist/index.mjs";
 
 // ── 参数 ──
 const argDir = process.argv.find((a) => a.startsWith("--ext4-dir="));
@@ -79,7 +79,7 @@ if (uin !== undefined) {
 //    self-host.cjs 是单文件 CJS bundle，kernel dist 是单文件 ESM bundle——
 //    把这两个复制到 ext4 运行时目录即可（wine 内路径过 toWinePath）。
 const scriptDir = dirname(fileURLToPath(import.meta.url));
-const projectRoot = resolve(scriptDir, "..");
+const projectRoot = resolve(scriptDir, "../..");
 const srcSelfHost = join(projectRoot, "packages", "loader", "dist", "host", "self-host.cjs");
 const srcKernel = join(projectRoot, "packages", "kernel", "dist", "index.mjs");
 if (!existsSync(srcSelfHost)) {
@@ -99,10 +99,10 @@ copyFileSync(srcKernel, kernelPath);
 console.log(`[wine-login] 运行时已复制到 ext4: ${runtimeDir}`);
 console.log(`[wine-login] wine 跑 self-host（路径 Z:\\ 视角）…`);
 
-// 4.5 kernel entry 环境变量（指向 ext4 的 kernel.mjs，wine 视角 Z:\）
+// 6. kernel entry 环境变量（指向 ext4 的 kernel.mjs，wine 视角 Z:\）
 env["NAPUTO_KERNEL_ENTRY"] = toWinePath(kernelPath);
 
-// 6. spawn wine + win-node + self-host.cjs（登录长驻，观察后退出）
+// 7. spawn wine + win-node + self-host.cjs（登录长驻，观察后退出）
 const wineBin = process.env["NAPUTO_WINE"] ?? "wine";
 const child = spawn(wineBin, [winNode.exePath, toWinePath(selfHostPath)], {
     cwd: dataRoot,
