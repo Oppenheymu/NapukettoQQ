@@ -9,7 +9,7 @@
 > 3. **架构事实确认**：整个业务栈（kernel + adapter + network + cli）都在 wine 内跑 Windows node.exe，对外只暴露**无状态的标准 OneBot11/Satori 网络协议端口（localhost）**——高内聚低耦合，符合云原生微服务理念。
 > 4. **wine 版本 = wine-stable**（或发行版默认）；Docker 内仅 `wine64`（省 100MB+ 镜像体积）。不追新：QQNT 核心不依赖 wine-devel 特性，稳定优先防 regression。
 > 5. **路径映射确认**：launcher 层必须做 Linux 路径 → wine `Z:\` 路径转换（`toWinePath`），写入 §3.2。
-> 6. **版本清单自动化立项**：探测腾讯公开版本接口/官方下载页，有则 CI 自动更新，无则人肉维护 + `NAPUTO_QQ_URL` 兜底。**2026-08-12 实测：官方下载页可爬，探测方案可行**（见 §2.2）。
+> 6. **版本清单自动化立项**：探测腾讯公开版本接口/官方下载页，有则 CI 自动更新，无则人肉维护 + `NAPUTO_QQ_URL` 兜底。**2026-08-13 实测：官方下载配置 JSON（SPA 数据源）可读，探测方案可行**（见 §2.2）。
 > 7. **下载实现 = Node 内置 `https` + `crypto`**（无第三方依赖，轻依赖即美德）。
 > 8. **解包工具 = 内置 `7za.exe`**（LGPL 可分发，Windows 纯净环境兜底）+ Linux/Docker 用系统 `p7zip-full`。
 > 9. **ARM = 第一版只承诺 `linux/amd64`**，ARM（M1/M2/树莓派）列为后置 P2/P3。
@@ -80,17 +80,22 @@ https://qqdl.gtimg.cn/qqfile/QQNT/9.9.33/release/a0ce07ad/QQ_9.9.33_260730_x64_0
         └─ 主域固定      └─ 版本号  └─ release  └─ 哈希(随版本变)  └─ QQ_<版本>_<构建日期>_x64_01.exe
 ```
 
-**版本探测（2026-08-12 实测结论）**：
+**版本探测（2026-08-13 实测结论，替代 08-12 旧结论）**：
 
 - ❌ 无公开 JSON 版本接口：`dldir1.qq.com/qqfile/qq/QQNT/version.json` 等候选均 404。
-- ✅ **官方下载页可爬**（GitOps 自动化的基础）：
-  - `https://im.qq.com/qq/download/`（官方首页下载入口，HTML 内含最新版链接）
-  - `https://im.qq.com/index/#/windows`（版本列表页，HTML 内含 64 位/32 位/ARM 三变体链接 + 版本号 + 构建日期）
-  - 实测抓到的链接与用户给的一致：`QQ_9.9.33_260730_x64_01.exe`。
-  - 两页均为**纯 HTML 含链接**（非 JS 渲染），可直接 `https` GET + 正则提取。
+- ⚠️ 2026-08-13 实测：im.qq.com 已改版为 **Vite SPA**——HTML 壳仅 ~7KB，下载链接不再内联，
+  08-12 的「两页纯 HTML 可正则」结论失效。
+- ✅ **官方下载配置 JSON（SPA 运行时数据源，可直接 GET，GitOps 基础）**：
+  - 主：`https://im.qq.com/proxy/domain/qq-web.cdn-go.cn/im.qq.com_new/latest/rainbow/pcConfig.json`
+    （生产；`Windows.version` + `Windows.updateDate` + `Windows.ntDownloadX64Url`）
+  - 备：`https://pre.cdn-go.cn/qq-web/im.qq.com_new/latest/rainbow/pcConfig.json`（可能滞后，脚本带防降级）
+  - 实测：`9.9.33` / `2026-08-13` / `QQ_9.9.33_260813_x64_01.exe`。
+- **构建号不在配置里**（`9.9.33-51802` 的 `51802`）：藏在安装包内部 `versions/<版本>` 目录名，
+  用内置 7-Zip 列归档（`7z l`）解析——清单 version 必须与安装包内部目录名一致（运行时
+  `extractWrapperFiles` 按版本目录名定位 wrapper.node）。
 - **CI 自动更新方案（GitHub Actions）**：
-  - Cron Job（如每日）抓取上述两页 → 正则提取最新版 URL + 版本号 + 日期；
-  - 与 `qq-releases.json` 比对，发现新版本 → 自动提 PR 更新清单（GitOps 免维护）。
+  - Cron Job（每日）调 `scripts/update-qq-releases.ts`（CI/本地共用）→ 抓配置 → 下载算 sha256
+    → 解析版本目录 → 更新清单 → 发现变更自动提 PR（GitOps 免维护）。
 
 **版本清单机制（qq-releases.json）**：
 
@@ -322,7 +327,7 @@ packages/loader/
 
 1. **wine 版本**：`wine-stable`（发行版默认）；Docker 仅 `wine64`。
 2. **路径映射**：`toWinePath` 纯函数入 launcher（§3.2），所有传给 wine 子进程的路径过转换。
-3. **版本探测**：已立项，实测官方下载页可爬（§2.2），CI Cron 自动更新清单。
+3. **版本探测**：已立项，实测官方下载配置 JSON（SPA 数据源）可读（§2.2）；CI Cron 自动更新清单已落地（`scripts/update-qq-releases.ts` + `.github/workflows/update-qq-releases.yml`）。
 4. **下载实现**：Node 内置 `https` + `crypto`（sha256），无第三方依赖。
 5. **解包工具**：内置 `7za.exe`（LGPL 合规可分发）+ Linux/Docker 系统 `p7zip-full`。
 6. **ARM**：第一版只承诺 `linux/amd64`，ARM 列后置 P2/P3。

@@ -1,0 +1,48 @@
+name: update-qq-releases
+
+# qq-releases.json 自动维护：每日 cron + 手动触发。
+# 脚本 scripts/update-qq-releases.ts 与本地共用（纯 Node 零第三方依赖）：
+#   抓取 QQ 官方下载配置（rainbow pcConfig.json，im.qq.com 新版 SPA 的数据源）
+#   → 解析最新版号与下载链接 → 下载安装包计算 sha256 → 用内置 7-Zip 解析安装包
+#   内部版本目录名（含构建号）→ 更新 qq-releases.json（保留历史、按版本递增）。
+# 任何一步失败：脚本非零退出且不写清单；无变更时 no-op，不产生 PR。
+on:
+    schedule:
+        # 每天 UTC 03:17（避开整点高峰）
+        - cron: "17 3 * * *"
+    workflow_dispatch:
+
+permissions:
+    contents: write
+    pull-requests: write
+
+jobs:
+    update:
+        runs-on: ubuntu-latest
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v4
+
+            - name: Setup Node
+              uses: actions/setup-node@v4
+              with:
+                  node-version: 24
+
+            - name: 更新 qq-releases.json
+              run: node scripts/update-qq-releases.ts
+
+            - name: 有变更则提 PR
+              uses: peter-evans/create-pull-request@v7
+              with:
+                  token: ${{ secrets.GITHUB_TOKEN }}
+                  commit-message: "chore(loader): 更新 qq-releases.json 到最新 QQ 版本"
+                  branch: chore/qq-releases-update
+                  delete-branch: true
+                  title: "chore(loader): 自动更新 qq-releases.json"
+                  body: |
+                      由 update-qq-releases workflow 自动生成。
+                      解析 QQ 官方下载配置 + 下载安装包计算 sha256 + 解析版本目录。
+                      请核对版本号与 sha256 后合并。
+                  labels: |
+                      chore
+                      automated

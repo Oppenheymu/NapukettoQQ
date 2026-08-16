@@ -2,8 +2,14 @@
  * qq-releases.ts：版本清单读取（P1）。
  *
  * 运行时从包根 qq-releases.json 读取（发布时 files 含它，安装后位于
- * node_modules/@napuketto/loader/qq-releases.json）。清单由 CI/社区 PR 维护
- * （设计文档 §2.2）。NAPUTO_QQ_URL 可运行时覆盖下载地址。
+ * node_modules/@napuketto/loader/qq-releases.json）。
+ *
+ * 维护机制（真实存在，非「声称」）：清单由 CI 自动维护——
+ * .github/workflows/update-qq-releases.yml（每日 cron + 手动触发）调用
+ * scripts/update-qq-releases.ts（纯 Node，与本地共用），抓取 QQ 官方下载配置
+ * 解析最新版 + 下载安装包计算 sha256 + 解析安装包内部版本目录后更新本清单
+ * （保留历史条目、known 按版本递增）。社区 PR 仍可手动补充。NAPUTO_QQ_URL
+ * 可运行时覆盖下载地址（用户拿到新链接时用）。
  */
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -18,7 +24,7 @@ export interface QqReleaseEntry {
     url: string;
     /** sha256（十六进制小写）；空串 = 尚未校验（首次录入时 CI 计算后填入）。 */
     sha256: string;
-    /** appid（预知信息，运行时仍从 major.node 解析）。 */
+    /** appid（预知信息，运行时仍从 major.node 解析；0 = 尚未解析/待运行时补）。 */
     appid: number;
     /** 来源标记（official = 官方）。 */
     source: string;
