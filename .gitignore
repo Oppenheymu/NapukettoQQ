@@ -63,5 +63,6 @@ docs/
 # token
 .npmrc
 
-
+# 一些缓存？
 .pnpm-store
+.repo/
