@@ -175,6 +175,11 @@ async function activateSession(
             qqDataRoot && typeof kernel.resolveQqGlobalPath === "function"
                 ? kernel.resolveQqGlobalPath(qqDataRoot)
                 : bootEnv.dataDir || ".";
+        // 设备指纹 guid：loginService.getMachineGuid()（kernel 原生反射，反风控）。
+        const machineGuid =
+            typeof kernel.readMachineGuid === "function"
+                ? kernel.readMachineGuid(ctx.loginService)
+                : "";
         const sessionConfig = kernel.buildSessionConfig({
             appid: Appid,
             fullVersion: bootEnv.qqVersion || "",
@@ -182,6 +187,7 @@ async function activateSession(
             selfUid: loginResult.uid,
             accountPath,
             downloadPath: join(accountPath, "NapCat", "temp"),
+            machineGuid,
         });
         const listener = kernel.createLifecycleSessionListener();
         // initAndStartSession 已修正：先 session.init 再 startupSession.start()

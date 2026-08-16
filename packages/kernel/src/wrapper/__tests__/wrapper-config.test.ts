@@ -10,7 +10,12 @@ import { rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { parseAppidFromMajor, resolveAppidQua } from "../wrapper-config.js";
+import {
+    buildSessionConfig,
+    parseAppidFromMajor,
+    readMachineGuid,
+    resolveAppidQua,
+} from "../wrapper-config.js";
 
 /** 临时文件路径。 */
 let majorPath: string;
@@ -58,5 +63,51 @@ describe("resolveAppidQua", () => {
         const result = resolveAppidQua("9.9.31-49919", undefined);
         expect(result.appid).toBe("537237765");
         expect(result.qua).toContain("9.9.31-49919");
+    });
+});
+
+describe("readMachineGuid", () => {
+    it("getMachineGuid 返回字符串 → 原样返回", () => {
+        const guid = "guid-1234-5678";
+        const loginService = { getMachineGuid: () => guid };
+        expect(readMachineGuid(loginService)).toBe(guid);
+    });
+
+    it("无 getMachineGuid 方法 → 空串", () => {
+        expect(readMachineGuid({ initConfig: () => undefined })).toBe("");
+        expect(readMachineGuid(undefined)).toBe("");
+        expect(readMachineGuid(null)).toBe("");
+    });
+
+    it("getMachineGuid 抛错 / 返回非字符串 → 空串", () => {
+        expect(
+            readMachineGuid({
+                getMachineGuid: () => {
+                    throw new Error("boom");
+                },
+            }),
+        ).toBe("");
+        expect(readMachineGuid({ getMachineGuid: () => 123 })).toBe("");
+    });
+});
+
+describe("buildSessionConfig guid", () => {
+    const base = {
+        appid: "537376818",
+        fullVersion: "9.9.33-51802",
+        selfUin: "3567141148",
+        selfUid: "u_uid",
+        accountPath: "C:/data/nt_qq/global",
+        downloadPath: "C:/data/nt_qq/global/NapCat/temp",
+    };
+
+    it("machineGuid 传入 → deviceInfo.guid 填充", () => {
+        const cfg = buildSessionConfig({ ...base, machineGuid: "guid-abc" });
+        expect(cfg.deviceInfo.guid).toBe("guid-abc");
+    });
+
+    it("machineGuid 缺省 → deviceInfo.guid 空串", () => {
+        const cfg = buildSessionConfig(base);
+        expect(cfg.deviceInfo.guid).toBe("");
     });
 });

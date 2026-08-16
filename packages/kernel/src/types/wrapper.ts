@@ -184,6 +184,8 @@ export interface NodeIKernelLoginService {
     quickLoginWithUin(uin: string): Promise<unknown>;
     getQRCodePicture(): boolean;
     getMsfStatus(): number;
+    /** 设备指纹 guid（wrapper.node 字符串分析实证，2026-08-12；无 getMachineId）。 */
+    getMachineGuid(): string;
 }
 
 /** NodeIKernelLoginService 构造器（含静态 get）。 */

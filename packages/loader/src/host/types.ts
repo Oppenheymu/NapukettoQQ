@@ -126,6 +126,8 @@ export interface KernelLike {
     // session
     getMainSession?: (ctx: CoreContextLike) => unknown;
     buildSessionConfig(options: unknown): unknown;
+    /** 读取设备指纹 guid（loginService.getMachineGuid，kernel 原生反射；缺省空串）。 */
+    readMachineGuid?: (loginService: unknown) => string;
     createLifecycleSessionListener(): unknown;
     initAndStartSession(
         ctx: CoreContextLike,

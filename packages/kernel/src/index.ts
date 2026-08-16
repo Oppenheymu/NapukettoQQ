@@ -159,6 +159,7 @@ export {
     buildLoginConfig,
     buildSessionConfig,
     parseAppidFromMajor,
+    readMachineGuid,
     resolveAppidQua,
 } from "./wrapper/wrapper-config.js";
 export type {

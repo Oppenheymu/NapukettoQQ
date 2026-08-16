@@ -155,14 +155,18 @@ export interface SessionConfigOptions {
     selfUid: string;
     accountPath: string;
     downloadPath: string;
+    /** 设备指纹 guid（来自 loginService.getMachineGuid()；缺省空串）。 */
+    machineGuid?: string;
 }
 
 /** 生成 session 初始化配置（登录成功后调用）。 */
 export function buildSessionConfig(options: SessionConfigOptions): WrapperSessionInitConfig {
-    const { appid, fullVersion, selfUin, selfUid, accountPath, downloadPath } = options;
+    const { appid, fullVersion, selfUin, selfUid, accountPath, downloadPath, machineGuid } =
+        options;
     const { platVer, osVersion, devType } = systemInfo();
     const deviceInfo: DeviceInfo = {
-        guid: "", // TODO: 从 LoginService 获取（getMachineId）
+        // 设备指纹 guid：loginService.getMachineGuid()（wrapper 探测确认，无 getMachineId 方法）。
+        guid: machineGuid ?? "",
         buildVer: fullVersion,
         localId: 2052,
         devName: hostname(),
@@ -206,4 +210,23 @@ export function buildSessionConfig(options: SessionConfigOptions): WrapperSessio
         deviceInfo,
         deviceConfig: '{"appearance":{"isSplitViewMode":true},"msg":{}}',
     };
+}
+
+/**
+ * 读取设备指纹 guid（wrapper.node 字符串分析实证，2026-08-12）：
+ * NodeIKernelLoginService::getMachineGuid（0 参，返回机器 GUID 字符串）。
+ * 无 getMachineId 方法——TODO 里的方法名不存在，等价方法是 getMachineGuid。
+ * 失败（无该方法 / 调用抛错 / 返回值非字符串）兜底空串。
+ */
+export function readMachineGuid(loginService: unknown): string {
+    try {
+        const fn = (loginService as Record<string, unknown> | null | undefined)?.["getMachineGuid"];
+        if (typeof fn !== "function") {
+            return "";
+        }
+        const value: unknown = fn.call(loginService);
+        return typeof value === "string" ? value : "";
+    } catch {
+        return "";
+    }
 }

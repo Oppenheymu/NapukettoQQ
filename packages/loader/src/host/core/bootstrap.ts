@@ -62,6 +62,11 @@ async function quickLoginAndStartSession(
     }
     const loginResult = await kernel.quickLogin(ctx, {});
     log(`bootstrap: quickLogin OK, uin=${loginResult.uin}, uid=${loginResult.uid}`);
+    // 设备指纹 guid：loginService.getMachineGuid()（kernel 原生反射，反风控）。
+    const machineGuid =
+        typeof kernel.readMachineGuid === "function"
+            ? kernel.readMachineGuid(ctx.loginService)
+            : "";
     const sessionConfig = kernel.buildSessionConfig({
         appid: Appid,
         fullVersion: bootEnv.qqVersion || "",
@@ -69,6 +74,7 @@ async function quickLoginAndStartSession(
         selfUid: loginResult.uid,
         accountPath: bootEnv.dataDir || ".",
         downloadPath: join(bootEnv.dataDir || ".", "temp"),
+        machineGuid,
     });
     const listener = kernel.createLifecycleSessionListener();
     await kernel.initAndStartSession(ctx, sessionConfig, listener, {
