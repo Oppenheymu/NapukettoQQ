@@ -8,17 +8,17 @@
  *   create-napukettoqq                # intro + 交互问部署文件夹名（默认 NapukettoQQ）
  *   create-napukettoqq my-bot         # 位置参数指定文件夹名，跳过命名交互
  *   create-napukettoqq my-bot -f      # 目标目录非空时强制清空覆盖
- *   create-napukettoqq -y             # 全默认（命名用默认值、启动询问用默认 Y）
+ *   create-napukettoqq -y             # 全默认（命名用默认值）
  *   create-napukettoqq -h             # 打印帮助
  *
  * 流程：intro → 问文件夹名 → 目标目录准备（非空需确认清空）→ spinner 生成骨架
- *   （package.json / napuketto.toml / readme.md / .gitignore）→ 用调用方包管理器
- *   自动 install → 询问是否现在启动（默认 Y）→ 前台运行 → outro 收尾。
+ *   （package.json / napuketto.toml）→ 用调用方包管理器自动 install →
+ *   打开 napuketto.toml 供填写 QQ 号（不自动启动）+ 打印启动指引 → outro 收尾。
  */
 
 import { spawn } from "node:child_process";
 import { readFileSync } from "node:fs";
-import { relative } from "node:path";
+import { join, relative } from "node:path";
 import process from "node:process";
 import { cancel, confirm, intro, isCancel, log, outro, spinner, text } from "@clack/prompts";
 import pc from "picocolors";
@@ -56,6 +56,32 @@ const HELP = `  用法: create-napukettoqq [name] [选项]
     -y, --yes      跳过所有交互提示（使用默认值）
     -h, --help     显示本帮助
 `;
+
+/** 配置文件文件名（生成后引导用户填写 QQ 号）。 */
+const CONFIG_FILE = "napuketto.toml";
+
+/**
+ * 用系统默认应用打开文件（引导编辑配置用；尽力而为，失败不阻塞创建流程）。
+ * Windows：经 cmd.exe 执行内建 start（CreateProcess 不认内建命令）；
+ * macOS/Linux：open / xdg-open。detached + unref：不挂到脚手架进程树。
+ */
+function openInEditor(file: string): void {
+    try {
+        if (process.platform === "win32") {
+            // start 首参是窗口标题（"" 占位），文件路径带引号防空格
+            spawn("cmd.exe", ["/d", "/s", "/c", `start "" "${file}"`], {
+                stdio: "ignore",
+                windowsHide: true,
+                detached: true,
+            }).unref();
+            return;
+        }
+        const opener = process.platform === "darwin" ? "open" : "xdg-open";
+        spawn(opener, [file], { stdio: "ignore", detached: true }).unref();
+    } catch {
+        // 打开失败不影响创建流程（提示仍会打印）
+    }
+}
 
 /** 解析命令行参数（flag 仅三个，手写保持自包含，不引 yargs-parser）。 */
 function parseArgs(argv: string[]): CliOptions {
@@ -154,22 +180,6 @@ async function confirmRemove(dirName: string): Promise<boolean> {
     const ok = await confirm({
         message: `目录 "${dirName}" 已存在且非空，移除现有文件并继续？`,
         initialValue: false,
-    });
-    if (isCancel(ok)) {
-        cancel("操作已取消");
-        process.exit(0);
-    }
-    return ok;
-}
-
-/** 询问是否现在启动（默认 Y；-y 直接返回 true）。 */
-async function askStartNow(yes: boolean): Promise<boolean> {
-    if (yes) {
-        return true;
-    }
-    const ok = await confirm({
-        message: "是否现在启动？",
-        initialValue: true,
     });
     if (isCancel(ok)) {
         cancel("操作已取消");
@@ -285,22 +295,16 @@ async function main(): Promise<void> {
         return;
     }
 
-    // 询问是否现在启动（默认 Y → 前台运行）
-    if (await askStartNow(opts.yes)) {
-        log.info("正在启动 NapukettoQQ（Ctrl+C 停止）...\n");
-        const startCode = await runInteractive(pmBin(pm), ["start"], result.dir);
-        if (startCode !== 0) {
-            process.exitCode = startCode;
-        }
-    } else {
-        log.message("你可以稍后这样启动：");
-        if (targetDir !== process.cwd()) {
-            const related = relative(process.cwd(), targetDir);
-            log.step(`cd ${related}`);
-        }
-        log.step(brand(`${pm} start -q <你的QQ号>`));
-        log.message("配置说明见项目内 napuketto.toml。");
+    // 不自动启动（2026-08-16 用户拍板）：打开配置文件供填写 QQ 号 + 打印启动指引。
+    // 占位账号（qq = "123456"）启动无意义，且自动前台运行会占用终端。
+    log.message(`请编辑 ${CONFIG_FILE} 填写你的 QQ 号（[[accounts]] 段 qq 字段），然后启动：`);
+    if (targetDir !== process.cwd()) {
+        const related = relative(process.cwd(), targetDir);
+        log.step(`cd ${related}`);
     }
+    log.step(brand(`${pm} start`));
+    log.message("启动后 Ctrl+C 停止；协议与端口配置见项目内 napuketto.toml。");
+    openInEditor(join(result.dir, CONFIG_FILE));
 
     outro("完成。");
 }

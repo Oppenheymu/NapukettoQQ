@@ -177,3 +177,59 @@ export function topoSort(pkgs: readonly WorkspacePkg[]): WorkspacePkg[] {
     }
     return ordered.map((name) => byName.get(name) as WorkspacePkg);
 }
+
+/** package.json 中可含 workspace:* 依赖的字段（发布时必须全部改写）。 */
+const WORKSPACE_DEP_FIELDS = [
+    "dependencies",
+    "devDependencies",
+    "optionalDependencies",
+    "peerDependencies",
+] as const;
+
+/** 单个依赖改写记录。 */
+export interface WorkspaceRewrite {
+    /** 所在字段（dependencies 等）。 */
+    field: string;
+    /** 依赖包名。 */
+    dep: string;
+    /** 改写后的版本范围（caret）。 */
+    range: string;
+}
+
+/**
+ * 把 package.json 文本中所有 `workspace:*` 依赖改写为 caret 真实版本
+ * （npm 不认 workspace 协议，发布前必须改写；`changeset version` 正常跑时
+ * 已改写，此处幂等兜底——2026-08-16 修复：曾绕过 changeset 直发，published
+ * 包泄漏 workspace:*，yarn create / npm install 被迫交互选版本或直接失败）。
+ *
+ * 返回改写后的 JSON 文本与改写记录；无 workspace:* 时原样返回（不改写不重排）。
+ * 工作区内找不到对应包版本 → 抛错（无法生成真实范围，发布链中断）。
+ */
+export function rewriteWorkspaceProtocol(
+    raw: string,
+    workspaceVersions: ReadonlyMap<string, string>,
+): { text: string; changes: WorkspaceRewrite[] } {
+    const pkg = JSON.parse(raw) as Record<string, unknown>;
+    const changes: WorkspaceRewrite[] = [];
+    for (const field of WORKSPACE_DEP_FIELDS) {
+        const deps = pkg[field];
+        if (typeof deps !== "object" || deps === null) {
+            continue;
+        }
+        for (const [dep, range] of Object.entries(deps as Record<string, unknown>)) {
+            if (range !== "workspace:*") {
+                continue;
+            }
+            const version = workspaceVersions.get(dep);
+            if (version === undefined) {
+                throw new Error(
+                    `依赖 ${dep} 声明为 workspace:*，但工作区内找不到该包版本（无法改写为真实版本号）`,
+                );
+            }
+            (deps as Record<string, string>)[dep] = `^${version}`;
+            changes.push({ field, dep, range: `^${version}` });
+        }
+    }
+    const text = changes.length > 0 ? `${JSON.stringify(pkg, null, 4)}\n` : raw;
+    return { text, changes };
+}

@@ -17,25 +17,50 @@ import process from "node:process";
 /** 模板目录（相对本文件：src 与 dist 都在包根下，../templates 均指向包根/templates）。 */
 const TEMPLATES = new URL("../templates/", import.meta.url);
 
+/** npm registry 查询超时（毫秒；兜底链路，超时不阻塞脚手架）。 */
+const REGISTRY_TIMEOUT_MS = 3000;
+
+/** npm registry 上 @napuketto/cli 的最新版本（查询失败返回 null）。 */
+async function fetchLatestCliVersion(): Promise<string | null> {
+    try {
+        const res = await fetch("https://registry.npmjs.org/@napuketto/cli/latest", {
+            signal: AbortSignal.timeout(REGISTRY_TIMEOUT_MS),
+        });
+        if (!res.ok) {
+            return null;
+        }
+        const json = (await res.json()) as { version?: unknown };
+        return typeof json.version === "string" && json.version !== "" ? json.version : null;
+    } catch {
+        return null;
+    }
+}
+
 /**
- * 生成的用户项目所依赖的 @napuketto/cli 版本范围。
- * 运行时从脚手架自身 package.json 读取（dependencies["@napuketto/cli"]）——
- * 发版时 changesets 升版本 + pnpm publish 把 workspace:* 替换为实际版本，
- * 模板版本自动跟随，无需手动同步（比硬编码常量可靠）。
+ * 生成的用户项目所依赖的 @napuketto/cli 版本范围（自动最新版，不交互选版本）。
+ * 优先级：
+ *   1. 脚手架自身 package.json 的 dependencies["@napuketto/cli"]（发版时 changesets
+ *      升版本 + 发布改写为实际版本，模板版本自动跟随）
+ *   2. npm registry 查询最新版（自身依赖缺失 / 仍是 workspace:*（发布泄漏兜底）——
+ *      2026-08-16 修复：published 包曾泄漏 workspace:*，yarn create 被迫交互选版本）
+ *   3. ^0.0.1（离线 / registry 查询失败兜底）
+ * workspace:* 只在本地 monorepo 直跑脚手架时出现（发布后被替换为实际版本）。
  */
-function cliVersionRange(): string {
+async function cliVersionRange(): Promise<string> {
     try {
         const ownPkg = JSON.parse(
             readFileSync(new URL("../package.json", import.meta.url), "utf8"),
         ) as { dependencies?: Record<string, string> };
         const range = ownPkg.dependencies?.["@napuketto/cli"];
-        // workspace:* 仅在本地 monorepo 直跑脚手架时出现（发布后 pnpm 替换为实际版本），
-        // 此时兜底默认范围，避免生成的用户项目 install 失败
         if (range !== undefined && range !== "workspace:*") {
             return range;
         }
     } catch {
-        // package.json 缺失（异常环境）→ 兜底默认范围
+        // package.json 缺失（异常环境）→ 走 registry 兜底
+    }
+    const latest = await fetchLatestCliVersion();
+    if (latest !== null) {
+        return `^${latest}`;
     }
     return "^0.0.1";
 }
@@ -161,7 +186,7 @@ export async function scaffoldProject(dirName: string, overwrite = false): Promi
     // 渲染变量（napuketto.toml 模板不再插值 dataDir——缺省 = 项目根/.napuketto，跨平台）
     const vars: Record<string, string> = {
         packageName,
-        cliVersion: cliVersionRange(),
+        cliVersion: await cliVersionRange(),
     };
     // 用户项目是「运行壳」：不开发代码，只需 package.json（依赖 + start）+ napuketto.toml（配置）
     // 模板文件为 templates/<name>.tmpl（.tmpl 后缀避免 TOML/JSON 语言服务把占位符当非法语法）

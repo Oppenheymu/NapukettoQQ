@@ -7,11 +7,16 @@
  *   node scripts/release-npm.ts --dry-run  # 只跑 npm publish --dry-run（打包检查，不发布）
  *
  * 前置（由根 package.json 的 release 链保证）：
- *   1. pnpm changeset version —— workspace:* 已改写为真实版本号（caret），
- *      npm 不认 workspace:* 协议，缺失会直接发布失败
- *   2. node scripts/sync-adapter-deps.ts —— koishi 适配器的 kernel/loader
+ *   1. node scripts/sync-adapter-deps.ts —— koishi 适配器的 kernel/loader
  *      依赖已刷成 ~latest
- *   3. pnpm -r build —— 各包 dist 已构建
+ *   2. pnpm -r build —— 各包 dist 已构建
+ *
+ * workspace:* 改写（2026-08-16 修复，本脚本自保证，不再依赖 changeset）：
+ *   发布前把每个包 package.json 中 workspace:* 依赖改写为 caret 真实版本
+ *   （按工作区当前版本），发布后恢复原样（git 保持 workspace:* 约定）。
+ *   changeset version 正常跑时已改写 → 本步骤幂等空转；
+ *   绕过 changeset 手动 bump 直发 → 本步骤兜底，杜绝 published 包泄漏
+ *   workspace:*（yarn create / npm install 曾被迫交互选版本或直接失败）。
  *
  * 行为：
  *   - 发布前查询 registry：本地版本已存在（changeset 未 bump 的包）→ 跳过
@@ -22,9 +27,16 @@
  * 纯逻辑在 ./release-npm-core.ts（可单测），本文件只做参数解析 + 进程执行。
  */
 import { spawnSync } from "node:child_process";
-import { dirname, resolve } from "node:path";
+import { readFileSync, writeFileSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { discoverPackages, planPublish, topoSort } from "./release-npm-core.ts";
+import type { WorkspacePkg } from "./release-npm-core.ts";
+import {
+    discoverPackages,
+    planPublish,
+    rewriteWorkspaceProtocol,
+    topoSort,
+} from "./release-npm-core.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(__dirname, "..");
@@ -115,15 +127,47 @@ export async function main(argv: readonly string[]): Promise<number> {
     for (const pkg of ordered) {
         console.log(`  ${pkg.name}@${pkg.version}`);
     }
+    // workspace:* → caret 真实版本映射（按工作区当前版本，改写在 publish 前、恢复在 finally）
+    const workspaceVersions = new Map(pkgs.map((pkg) => [pkg.name, pkg.version]));
+    return await publishOrdered(ordered, workspaceVersions, dryRun);
+}
+
+/**
+ * 按拓扑序逐个发布（publish 前改写 workspace:* → 真实版本，finally 恢复原样）。
+ * 任一包失败 → 返回非 0（后续包依赖残缺上游，立即中断）。
+ */
+async function publishOrdered(
+    ordered: readonly WorkspacePkg[],
+    workspaceVersions: ReadonlyMap<string, string>,
+    dryRun: boolean,
+): Promise<number> {
     for (const pkg of ordered) {
-        const code = publishPkg(pkg, dryRun);
-        if (code !== 0) {
+        const manifestPath = join(pkg.dir, "package.json");
+        const original = readFileSync(manifestPath, "utf8");
+        const { text, changes } = rewriteWorkspaceProtocol(original, workspaceVersions);
+        if (changes.length > 0) {
+            writeFileSync(manifestPath, text, "utf8");
             console.log(
-                `[release-npm] ❌ 发布失败: ${pkg.name}@${pkg.version}（退出码 ${code}），已中断`,
+                `[release-npm] ✍️  ${pkg.name}: workspace:* → 真实版本 ${changes
+                    .map((c) => `${c.dep}@${c.range}`)
+                    .join(", ")}`,
             );
-            return code;
         }
-        console.log(`[release-npm] ✅ 已发布: ${pkg.name}@${pkg.version}`);
+        try {
+            const code = publishPkg(pkg, dryRun);
+            if (code !== 0) {
+                console.log(
+                    `[release-npm] ❌ 发布失败: ${pkg.name}@${pkg.version}（退出码 ${code}），已中断`,
+                );
+                return code;
+            }
+            console.log(`[release-npm] ✅ 已发布: ${pkg.name}@${pkg.version}`);
+        } finally {
+            if (changes.length > 0) {
+                writeFileSync(manifestPath, original, "utf8");
+                console.log(`[release-npm] ↩ 已恢复 ${pkg.name}/package.json（workspace:*）`);
+            }
+        }
     }
     console.log(`[release-npm] 全部完成（${dryRun ? "dry-run" : "已发布"}）`);
     return 0;
