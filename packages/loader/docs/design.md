@@ -172,6 +172,9 @@ Linux 主机（无 QQ 安装）
 - **Windows 版 node.exe 来源**：`https://nodejs.org/dist/<版本>/node-v<版本>-win-x64.zip`（Node 官方，非腾讯）。
   与腾讯二进制不同——这是**开源软件官方发行版**，但为保守起见同样**不内置**，运行时自动下载到
   `<数据根>/runtime/win-node/`（可被 `NAPUTO_WIN_NODE_PATH` 覆盖）。
+  > ⚠️ **升级 Windows node 需手动改常量**：`win-node.ts` 的 `DEFAULT_WIN_NODE_VERSION`（当前
+  > `v24.16.0`）为兜底版本（`NAPUTO_WIN_NODE_VERSION` 可覆盖）。nodejs.org/dist 保留历史版本
+  > 不会 404，但 pin 死旧 patch 收不到安全更新——升级 node 时记得同步 bump 该常量。
 - **wine 来源**：Linux 用户用系统包管理器安装（`apt install wine` 等）；Docker 镜像内预装（G3）。
 
 ### 3.2 launcher 的平台分支

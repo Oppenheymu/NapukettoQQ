@@ -96,5 +96,9 @@ async function unzipNode(zipPath: string, cacheDir: string): Promise<void> {
     await rm(tmpDir, { recursive: true, force: true });
 }
 
-/** 默认 Windows node 版本（latest v24，LTS 线；可被环境变量/参数覆盖）。 */
+/**
+ * 默认 Windows node 版本（latest v24，LTS 线；可被环境变量/参数覆盖）。
+ * ⚠️ nodejs.org/dist 保留历史版本不会 404，但 pin 死旧 patch 收不到安全更新——
+ * 升级 Windows node 时记得同步 bump 此常量（或经 NAPUTO_WIN_NODE_VERSION 覆盖）。
+ */
 const DEFAULT_WIN_NODE_VERSION = "v24.16.0";

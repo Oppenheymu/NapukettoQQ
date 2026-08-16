@@ -14,6 +14,10 @@ import type { IncomingMessage } from "node:http";
 import { get, type RequestOptions } from "node:https";
 import { dirname } from "node:path";
 import process from "node:process";
+import { loaderVersion } from "./package-info.js";
+
+/** 下载请求 User-Agent（运行时读本包版本，失败兜底 0.0.0）。 */
+const USER_AGENT = `napuketto-loader/${loaderVersion()}`;
 
 /** 下载选项。 */
 export interface DownloadOptions {
@@ -48,7 +52,7 @@ function httpsGet(url: string, timeoutMs: number): Promise<IncomingMessage> {
     return new Promise((resolve, reject) => {
         const request = (currentUrl: string, redirects: number): void => {
             const opts: RequestOptions = {
-                headers: { "user-agent": "napuketto-loader/0.0.x" },
+                headers: { "user-agent": USER_AGENT },
             };
             const req = get(currentUrl, opts, (res) => {
                 const status = res.statusCode ?? 0;
