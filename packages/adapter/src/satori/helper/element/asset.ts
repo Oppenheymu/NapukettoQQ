@@ -2,12 +2,11 @@
  * Satori 发方向资源处理（从 element-convert.ts 拆分，2026-08-08 FTA 优化）
  *
  * - resolveAsset：internal: 路径 / http(s) 下载 / 本地路径原样
- * - ensureSilk：非 silk 语音（任意音频格式）转 silk（QQ 语音格式，失败原样返回）
+ * - ensureSilk 已上移到 adapter core（core/media.ts，onebot11/satori 共用）
  */
-import { mkdir, open, writeFile } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { kernelError } from "@napuketto/kernel";
-import { encodePcmToSilk } from "@napuketto/media";
 
 /** internal:{platform}/{user.id}/{path} → 本地路径（取 _tmp 之后的路径，回落 cacheDir）。 */
 function resolveInternalPath(src: string): string {
@@ -57,30 +56,4 @@ async function downloadAsset(url: string, cacheDir: string): Promise<string> {
     const filePath = join(cacheDir, safeName);
     await writeFile(filePath, buf);
     return filePath;
-}
-
-/** 语音转码：非 silk 输入（任意音频格式，经 media 归一化）转 silk（QQ 语音格式）。 */
-export async function ensureSilk(path: string): Promise<string> {
-    try {
-        const header = await readFileHead(path);
-        if (header.startsWith("#!SILK")) {
-            return path;
-        }
-        // 任意音频 → silk（转码失败原样返回，由 kernel 发送时兜底）
-        return await encodePcmToSilk(path);
-    } catch {
-        return path;
-    }
-}
-
-/** 读文件头 8 字节（判断格式）。 */
-async function readFileHead(path: string): Promise<string> {
-    const handle = await open(path, "r");
-    try {
-        const buf = Buffer.alloc(8);
-        await handle.read(buf, 0, 8, 0);
-        return buf.toString("utf8");
-    } finally {
-        await handle.close();
-    }
 }

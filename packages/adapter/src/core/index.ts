@@ -10,3 +10,4 @@ export { BaseAction } from "./base-action.js";
 export type { ProtocolHooks } from "./base-protocol-adapter.js";
 export { BaseProtocolAdapter } from "./base-protocol-adapter.js";
 export { ProtocolConfig } from "./config.js";
+export { ensureSilk } from "./media.js";

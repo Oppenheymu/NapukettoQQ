@@ -7,7 +7,8 @@
  * deps 类型来自 deps.js（独立契约文件，避免与 element-convert 循环引用）。
  */
 import type { CanonicalElement } from "@napuketto/kernel";
-import { ensureSilk, resolveAsset } from "./asset.js";
+import { ensureSilk } from "../../../core/media.js";
+import { resolveAsset } from "./asset.js";
 import type { SatoriToCanonicalDeps } from "./deps.js";
 import type { SatoriElement } from "./element.js";
 

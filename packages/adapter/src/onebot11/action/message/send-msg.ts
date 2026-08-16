@@ -11,7 +11,7 @@
 
 import type { CanonicalElement } from "@napuketto/kernel";
 import { z } from "zod";
-import { BaseAction } from "../../../core/index.js";
+import { BaseAction, ensureSilk } from "../../../core/index.js";
 import type { OneBotApi } from "../../api/one-bot-api.js";
 import { applySendContext, cqMessageToCanonical, segmentsToCanonical } from "../../helper/index.js";
 import type { OB11MessageSegment } from "../../types/index.js";
@@ -73,6 +73,8 @@ export async function sendOb11Message(
             return el;
         });
     }
+    // 语音段：非 silk 输入转 silk（QQ 语音协议）；转换在协议层完成，kernel 不背 media（红线）
+    canonical = await ensureVoiceSilk(canonical);
     const { msgId } = await deps.msgApi.sendMessage(peer, canonical);
     return { message_id: deps.messageUnique.alloc(msgId, peer) };
 }
@@ -102,4 +104,17 @@ function escapeText(text: string): string {
         .replaceAll("[", "&#91;")
         .replaceAll("]", "&#93;")
         .replaceAll(",", "&#44;");
+}
+
+/** 语音元素统一转 silk：非 silk 自动转码（QQ 语音格式），已是 silk 原样。 */
+async function ensureVoiceSilk(elements: CanonicalElement[]): Promise<CanonicalElement[]> {
+    const out: CanonicalElement[] = [];
+    for (const el of elements) {
+        if (el.type === "voice") {
+            out.push({ ...el, path: await ensureSilk(el.path) });
+        } else {
+            out.push(el);
+        }
+    }
+    return out;
 }

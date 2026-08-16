@@ -179,9 +179,9 @@ export class MsgApi {
      * 且发送后进程崩溃重启（supervisor 自动拉起）。完整字段（NapCat 同款，
      * formatType/voiceType/canConvert2Text/waveAmplitudes 等）消除该错误。
      *
-     * ⚠️ silk 格式：QQ 语音协议为 silk v3。传入非 silk（ogg/mp3 等）时发送器
-     * 可能拒绝上传（待实测）。转换点预留：此处直接放置原文件，后续接入
-     * ogg → PCM → silk 编码器（外部 ffmpeg + silk-wasm；@napuketto/media 的 `encodePcmToSilk` 已实现，本路径未接线）。
+     * ⚠️ silk 格式：QQ 语音协议为 silk v3。非 silk → silk 的转码在协议层
+     * （adapter，@napuketto/media 的 encodePcmToSilk，2026-08-12 接线）完成，
+     * 此处接收的已是 silk 路径，仅做放置。kernel 不 import media（解耦红线）。
      */
     private async preparePttElement(path: string): Promise<SendMessageElement> {
         const file = await statFile(path);
