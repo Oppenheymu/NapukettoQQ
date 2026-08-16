@@ -1,8 +1,15 @@
 /**
  * cli boot：单账号启动序列（2026-08-07 用户拍板：只保留自建宿主）
  *
- * locate QQ（取版本/wrapper 路径）→ 解析各包 dist 入口 → launchSelfHost
+ * resolveQqFiles（多级来源定位 QQ 原生文件）→ 解析各包 dist 入口 → launchSelfHost
  * （标准 node + stub QQNT.dll 直接 dlopen，不拉起 QQ / 不注入）→ 常驻。
+ *
+ * QQ 原生文件来源（本机未装 QQ 也能跑，2026-08-16 接入）：
+ *   L0 NAPUTO_QQ_FILES 显式文件根 → L1 本机 QQ 安装（--qq-path / NAPUTO_QQ_PATH /
+ *      注册表 / 常见路径）→ L2 数据根缓存 <数据根>/qq-files/<版本> → 全部缺失时
+ *      自动下载官方安装包（sha256 校验 + 7z 解包 + 提取缓存，幂等）。
+ * cached 来源下 qq.qqPath 为语义占位（缓存目录无 QQ.exe）——launchSelfHost 只消费
+ * qq.wrapperPath / qq.version（NAPUTO_QQ_PATH 仅注入、self-host 未读取），占位安全。
  *
  * 不写业务逻辑：kernel 装配 + 登录 + 协议装配全部在 self-host.cjs → boot-bootstrap.js 完成。
  * 路线 B（拉起 QQ + 注入）已淘汰（launchQqWithLoader 仅历史回退，cli 不再调用）。
@@ -17,7 +24,7 @@ import {
     defaultStubDir,
     launchSelfHost,
     type QqInstallInfo,
-    resolveQqInstall,
+    resolveQqFiles,
 } from "@napuketto/loader";
 import QRCode from "qrcode";
 import { logger } from "./logger.js";
@@ -104,7 +111,24 @@ function renderTerminalQr(raw: string): void {
 /** 启动单个账号（自建宿主 + 常驻）。 */
 export async function runSingleAccount(opts: BootOptions = {}): Promise<void> {
     const dataRoot = resolveDataRoot(opts.dataDir);
-    const qq: QqInstallInfo = resolveQqInstall(opts.qqPath);
+    // QQ 原生文件多级来源 + 自动下载（本机未装 QQ 时走下载管线；下载失败给可操作提示）
+    let qq: QqInstallInfo;
+    try {
+        qq = await resolveQqFiles({
+            dataRoot,
+            ...(opts.qqPath !== undefined ? { qqPath: opts.qqPath } : {}),
+        });
+    } catch (err) {
+        logger.error(
+            { err },
+            `定位/下载 QQ 原生文件失败：${err instanceof Error ? err.message : String(err)}\n` +
+                "（本机未装 QQ 时自动下载官方安装包；若下载失败请检查网络，或手动安装 QQ、" +
+                "设置 NAPUTO_QQ_PATH 指定已有安装、NAPUTO_QQ_FILES 指定文件根、" +
+                "NAPUTO_QQ_URL 覆盖下载地址）",
+        );
+        process.exitCode = 1;
+        return;
+    }
     const cfgDir = path.join(dataRoot, opts.qq ?? "default");
 
     // 单实例锁预检（2026-08-07 根治「多实例抢数据目录锁挂起」）：同一账号数据
@@ -130,7 +154,7 @@ export async function runSingleAccount(opts: BootOptions = {}): Promise<void> {
     const stubDir = opts.stubDir ?? process.env["NAPUTO_STUB_DIR"] ?? defaultStubDir();
 
     // 启动信息走结构化日志（时间戳 + 级别 + pid + 元数据，与 kernel 子进程格式一致）
-    logger.info({ qqVersion: qq.version, qqPath: qq.qqPath }, "QQ 安装信息");
+    logger.info({ qqVersion: qq.version, qqPath: qq.qqPath, source: qq.source }, "QQ 文件来源");
     logger.info({ dataDir: cfgDir }, "数据目录");
     logger.info("自建宿主引导（标准 node + stub QQNT.dll）");
 
