@@ -1,5 +1,13 @@
 # @napuketto/cli
 
+## 0.0.21
+
+### Patch Changes
+
+- 7872faf: fix(release): 重新发布以修复 npm 包依赖泄漏——此前发布环节绕过 changeset 直发，published 包的 @napuketto/_ 依赖仍是 workspace:_，yarn create / npm install 被迫交互选版本或直接失败；release-npm.ts 现已在发布前把 workspace:\* 改写为 caret 真实版本（发布后恢复），本次随版本号重新发布修正依赖声明
+- Updated dependencies [7872faf]
+  - @napuketto/adapter@0.0.13
+
 ## 0.0.20
 
 ### Patch Changes
