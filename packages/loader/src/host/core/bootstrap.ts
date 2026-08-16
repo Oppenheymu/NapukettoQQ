@@ -23,15 +23,24 @@ import { errMsg, log, type SharedState } from "../util.js";
 import { type BootstrapEnv, bootstrapWithCore } from "./bootstrap-core.js";
 
 /** ⭐ appid 动态解析（2026-08-06 P2-0 实测：硬编码 537237765 在 9.9.33 扫码失败
- * 「请下载最新版」；major.node 解析的 537376818 成功）。自研，参考 NapCat 思路。 */
+ * 「请下载最新版」；major.node 解析的 537376818 成功）。自研，参考 NapCat 思路。
+ * 2026-08 硬编码审计：删除第三层字面量兜底 537237765——解析失败复用 kernel 的
+ * resolveAppidQua（已改为失败抛 KernelError），旧 kernel 则显式抛错，不再静默回退。 */
 function resolveAppid(kernel: KernelLike, bootEnv: BootstrapEnv): string | number {
-    return (
-        (typeof kernel.parseAppidFromMajor === "function" &&
-            bootEnv.wrapperPath &&
-            kernel.parseAppidFromMajor(join(dirname(bootEnv.wrapperPath), "major.node"))) ||
-        (typeof kernel.resolveAppidQua === "function" &&
-            kernel.resolveAppidQua(bootEnv.qqVersion || "").appid) ||
-        "537237765"
+    const majorPath = bootEnv.wrapperPath
+        ? join(dirname(bootEnv.wrapperPath), "major.node")
+        : undefined;
+    if (typeof kernel.resolveAppidQua === "function") {
+        return kernel.resolveAppidQua(bootEnv.qqVersion || "", majorPath).appid;
+    }
+    if (typeof kernel.parseAppidFromMajor === "function" && majorPath !== undefined) {
+        const appid = kernel.parseAppidFromMajor(majorPath);
+        if (appid !== null) {
+            return appid;
+        }
+    }
+    throw new Error(
+        "无法从 major.node 解析 appid，请确认 wrapper.node/major.node 完整，或更新 qq-releases.json",
     );
 }
 
@@ -146,9 +155,10 @@ export async function bootstrap(state: SharedState): Promise<void> {
             dataDir: env.NAPUTO_CFG_DIR || "",
             wrapperPath: env.NAPUTO_WRAPPER_PATH || "",
         };
-        const Appid = resolveAppid(kernel, bootEnv);
-        log(`bootstrap: appid=${Appid}（wrapper=${bootEnv.wrapperPath}）`);
         try {
+            // resolveAppid 失败会抛错（major.node 缺失/解析失败）——显式报错，不再静默回退。
+            const Appid = resolveAppid(kernel, bootEnv);
+            log(`bootstrap: appid=${Appid}（wrapper=${bootEnv.wrapperPath}）`);
             if (kernel.NapukettoCore !== undefined) {
                 await bootstrapWithCore(kernel, state, bootEnv, Appid);
             } else {
