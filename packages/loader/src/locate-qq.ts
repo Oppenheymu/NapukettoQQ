@@ -20,7 +20,10 @@ import { latestRelease, loadQqReleases, resolveDownloadUrl } from "./qq-releases
 /** 数据根下 QQ 文件缓存目录名（<数据根>/qq-files/<版本>/，P1 下载解包产物）。 */
 export const QQ_FILES_DIR_NAME = "qq-files";
 
-/** 7-Zip 官方 Linux 版版本号（tar.xz 文件名组成部分；兜底下载用，内置资产优先）。 */
+/**
+ * 7-Zip 官方 Linux 版版本号（tar.xz 文件名组成部分；兜底下载用，内置资产优先）。
+ * ⚠️ 此值为最后兜底下载用，7-Zip 官网只留最新版，旧版号会 404；内置资产失败才触发。
+ */
 const SEVEN_ZIP_LINUX_VERSION = "2501";
 
 /** 注册表 UninstallString 查询（QQ 官方安装路径）。 */
@@ -61,8 +64,6 @@ function findQqViaCommonPaths(): string | null {
         "C:/Program Files/Tencent/QQNT/QQ.exe",
         "C:/Program Files (x86)/Tencent/QQNT/QQ.exe",
         join(localAppData, "Programs", "Tencent", "QQNT", "QQ.exe"),
-        // 开发机目录（2026-08-07 环境事实：QQ 9.9.33-51802 在 C:\Dev\QQBot-Dev\QQNT）
-        "C:/Dev/QQBot-Dev/QQNT/QQ.exe",
     ];
     for (const p of candidates) {
         // WSL 场景：Windows 盘挂载在 /mnt/<盘符>/（如 C:\ → /mnt/c/），
