@@ -1,5 +1,11 @@
 # @napuketto/kernel
 
+## 0.0.13
+
+### Patch Changes
+
+- 426cf43: refactor(kernel): msg 富媒体元素裸魔数抽常量并补注释（纯重构，行为零变化）
+
 ## 0.0.12
 
 ### Patch Changes
