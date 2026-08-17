@@ -16,13 +16,12 @@
 </p>
 
 <p align="center">
-  <video src="./.github/assets/demo.mp4"
-         autoplay
-         loop
-         muted
-         playsinline
-         no-controls
-         width="80%">
+  <video src="https://github.com/user-attachments/assets/a3f08d95-7a1f-4e59-bf56-b31aed1c1d96" 
+         autoplay 
+         loop 
+         muted 
+         playsinline 
+         width="100%">
   </video>
 </p>
 
