@@ -16,7 +16,7 @@
 </p>
 
 <p align="center">
-  <img src=".github/assets/demo.webp" alt="demo" width="80%" />
+  <img src=".github/assets/demo.webp" alt="demo" width="100%" style="border-radius: 8px;" />
 </p>
 
 ## 核心特性
