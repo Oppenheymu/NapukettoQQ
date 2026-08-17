@@ -15,6 +15,17 @@
   <img alt="Monorepo" src="https://img.shields.io/badge/Monorepo-pnpm%20workspace-00B4A0">
 </p>
 
+<p align="center">
+  <video src="./.github/assets/demo.mp4"
+         autoplay
+         loop
+         muted
+         playsinline
+         no-controls
+         width="80%">
+  </video>
+</p>
+
 ## 核心特性
 
 - **原生 API 直接交互** — 直接调用 `wrapper.node` 官方 NAPI 导出接口（`getMsgService` 等），不经过代理层，稳定高效
