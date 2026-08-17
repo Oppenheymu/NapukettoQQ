@@ -16,13 +16,7 @@
 </p>
 
 <p align="center">
-  <video src="https://github.com/user-attachments/assets/a3f08d95-7a1f-4e59-bf56-b31aed1c1d96" 
-         autoplay 
-         loop 
-         muted 
-         playsinline 
-         width="100%">
-  </video>
+  <img src=".github/assets/demo.webp" alt="demo" width="80%" />
 </p>
 
 ## 核心特性
