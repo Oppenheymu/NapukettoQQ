@@ -58,6 +58,14 @@ export function attachIpcServices(
     const groupApi = services.groupApi as {
         uinToUid?: (uins: string[]) => Promise<Map<string, string>>;
     };
+    // ⚠️ 必须 bind（2026-08-20 生产实修）：GroupApi.uinToUid 是**类方法**，
+    // 摘成裸函数注入会丢 this → 方法内 `this.service.getUidByUins()` 抛
+    // `Cannot read properties of undefined (reading 'service')`（读的是
+    // undefined 的 service，即 this 为 undefined，不是原生服务缺失）。
+    // 症状：私聊/临时会话发送必失败（群聊 peerUid 直通群号不走本函数，恰好躲过），
+    // 且错误消息极具误导性。core/kernel-services.ts 注入 uidToUin 用的是箭头包装
+    // （正确写法），此处漏了——注入 kernel 类方法一律 bind 或箭头包装。
+    const uinToUid = groupApi.uinToUid?.bind(services.groupApi);
     const full = createIpcActions({
         msgApi: services.msgApi as IpcApiContext["msgApi"],
         groupApi: services.groupApi as IpcApiContext["groupApi"],
@@ -67,7 +75,7 @@ export function attachIpcServices(
         session: services.session,
         engine: services.engine,
         util: services.util,
-        ...(groupApi.uinToUid !== undefined ? { uinToUid: groupApi.uinToUid } : {}),
+        ...(uinToUid !== undefined ? { uinToUid } : {}),
     });
     for (const [name, handler] of full) {
         actions.set(name, handler);

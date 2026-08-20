@@ -63,13 +63,19 @@ export function registerLoginRefreshAction(
 }
 
 /**
- * 从宽松 params 构造 Peer（缺省 chatType=1 群聊）。
+ * 从宽松 params 构造 Peer（缺省 chatType=1 私聊）。
  * 优先 peerUid（uid 直通）；缺省时 peerUin 经 uinToUid 转换。
  *
- * ⚠️ 2026-08-09 修复：群聊（chatType=2）peerUid 直接用群号（kernel Peer 定义
- * 「群号 / 用户 uid」，OB11 resolve-peer 同构），**不走 uinToUid**——
- * getUidByUins 是「用户 uin → uid」转换，传群号属非法调用（QQ 原生内部
- * 抛 `Cannot read properties of undefined (reading 'service')`，实测）。
+ * ⚠️ 群聊（chatType=2）peerUid 直接用群号（kernel Peer 定义「群号 / 用户 uid」，
+ * OB11 resolve-peer 同构），**不走 uinToUid**——getUidByUins 是「用户 uin → uid」
+ * 转换，传群号属非法调用。
+ *
+ * ⚠️ 归因更正（2026-08-20）：2026-08-09 把 `Cannot read properties of undefined
+ * (reading 'service')` 归因为「传群号给 getUidByUins」是**误判**。真因是
+ * ipc-bootstrap 把类方法 `GroupApi.uinToUid` 摘成裸函数注入丢了 this（读
+ * undefined 的 service）。当时群聊改直通恰好绕开了这条路径，于是「群聊修好了」，
+ * 而私聊仍然必炸——直到 2026-08-20 才在 ipc-bootstrap 处 bind 根治。
+ * 群聊直通的行为本身仍然正确（上面第一条），保留。
  */
 async function toPeer(
     params: Record<string, unknown>,

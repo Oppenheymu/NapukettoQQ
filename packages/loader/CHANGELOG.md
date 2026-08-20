@@ -1,5 +1,11 @@
 # @napuketto/loader
 
+## 0.0.19
+
+### Patch Changes
+
+- fix(loader): 修复私聊/临时会话发消息必失败——`attachIpcServices` 把 kernel 的**类方法** `GroupApi.uinToUid` 摘成裸函数注入 IPC 动作表，丢了 `this`，方法内 `this.service.getUidByUins()` 抛 `Cannot read properties of undefined (reading 'service')`（读的是 undefined 的 `service`，即 `this` 为 undefined，与原生服务是否就绪无关）。群聊 peerUid 直通群号不走这条路径，因此只有私聊/临时会话中招。改为 `bind` 注入（与 kernel-services 里 `uidToUin` 的箭头包装写法对齐），并补 `attachIpcServices` 回归单测：用「方法内读 `this.service`」的假 GroupApi，未 bind 时复现同一条报错。同时更正 2026-08-09 对该报错的误判归因（当时归因为「传群号给 getUidByUins」，群聊改直通只是恰好绕开了缺陷路径，私聊一直是坏的）。
+
 ## 0.0.18
 
 ### Patch Changes
