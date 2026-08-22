@@ -77,6 +77,117 @@ describe("createIpcActions", () => {
         expect(ctx.uinToUid).toHaveBeenCalledWith(["12345"]);
     });
 
+    it("msg.sendMessage 群聊 at 元素 uin → uid 转换（issue #1 @ 修复）", async () => {
+        const ctx = mockCtx();
+        const actions = createIpcActions(ctx);
+        const result = await callIpcAction(actions, "msg.sendMessage", {
+            chatType: 2,
+            peerUin: "12345",
+            elements: [
+                { type: "text", text: "你好 " },
+                { type: "at", target: "67890" },
+            ],
+        });
+        expect(result).toEqual({ ok: true, value: { msgId: "42" } });
+        expect(ctx.uinToUid).toHaveBeenCalledWith(["67890"]);
+        expect(ctx.msgApi.sendMessage).toHaveBeenCalledWith({ chatType: 2, peerUid: "12345" }, [
+            { type: "text", text: "你好 " },
+            { type: "at", target: "u_67890" },
+        ]);
+    });
+
+    it("msg.sendMessage 群聊 at 补 display（groupCache.getMember 昵称）", async () => {
+        const ctx = mockCtx();
+        ctx.groupCache.getMember = vi.fn(async (_groupCode, uid) => ({ uid, nick: "小明" }));
+        const actions = createIpcActions(ctx);
+        const result = await callIpcAction(actions, "msg.sendMessage", {
+            chatType: 2,
+            peerUin: "12345",
+            elements: [{ type: "at", target: "67890" }],
+        });
+        expect(result).toEqual({ ok: true, value: { msgId: "42" } });
+        expect(ctx.groupCache.getMember).toHaveBeenCalledWith("12345", "u_67890");
+        expect(ctx.msgApi.sendMessage).toHaveBeenCalledWith({ chatType: 2, peerUid: "12345" }, [
+            { type: "at", target: "u_67890", display: "小明" },
+        ]);
+    });
+
+    it("msg.sendMessage 群聊 at 已带 display 则不覆盖", async () => {
+        const ctx = mockCtx();
+        ctx.groupCache.getMember = vi.fn(async (_groupCode, uid) => ({ uid, nick: "小明" }));
+        const actions = createIpcActions(ctx);
+        const result = await callIpcAction(actions, "msg.sendMessage", {
+            chatType: 2,
+            peerUin: "12345",
+            elements: [{ type: "at", target: "67890", display: "指定名" }],
+        });
+        expect(result).toEqual({ ok: true, value: { msgId: "42" } });
+        expect(ctx.groupCache.getMember).not.toHaveBeenCalled();
+        expect(ctx.msgApi.sendMessage).toHaveBeenCalledWith({ chatType: 2, peerUid: "12345" }, [
+            { type: "at", target: "u_67890", display: "指定名" },
+        ]);
+    });
+
+    it("msg.sendMessage 群聊 at 已为 uid（u_ 前缀）直通不转换", async () => {
+        const ctx = mockCtx();
+        const actions = createIpcActions(ctx);
+        const result = await callIpcAction(actions, "msg.sendMessage", {
+            chatType: 2,
+            peerUin: "12345",
+            elements: [{ type: "at", target: "u_abc" }],
+        });
+        expect(result).toEqual({ ok: true, value: { msgId: "42" } });
+        expect(ctx.uinToUid).not.toHaveBeenCalled();
+        expect(ctx.msgApi.sendMessage).toHaveBeenCalledWith({ chatType: 2, peerUid: "12345" }, [
+            { type: "at", target: "u_abc" },
+        ]);
+    });
+
+    it("msg.sendMessage 群聊 at 转换失败保留原 target（保底发送）", async () => {
+        const ctx = mockCtx();
+        ctx.uinToUid = vi.fn(async () => new Map()); // 空映射 = 转换失败
+        const actions = createIpcActions(ctx);
+        const result = await callIpcAction(actions, "msg.sendMessage", {
+            chatType: 2,
+            peerUin: "12345",
+            elements: [{ type: "at", target: "67890" }],
+        });
+        expect(result).toEqual({ ok: true, value: { msgId: "42" } });
+        expect(ctx.msgApi.sendMessage).toHaveBeenCalledWith({ chatType: 2, peerUid: "12345" }, [
+            { type: "at", target: "67890" },
+        ]);
+    });
+
+    it("msg.sendMessage @全体不转换（atType=1 由 kernel 处理）", async () => {
+        const ctx = mockCtx();
+        const actions = createIpcActions(ctx);
+        const result = await callIpcAction(actions, "msg.sendMessage", {
+            chatType: 2,
+            peerUin: "12345",
+            elements: [{ type: "at", target: "all" }],
+        });
+        expect(result).toEqual({ ok: true, value: { msgId: "42" } });
+        expect(ctx.uinToUid).not.toHaveBeenCalled();
+        expect(ctx.msgApi.sendMessage).toHaveBeenCalledWith({ chatType: 2, peerUid: "12345" }, [
+            { type: "at", target: "all" },
+        ]);
+    });
+
+    it("msg.sendMessage 私聊 at 不转换（QQ 私聊无 at 语义）", async () => {
+        const ctx = mockCtx();
+        const actions = createIpcActions(ctx);
+        const result = await callIpcAction(actions, "msg.sendMessage", {
+            chatType: 1,
+            peerUin: "67890",
+            elements: [{ type: "at", target: "67890" }],
+        });
+        expect(result).toEqual({ ok: true, value: { msgId: "42" } });
+        // peerUin → uid 是 toPeer 的 peer 转换；at 元素本身原样透传
+        expect(ctx.msgApi.sendMessage).toHaveBeenCalledWith({ chatType: 1, peerUid: "u_67890" }, [
+            { type: "at", target: "67890" },
+        ]);
+    });
+
     it("msg.recallMessage 透传 msgIds", async () => {
         const ctx = mockCtx();
         const actions = createIpcActions(ctx);

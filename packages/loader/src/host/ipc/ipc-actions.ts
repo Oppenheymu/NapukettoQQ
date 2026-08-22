@@ -31,6 +31,11 @@ export interface IpcApiContext {
     /** 群缓存（事件维护群列表；listGroupsRefreshed 空缓存时主动刷新等待回填）。 */
     groupCache: {
         listGroupsRefreshed(): Promise<Array<{ groupCode: string; groupName: string }>>;
+        /** 群成员（缓存优先 + 惰性回填；at 昵称补全用，可选——未注入则跳过补全）。 */
+        getMember?(
+            groupCode: string,
+            uid: string,
+        ): Promise<{ uid: string; nick?: string } | undefined>;
     };
     friendApi: {
         getFriendList(): Promise<unknown[]>;
@@ -104,6 +109,122 @@ async function toPeer(
     throw new Error("缺 peerUid（或 peerUin 且未注入 uinToUid）");
 }
 
+/** 宽松 canonical at 元素（协议无关中间层 at 形状）。 */
+interface LooseAtElement {
+    type: "at";
+    target: string;
+    display?: string;
+}
+
+/** at 元素判断（宽松结构；排除 @全体——target="all" 走 atType=1，无需转换）。 */
+function isLooseAtElement(value: unknown): value is LooseAtElement {
+    if (typeof value !== "object" || value === null) {
+        return false;
+    }
+    const el = value as Record<string, unknown>;
+    return el["type"] === "at" && typeof el["target"] === "string" && el["target"] !== "all";
+}
+
+/** 收集元素中的 at（非 @全体）及其索引。 */
+function collectAtItems(elements: unknown[]): Array<{ index: number; uin: string }> {
+    const items: Array<{ index: number; uin: string }> = [];
+    for (let i = 0; i < elements.length; i++) {
+        const el = elements[i];
+        if (isLooseAtElement(el)) {
+            items.push({ index: i, uin: el.target });
+        }
+    }
+    return items;
+}
+
+/** 群成员昵称 → display（可选依赖 groupCache.getMember；无昵称返回 undefined）。 */
+async function memberDisplay(
+    ctx: IpcApiContext,
+    groupCode: string,
+    uid: string,
+): Promise<string | undefined> {
+    if (ctx.groupCache.getMember === undefined) {
+        return undefined;
+    }
+    const member = await ctx.groupCache.getMember(groupCode, uid);
+    if (member === undefined || member.nick === undefined || member.nick === "") {
+        return undefined;
+    }
+    return member.nick;
+}
+
+/**
+ * 单个 at 元素归一化：target uin → uid（u_ 前缀直通）+ display 补全。
+ * 返回 null 表示目标未解析（调用方保留原元素，保底发送）。
+ */
+async function normalizeAtElement(
+    ctx: IpcApiContext,
+    groupCode: string,
+    prev: LooseAtElement,
+    uidMap: Map<string, string>,
+): Promise<LooseAtElement | null> {
+    const uid = prev.target.startsWith("u_") ? prev.target : (uidMap.get(prev.target) ?? "");
+    if (uid === "") {
+        return null;
+    }
+    const next: LooseAtElement = { type: "at", target: uid };
+    if (prev.display !== undefined && prev.display !== "") {
+        next.display = prev.display;
+        return next;
+    }
+    const nick = await memberDisplay(ctx, groupCode, uid);
+    if (nick !== undefined) {
+        next.display = nick;
+    }
+    return next;
+}
+
+/**
+ * 发送前 at 目标归一化（P2-19 同构：OB11 协议层 at.qq uin → uid 后才进 kernel）。
+ *
+ * 背景（koishi-plugin-adapter-napuketto issue #1「无法 @ 指定群成员」）：
+ * koishi 调用方给的 at.target 是 QQ 号（uin——session.userId 即 senderUin），
+ * 而 NT 的 atUid 契约是 u_ 开头的 uid。不转则 QQ 解析 at 失败，只能回退显示
+ * content 兜底 "@" → 表现为「@号后面为空」。群聊才有 at 语义，私聊/临时会话跳过。
+ *
+ * 归一化：uin 批量 uinToUid → uid（u_ 前缀直通不转）；有 groupCache.getMember
+ * 时补 display（群成员昵称，kernel toSendElements 用它作 TEXT content，
+ * 避免 @ 后无显示名）。转换失败/缺注入：保留原元素（不阻塞发送，保底）。
+ */
+async function resolveAtElements(
+    chatType: number,
+    peerUid: string,
+    elements: unknown[],
+    ctx: IpcApiContext,
+): Promise<unknown[]> {
+    if (chatType !== 2 || ctx.uinToUid === undefined) {
+        return elements;
+    }
+    const atItems = collectAtItems(elements);
+    if (atItems.length === 0) {
+        return elements;
+    }
+    // 分离 uid（u_ 前缀直通）与 uin（需 getUidByUins 转换）
+    const uins = atItems.filter((item) => !item.uin.startsWith("u_"));
+    let uidMap = new Map<string, string>();
+    if (uins.length > 0) {
+        try {
+            uidMap = await ctx.uinToUid(uins.map((item) => item.uin));
+        } catch {
+            uidMap = new Map(); // 转换失败：保留原 target 保底发送
+        }
+    }
+    const out = [...elements];
+    for (const item of atItems) {
+        const prev = out[item.index] as LooseAtElement;
+        const next = await normalizeAtElement(ctx, peerUid, prev, uidMap);
+        if (next !== null) {
+            out[item.index] = next;
+        }
+    }
+    return out;
+}
+
 /** 构造动作表（map 顺序即注册顺序，重复动作名后注册覆盖）。 */
 export function createIpcActions(ctx: IpcApiContext): Map<string, IpcActionHandler> {
     const actions = new Map<string, IpcActionHandler>();
@@ -113,7 +234,9 @@ export function createIpcActions(ctx: IpcApiContext): Map<string, IpcActionHandl
     actions.set("msg.sendMessage", async (params) => {
         const peer = await toPeer(params, ctx.uinToUid);
         const elements = Array.isArray(params["elements"]) ? params["elements"] : [];
-        return ctx.msgApi.sendMessage(peer, elements);
+        // at 目标归一化（uin → uid + 昵称补全）后再交给 kernel，见 resolveAtElements
+        const resolved = await resolveAtElements(peer.chatType, peer.peerUid, elements, ctx);
+        return ctx.msgApi.sendMessage(peer, resolved);
     });
 
     actions.set("msg.recallMessage", async (params) => {
