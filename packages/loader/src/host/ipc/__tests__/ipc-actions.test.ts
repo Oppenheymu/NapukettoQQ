@@ -203,6 +203,20 @@ describe("createIpcActions", () => {
         ]);
     });
 
+    it("msg.recallMessage 清洗 null/空字符串 msgId", async () => {
+        const ctx = mockCtx();
+        const actions = createIpcActions(ctx);
+        const result = await callIpcAction(actions, "msg.recallMessage", {
+            chatType: 1,
+            peerUin: "12345",
+            msgIds: ["a", "", null, "  "],
+        });
+        expect(result).toEqual({ ok: true });
+        expect(ctx.msgApi.recallMessage).toHaveBeenCalledWith({ chatType: 1, peerUid: "u_12345" }, [
+            "a",
+        ]);
+    });
+
     it("缺 peerUid/peerUin → 错误（提示可注入 uinToUid）", async () => {
         const actions = createIpcActions(mockCtx());
         const result = await callIpcAction(actions, "msg.sendMessage", {

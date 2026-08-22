@@ -57,7 +57,25 @@ describe("sendMessage", () => {
 describe("recallMessage", () => {
     it("空 msgIds 抛 INVALID_PARAM", async () => {
         const { api } = makeApi();
-        await expect(api.recallMessage(target, [])).rejects.toThrow(/至少一个 msgId/);
+        await expect(api.recallMessage(target, [])).rejects.toThrow(/至少一个非空 msgId/);
+    });
+
+    it("null msgIds 抛 INVALID_PARAM（而非裸 TypeError）", async () => {
+        const { api } = makeApi();
+        await expect(api.recallMessage(target, null as unknown as string[])).rejects.toThrow(
+            /必须是数组/,
+        );
+    });
+
+    it("空字符串 msgId 清洗后抛 INVALID_PARAM", async () => {
+        const { api } = makeApi();
+        await expect(api.recallMessage(target, ["", "  "])).rejects.toThrow(/至少一个非空 msgId/);
+    });
+
+    it("混合脏值只撤回有效 msgId", async () => {
+        const { api, service } = makeApi();
+        await api.recallMessage(target, ["m1", "", "  ", null as unknown as string]);
+        expect(service.recallMsg).toHaveBeenCalledWith(target, ["m1"]);
     });
 
     it("成功调用 recallMsg", async () => {

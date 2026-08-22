@@ -241,7 +241,14 @@ export function createIpcActions(ctx: IpcApiContext): Map<string, IpcActionHandl
 
     actions.set("msg.recallMessage", async (params) => {
         const peer = await toPeer(params, ctx.uinToUid);
-        const msgIds = Array.isArray(params["msgIds"]) ? params["msgIds"].map(String) : [];
+        // 清洗 msgIds：null/空字符串/纯空白过滤掉（`[null].map(String)` 会变成
+        // "null" 字符串透传给 wrapper，只换回「无错误详情」）；清洗后为空交给
+        // kernel 抛 INVALID_PARAM
+        const msgIds = Array.isArray(params["msgIds"])
+            ? params["msgIds"]
+                  .map((id) => (typeof id === "string" ? id.trim() : ""))
+                  .filter((id) => id !== "")
+            : [];
         await ctx.msgApi.recallMessage(peer, msgIds);
     });
 

@@ -77,6 +77,27 @@ async function hashFile(path: string): Promise<string> {
     }
 }
 
+/**
+ * 清洗撤回消息 id（防御外部脏参数）。
+ *
+ * 调用方（IPC / 协议层 / koishi 适配器）可能传 null、非数组、空字符串等——
+ * 直接透传会让裸 TypeError 逃逸，或把脏值一路送到 wrapper.node 才失败
+ * （原生层只回「无错误详情」，排查困难）。规则：
+ *  - 非数组 → INVALID_PARAM
+ *  - 过滤空字符串 / 纯空白 / 非字符串
+ *  - 清洗后为空 → INVALID_PARAM
+ */
+function sanitizeRecallMsgIds(msgIds: string[]): string[] {
+    if (!Array.isArray(msgIds)) {
+        throw kernelError("recallMessage 的 msgIds 必须是数组", "INVALID_PARAM");
+    }
+    const ids = msgIds.filter((id) => typeof id === "string" && id.trim() !== "");
+    if (ids.length === 0) {
+        throw kernelError("recallMessage 需要至少一个非空 msgId", "INVALID_PARAM");
+    }
+    return ids;
+}
+
 /** 消息 API：从 session 拿 msg service，包装成语义化方法。 */
 export class MsgApi {
     private readonly service: NodeIKernelMsgService;
@@ -329,10 +350,7 @@ export class MsgApi {
 
     /** 撤回消息（群聊管理员 / 私聊 2 分钟内）。 */
     async recallMessage(target: Peer, msgIds: string[]): Promise<void> {
-        if (msgIds.length === 0) {
-            throw kernelError("recallMessage 需要至少一个 msgId", "INVALID_PARAM");
-        }
-        const raw = await this.service.recallMsg(target, msgIds);
+        const raw = await this.service.recallMsg(target, sanitizeRecallMsgIds(msgIds));
         unwrapResult("recallMsg", raw);
     }
 
