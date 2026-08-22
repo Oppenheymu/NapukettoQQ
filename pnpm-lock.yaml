@@ -288,10 +288,10 @@ importers:
         specifier: ^5.30.11
         version: 5.30.11(@koishijs/client@5.30.11(@types/node@26.2.0)(lightningcss@1.33.0)(postcss@8.5.26)(rollup@4.62.4)(typescript@7.0.2))(koishi@4.18.11(@cordisjs/plugin-http@0.6.3(cordis@3.18.1))(cordis@3.18.1))
       '@napuketto/kernel':
-        specifier: ~0.0.13
+        specifier: ~0.0.15
         version: link:../../packages/kernel
       '@napuketto/loader':
-        specifier: ~0.0.19
+        specifier: ~0.0.22
         version: link:../../packages/loader
     devDependencies:
       '@biomejs/biome':
