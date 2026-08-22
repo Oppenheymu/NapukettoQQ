@@ -293,6 +293,9 @@ importers:
       '@napuketto/loader':
         specifier: ~0.0.22
         version: link:../../packages/loader
+      '@napuketto/media':
+        specifier: ~0.0.2
+        version: link:../../packages/media
     devDependencies:
       '@biomejs/biome':
         specifier: ^2.5.6
