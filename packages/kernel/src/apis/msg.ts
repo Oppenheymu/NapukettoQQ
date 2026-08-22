@@ -142,6 +142,13 @@ export class MsgApi {
         // 有事件通道：先注册确认监听（NapCat 式，事件可能早于 sendMsg 返回触发），
         // 再调 sendMsg。最终结果以事件 sendStatus 为准（raw.result 非 0 不判失败）。
         const confirm = this.confirmSend(msgId, target);
+        // ⚠️ 预消费 confirm 的 rejection（2026-08-22 崩溃根因修复）：若下方
+        // service.sendMsg 抛错（wrapper 内部异常），confirm 确认监听已注册却无人
+        // await，事件回调里 reject 会变成 unhandledRejection，Node 默认抛错退出
+        // 直接拖垮整个子进程（实测：sendStatus=0 确认事件触发后进程崩溃、IPC
+        // 通道关闭）。先挂 no-op 消费兜底，`await confirm` 仍能正常收到结果
+        // （Promise 允许多个消费者），失败语义不变。
+        confirm.catch(() => undefined);
         await this.service.sendMsg("0", sendPeer, sendElements, new Map());
         await confirm;
         return { msgId };

@@ -46,6 +46,14 @@ log(
 );
 log(`[self-host] stub 目录: ${env.NAPUTO_STUB_DIR ?? "(PATH 前置，未记录)"}`);
 
+// unhandledRejection 兜底（2026-08-22 崩溃防御）：一次失败的 Promise 不应拖垮
+// 整个子进程（实测：sendMsg 确认事件 reject 未被消费 → Node 默认抛错退出，连带
+// IPC 通道关闭、Koishi 侧全部动作失败）。记录日志但不退出——业务错误仍由调用方
+// 显式处理（不静默吞掉），此处只防「漏网」的进程级崩溃。
+process.on("unhandledRejection", (reason: unknown) => {
+    log(`[self-host] ⚠️ unhandledRejection: ${errMsg(reason)}`);
+});
+
 // 0. 单实例锁兜底（2026-08-07 根治）：数据目录粒度锁——同一账号数据目录
 //    只允许一个实例（QQ 原生层 MMKV/登录单例有锁，第二个实例抢不到会挂起）。
 //    cli 已做启动前检测，此处防 supervisor/直接跑 self-host 绕过 cli 的路径。
