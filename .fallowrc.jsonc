@@ -5,12 +5,12 @@
     "$schema": "https://raw.githubusercontent.com/fallow-rs/fallow/main/schema.json",
     // 手动入口：loader/src/host/ 是 tsdown 多入口（dist/host/self-host.cjs CJS bundle），
     // 不在 package.json exports 里，fallow 无法自动发现——声明后 host/ 目录不再报 unused。
-    // scripts/wine-smoke.mjs、wine-login-smoke.mjs 是手动冒烟脚本（node scripts/... 直接跑），
+    // scripts/wine/*.ts 是手动冒烟脚本（node scripts/... 直接跑），
     // 非 import 可达，声明为入口避免误报 unused-file。
     "entry": [
         "packages/loader/src/host/core/self-host.ts",
-        "scripts/wine-smoke.mjs",
-        "scripts/wine-login-smoke.mjs"
+        "scripts/wine/wine-smoke.ts",
+        "scripts/wine/wine-login-smoke.ts"
     ],
     // 完全排除：packages/loader/native/ 是私有 Git Submodule（Native Bypass 载具），
     // 仅分发编译后二进制，源脚本（verify/tools）不进主仓库分析范围。

@@ -1,8 +1,8 @@
 /**
- * wine-login-smoke.mjs：Linux/wine 完整链路登录冒烟（P2 Step 2）。
+ * wine-login-smoke.ts：Linux/wine 完整链路登录冒烟（P2 Step 2）。
  *
- * 用法（WSL2 内，从项目根）：
- *   node scripts/wine/wine-login-smoke.mjs [--ext4-dir <dir>] [--uin <QQ号>]
+ * 用法（WSL2 内，从项目根；Node 24 直接跑 TS）：
+ *   node scripts/wine/wine-login-smoke.ts [--ext4-dir <dir>] [--uin <QQ号>]
  *
  * 流程（复用自建宿主全链路，与 Windows 完全一致，仅换宿主为 wine + win-node）：
  *   1. 确保 QQ 文件（P1 ensureQqFiles）
@@ -59,7 +59,7 @@ console.log(`[wine-login] stub OK: ${stubHost}`);
 // 4. 装配环境变量（与 launcher.buildLaunchEnv 同构；wine 场景路径过 toWinePath）
 const wrapperDir = join(qq.wrapperPath, "..");
 const cfgDir = join(dataRoot, uin ?? "default");
-const env = {
+const env: Record<string, string | undefined> = {
     ...process.env,
     NAPUTO_QQ_PATH: toWinePath(join(dataRoot, "QQ.exe")), // 语义占位
     NAPUTO_QQ_VERSION: qq.version,
@@ -115,7 +115,7 @@ const timeout = setTimeout(() => {
     child.kill("SIGKILL");
 }, 90_000);
 
-function onLine(tag, line) {
+function onLine(tag: string, line: string) {
     console.log(`[wine-login] ${tag}: ${line}`);
     if (line.includes("bootstrap 完成") || (line.includes("session") && line.includes("READY"))) {
         sawReady = true;

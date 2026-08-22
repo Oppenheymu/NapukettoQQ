@@ -1,8 +1,8 @@
 /**
- * wine-smoke.mjs：Linux/wine 自建宿主加载冒烟（P2 Step 1 固化成果）。
+ * wine-smoke.ts：Linux/wine 自建宿主加载冒烟（P2 Step 1 固化成果）。
  *
- * 用法（WSL2 内，从项目根）：
- *   node scripts/wine/wine-smoke.mjs [--ext4-dir <dir>]
+ * 用法（WSL2 内，从项目根；Node 24 直接跑 TS）：
+ *   node scripts/wine/wine-smoke.ts [--ext4-dir <dir>]
  *
  * 流程：
  *   1. 确保 QQ 文件（P1 ensureQqFiles：本机无 QQ 则自动下载官方安装包 → 7z 解包 → 缓存）
