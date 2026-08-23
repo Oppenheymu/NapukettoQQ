@@ -204,10 +204,7 @@ settings:
   excludeLinksFromLockfile: false
 
 overrides:
-  '@typescript-eslint/parser>typescript': npm:@typescript/typescript6@6.0.2
-  '@typescript-eslint/project-service>typescript': npm:@typescript/typescript6@6.0.2
-  '@typescript-eslint/tsconfig-utils>typescript': npm:@typescript/typescript6@6.0.2
-  '@typescript-eslint/typescript-estree>typescript': npm:@typescript/typescript6@6.0.2
+  '@typescript-eslint/*>typescript': npm:@typescript/typescript6@6.0.2
 
 importers:
 
