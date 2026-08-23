@@ -8,7 +8,7 @@
  *  - NAPUTO_QQ_URL 环境变量可覆盖下载地址（用户拿到新链接时用）
  */
 import { createHash } from "node:crypto";
-import { createWriteStream, mkdirSync } from "node:fs";
+import { createWriteStream, mkdirSync, statSync } from "node:fs";
 import { rm } from "node:fs/promises";
 import type { IncomingMessage } from "node:http";
 import { get, type RequestOptions } from "node:https";
@@ -124,6 +124,21 @@ export async function downloadFile(options: DownloadOptions): Promise<DownloadRe
             await rm(options.dest, { force: true });
         }
         throw err instanceof Error ? err : new DownloadError(String(err));
+    }
+
+    // ⚠️ 完成态校验（2026-08-23 WSL 生产事故）：Promise 正常 resolve 但文件
+    // 缺失/为空是真实发生过的（koishi 场景 7z 解包报「No such file or
+    // directory」，疑为并发实例清理 tmp 或写入中断）。resolve 不代表落盘完整，
+    // 这里 stat 兜底，缺失/空文件立即报错而不是把坏文件交给下游解包。
+    let size: number;
+    try {
+        size = statSync(options.dest).size;
+    } catch {
+        throw new DownloadError(`下载完成但文件缺失: ${options.dest}`);
+    }
+    if (size <= 0) {
+        await rm(options.dest, { force: true });
+        throw new DownloadError(`下载完成但文件为空: ${options.dest}`);
     }
 
     const sha256 = hash.digest("hex");

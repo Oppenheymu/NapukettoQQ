@@ -52,6 +52,40 @@ export function wineBinary(): string {
     return process.env["NAPUTO_WINE"] ?? "wine";
 }
 
+/** wine 安装指引（缺失时提示用户如何准备，纯字符串可单测）。 */
+export function wineInstallHint(): string {
+    return (
+        "Linux/WSL 自建宿主需要 wine 运行 Windows 版 node.exe（wrapper.node 是" +
+        "Windows PE 原生模块，只能被 Windows node.exe dlopen）。\n" +
+        "  安装：sudo apt-get install wine64（或其他发行版对应 wine 包）\n" +
+        "  覆盖：设置环境变量 NAPUTO_WINE 指向 wine 可执行文件路径"
+    );
+}
+
+/**
+ * wine 可执行性探测结果 → 可读错误（null = 可用）。纯函数，可单测。
+ * 由 launcher 在 spawn 前用 spawnSync 探测 wine（缺失时 throw 可读错误，
+ * 避免 spawn 异步 emit 'error' 无监听者导致宿主进程崩溃，2026-08-23 WSL 实测）。
+ */
+export function wineCheckError(probe: {
+    /** spawnSync 退出码（null = spawn 本身失败，如命令不存在）。 */
+    status: number | null;
+    /** spawn 错误（ENOENT 等；可选）。 */
+    error?: unknown;
+}): string | null {
+    if (probe.status === 0) {
+        return null;
+    }
+    const err = probe.error as NodeJS.ErrnoException | undefined;
+    if (err !== undefined && err.code === "ENOENT") {
+        return `未检测到 wine 可执行文件。${wineInstallHint()}`;
+    }
+    if (err !== undefined) {
+        return `wine 探测失败: ${err.message ?? String(err)}。${wineInstallHint()}`;
+    }
+    return `wine --version 退出码非 0（status=${String(probe.status)}），wine 可能异常。${wineInstallHint()}`;
+}
+
 /** spawn 命令与参数（平台分支；纯函数，可单测）。 */
 export interface SpawnCommand {
     /** 命令（win32 = node.exe；linux = wine）。 */

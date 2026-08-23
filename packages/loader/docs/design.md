@@ -70,6 +70,16 @@ resolveQqFiles()   ← 替代现有 resolveQqInstall() 的文件定位部分
 
 - **版本选择策略**：L0/L1 有版本就用本机版本；否则按「版本清单」中**最新已知可用版本**下载。
 - **幂等**：缓存目录已有目标版本 → 跳过下载，直接使用。
+- **阶段日志（2026-08-23 WSL 事故后新增）**：`ensureQqFiles` / `launchSelfHost` 支持
+  `onStage` 回调（检查缓存/下载/校验/解包/提取/win-node/spawn 各阶段提示）——此前
+  首次下载 313MB 安装包全程静默，用户以为流程没生效。
+- **依赖预检（2026-08-23 事故后新增）**：Linux 分支 spawn 前预检 wine
+  （`spawnSync wine --version`），缺失时抛可读错误（含 `apt install` 指引）并挂
+  child 'error' 监听兜底——此前 spawn 异步 emit 'error' 无监听者 =
+  `uncaughtException` 直接崩掉整个 koishi 宿主进程。
+- **tmp 唯一化**：下载临时文件带 pid+时间戳后缀，解包前校验存在性——此前固定文件名
+  在多实例/重试并发时互相覆盖 + finally 清理竞态，表现「下载成功但 7z 解包报
+  No such file or directory」。
 
 ### 2.2 官方安装包下载器
 

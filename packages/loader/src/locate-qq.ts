@@ -130,6 +130,11 @@ export interface ResolveQqFilesOptions {
     autoDownload?: boolean;
     /** 7z 可执行文件路径（解包用；缺省自动探测）。 */
     sevenZipPath?: string;
+    /**
+     * 阶段回调（下载/校验/解包/提取各阶段提示，2026-08-23 WSL 事故后加：
+     * 下载 313MB 全程静默，用户以为流程没生效）。调用方接 logger.info。
+     */
+    onStage?: (message: string) => void;
 }
 
 /** 找 QQ.exe 路径。 */
@@ -212,7 +217,11 @@ export async function resolveQqFiles(options: ResolveQqFilesOptions = {}): Promi
     if (options.autoDownload !== false) {
         const sevenZipPath =
             options.sevenZipPath !== undefined ? { sevenZipPath: options.sevenZipPath } : {};
-        return ensureQqFiles({ dataRoot, ...sevenZipPath });
+        return ensureQqFiles({
+            dataRoot,
+            ...sevenZipPath,
+            ...(options.onStage !== undefined ? { onStage: options.onStage } : {}),
+        });
     }
     throw new Error(
         "未找到 QQ 原生文件（wrapper.node）：请安装 QQ、设置 NAPUTO_QQ_PATH/NAPUTO_QQ_FILES，" +
@@ -309,6 +318,9 @@ export async function ensureLinuxSevenZip(
 /**
  * 确保 QQ 原生文件就绪（P1）：幂等缓存检查 → 下载官方安装包 → sha256 校验
  * → 7z 解包 → 提取 wrapper.node/QQNT.dll → 缓存。返回缓存版本 QqInstallInfo。
+ *
+ * onStage：阶段回调（下载/解包等提示，2026-08-23 起——下载 313MB 全程静默
+ * 的坑）。调用方接 logger.info。
  */
 export async function ensureQqFiles(
     options: {
@@ -316,6 +328,8 @@ export async function ensureQqFiles(
         dataRoot?: string;
         /** 7z 路径（缺省自动探测）。 */
         sevenZipPath?: string;
+        /** 阶段回调（下载/校验/解包/提取，接 logger.info）。 */
+        onStage?: (message: string) => void;
     } = {},
 ): Promise<QqInstallInfo> {
     const dataRoot = resolveDataRoot(options.dataRoot);
@@ -325,6 +339,7 @@ export async function ensureQqFiles(
     // 幂等：缓存已有完整版本 → 直接返回
     const existing = tryResolveCached(dataRoot);
     if (existing !== null) {
+        options.onStage?.(`QQ 原生文件缓存命中：版本 ${existing.version}`);
         return existing;
     }
 
@@ -337,8 +352,17 @@ export async function ensureQqFiles(
     // 2. 下载 + sha256 校验（清单无参考值时下载器跳过校验，完整性由解包/加载兜底）
     const tmpDir = join(dataRoot, "tmp");
     mkdirSync(tmpDir, { recursive: true });
-    const installerPath = join(tmpDir, `qq-installer-${version}.exe`);
+    // ⚠️ tmp 文件名唯一化（2026-08-23 WSL 事故）：固定名 qq-installer-<v>.exe 在
+    // 多实例/重试并发时互相覆盖，且一个实例 finally 清理会删掉另一个实例刚下载
+    // 的文件——表现就是「下载成功但 7z 解包报 No such file or directory」。
+    // 加 pid + 时间戳后缀，实例间天然隔离。
+    const installerPath = join(
+        tmpDir,
+        `qq-installer-${version}-${process.pid}-${Date.now().toString(36)}.exe`,
+    );
+    options.onStage?.(`下载 QQ 官方安装包 ${version}（首次使用需下载，约 300MB）…`);
     await downloadFile({ dest: installerPath, url, expectedSha256: release.sha256 });
+    options.onStage?.(`QQ 安装包下载完成，sha256 校验通过（${release.sha256.slice(0, 12)}…）`);
 
     // 3. 解包 + 提取（失败清理缓存残留；临时文件无论如何清理）
     //    Linux 分支：确保 7zz（自动下载 7-Zip 官方 linux 版，2026-08-14 生产修复——
@@ -347,10 +371,20 @@ export async function ensureQqFiles(
     if (sevenZipPath === undefined && process.platform === "linux") {
         sevenZipPath = (await ensureLinuxSevenZip({ dataRoot })).exe;
     }
-    const extractedDir = join(tmpDir, `qq-extracted-${version}`);
+    const extractedDir = join(tmpDir, `qq-extracted-${version}-${process.pid}`);
     try {
+        // 解包前再次确认安装包真实存在（downloadFile 已 stat 兜底；防御并发清理竞态）
+        if (!existsSync(installerPath)) {
+            throw new Error(
+                `下载产物在解包前丢失: ${installerPath}（疑为并发实例清理 tmp，` +
+                    "已用唯一文件名规避，请重试）",
+            );
+        }
+        options.onStage?.(`7z 解包安装包（${version}，需数分钟）…`);
         await extractInstaller(installerPath, extractedDir, sevenZipPath);
+        options.onStage?.("提取 wrapper.node 及原生依赖 DLL…");
         const info = await extractWrapperFiles(extractedDir, version, cacheRoot);
+        options.onStage?.(`QQ 原生文件就绪：缓存版本 ${info.version}`);
         return info;
     } catch (err) {
         await clearCacheVersion(cacheRoot, version);

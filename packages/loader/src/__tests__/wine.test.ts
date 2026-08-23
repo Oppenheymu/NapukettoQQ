@@ -3,7 +3,14 @@
  * 不依赖真实 wine——纯逻辑层，Windows 上即可验证（P2 分层策略）。
  */
 import { describe, expect, it } from "vitest";
-import { buildSpawnCommand, toWinePath, unixPathToWinePath, wineBinary } from "../wine.js";
+import {
+    buildSpawnCommand,
+    toWinePath,
+    unixPathToWinePath,
+    wineBinary,
+    wineCheckError,
+    wineInstallHint,
+} from "../wine.js";
 
 describe("toWinePath", () => {
     it("Linux 绝对路径转 Z: 反斜杠路径", () => {
@@ -85,5 +92,42 @@ describe("wineBinary", () => {
         } finally {
             if (prev !== undefined) process.env["NAPUTO_WINE"] = prev;
         }
+    });
+});
+
+describe("wineCheckError", () => {
+    it("status=0：可用（返回 null）", () => {
+        expect(wineCheckError({ status: 0 })).toBeNull();
+    });
+
+    it("ENOENT（wine 未安装）：给出安装指引", () => {
+        const err = Object.assign(new Error("spawn wine ENOENT"), { code: "ENOENT" });
+        const hint = wineCheckError({ status: null, error: err });
+        expect(hint).not.toBeNull();
+        expect(hint).toContain("未检测到 wine");
+        expect(hint).toContain("apt-get install wine64");
+        expect(hint).toContain("NAPUTO_WINE");
+    });
+
+    it("其他 spawn 错误：附带指引", () => {
+        const err = new Error("permission denied");
+        const hint = wineCheckError({ status: null, error: err });
+        expect(hint).not.toBeNull();
+        expect(hint).toContain("wine 探测失败");
+        expect(hint).toContain("permission denied");
+    });
+
+    it("非零退出码（wine 异常）：给出说明", () => {
+        const hint = wineCheckError({ status: 42 });
+        expect(hint).not.toBeNull();
+        expect(hint).toContain("退出码非 0");
+    });
+});
+
+describe("wineInstallHint", () => {
+    it("包含安装与覆盖两条指引", () => {
+        const hint = wineInstallHint();
+        expect(hint).toContain("apt-get install wine64");
+        expect(hint).toContain("NAPUTO_WINE");
     });
 });

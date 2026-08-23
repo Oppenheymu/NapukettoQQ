@@ -10,14 +10,22 @@
  * P2（2026-08-12）：平台分支——win32 本机 node；linux 经 wine 跑 Windows 版 node.exe
  * （ensureWinNode 下载）。所有传给 wine 子进程的路径过 toWinePath（Z:\）。
  */
-import { type StdioOptions, spawn } from "node:child_process";
+import { type StdioOptions, spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 import type { QqInstallInfo } from "./locate-qq.js";
 import { ensureWinNode } from "./win-node.js";
-import { buildSpawnCommand, isLinux, toWinePath, unixPathToWinePath } from "./wine.js";
+import {
+    buildSpawnCommand,
+    isLinux,
+    toWinePath,
+    unixPathToWinePath,
+    wineBinary,
+    wineCheckError,
+    wineInstallHint,
+} from "./wine.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -60,6 +68,11 @@ export interface LaunchOptions {
      * 查找失败警告），其余转发——原生 printf 直写 fd 的字节无法从 JS 层拦截。
      */
     stdio?: StdioOptions;
+    /**
+     * 阶段回调（stub 校验/win-node 下载/spawn 提示，2026-08-23 起——下载
+     * 313MB 安装包与 win-node 全程静默的坑）。调用方接 logger.info。
+     */
+    onStage?: (message: string) => void;
 }
 
 export interface LaunchResult {
@@ -99,6 +112,7 @@ export async function launchSelfHost(options: LaunchOptions): Promise<LaunchResu
                 "请用 --stub-dir 或环境变量 NAPUTO_STUB_DIR 指定 stub 目录）",
         );
     }
+    options.onStage?.(`stub QQNT.dll 就绪：${stub}`);
 
     // 平台分支：win32 本机 node；linux wine + win-node（下载）
     const { useWine, winNodePath } = await resolveNodeExecutable(options);
@@ -121,12 +135,27 @@ export async function launchSelfHost(options: LaunchOptions): Promise<LaunchResu
         selfHostPath: useWine ? toWinePath(selfHostPath) : selfHostPath,
         wine: wineBinary(),
     });
+    options.onStage?.(`启动自建宿主子进程：${command} ${args.join(" ")}`);
     const child = spawn(command, args, {
         // exactOptionalPropertyTypes：未传 cwd 时不显式写入 undefined（继承父进程）
         ...(options.cwd !== undefined ? { cwd: options.cwd } : {}),
         env,
         stdio: options.stdio ?? "inherit",
         windowsHide: false,
+    });
+
+    // ⚠️ spawn error 兜底（2026-08-23 WSL 生产事故）：wine 未安装时 Node 异步
+    // emit 'error'（ENOENT），无监听者 = EventEmitter 默认 throw →
+    // uncaughtException → 整个宿主进程（koishi）崩溃。预检（assertWineAvailable）
+    // 已覆盖常见场景，这里防漏网并输出可读信息，绝不让宿主进程崩掉。
+    child.once("error", (err) => {
+        const code = (err as NodeJS.ErrnoException).code;
+        const message =
+            code === "ENOENT"
+                ? `无法启动子进程（命令不存在）: ${command}\n${isLinux() ? wineInstallHint() : ""}`
+                : `子进程启动失败: ${err.message}`;
+        // 防崩溃兜底输出（driver 侧另有 error 监听转 onError 友好流程）
+        process.stderr.write(`[napuketto-loader] ${message}\n`);
     });
 
     return { child, bootJsPath: selfHostPath };
@@ -140,10 +169,21 @@ async function resolveNodeExecutable(options: LaunchOptions): Promise<{
     if (!isLinux()) {
         return { useWine: false, winNodePath: undefined };
     }
+    // ⚠️ wine 预检（2026-08-23 WSL 生产事故）：spawn 前确认 wine 可执行——
+    // 干净 WSL 环境默认没有 wine，缺失时给出安装指引（throw 可读错误，由
+    // 调用方 driver 捕获转 [W] 驱动错误），而不是 spawn 后异步 'error' 崩进程。
+    const wine = wineBinary();
+    const probe = spawnSync(wine, ["--version"], { stdio: "ignore" });
+    const hint = wineCheckError(probe);
+    if (hint !== null) {
+        throw new Error(hint);
+    }
+    options.onStage?.("wine 就绪，获取 Windows 版 node.exe（Linux/wine 场景）…");
     const winNode = await ensureWinNode({
         ...(options.cwd !== undefined ? { dataRoot: options.cwd } : {}),
         ...(options.winNodePath !== undefined ? { exePath: options.winNodePath } : {}),
     });
+    options.onStage?.(`Windows 版 node.exe 就绪：${winNode.exePath}（${winNode.version}）`);
     return { useWine: true, winNodePath: winNode.exePath };
 }
 
@@ -206,11 +246,6 @@ function buildLaunchEnv(options: LaunchOptions, useWine: boolean): Record<string
         ...(options.ipc === true ? { [ENV.IPC]: "1" } : {}),
     };
     return { ...env, ...optional };
-}
-
-/** wine 可执行文件（linux 场景；NAPUTO_WINE 可覆盖）。 */
-function wineBinary(): string {
-    return process.env["NAPUTO_WINE"] ?? "wine";
 }
 
 /** 环境变量名（self-host.cjs 与 kernel 引导读取）。 */
