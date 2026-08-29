@@ -350,3 +350,43 @@ packages/loader/
 **遗留待实现时确认**：
 1. `qq-releases.json` 放 loader 包内 vs 单独维护（先放包内，后续量大再拆）。
 2. `resolveQqInstall` 的 API 兼容：保留旧签名导出，新入口 `resolveQqFiles` 并行存在，待 cli/koishi 适配器切换后再移除旧入口。
+
+---
+
+## 9. IPC 模式与 OB11 容器可选装配（2026-08-27）
+
+`src/host/ipc/`：koishi 插件子进程模式（`NAPUTO_IPC=1`，stdout JSON 行 + stdin
+action/control）。登录前启动 stdin 服务端（login.refreshQr 可达），登录后
+`attachIpcServices` 把 kernel 服务动作（`msg.sendMessage` 等点分域）并入同一张
+共享动作表，事件通道经 `sendEvent(service, name, args)` 透出。
+
+### 9.1 OB11 容器可选装配（ipc-ob11.ts）
+
+**触发条件**：IPC 模式 && `NAPUTO_ADAPTER_ENTRY` + `NAPUTO_NETWORK_ENTRY` 已注入
+（koishi 插件 launcher 透传；cli 协议模式不走本分支，行为零变化）。
+
+**装配**（`attachOb11IpcBridge(actions, services)`，`attachIpcServices` 之后调用，
+fail-soft——import/构造失败只 log 降级，不阻断登录链路）：
+
+1. 动态 import `{NETWORK_ENTRY}`（EventBroadcaster）、`{ADAPTER_ENTRY}` 派生的
+   `onebot11/index.mjs` / `core/index.mjs` 子路径（assemble-protocols.ts 同款
+   最小接口面声明——loader 编译期零 adapter/network 静态依赖，不违反依赖方向）。
+2. `ProtocolConfig` 以 `seed = ob11ConfigSchema.parse({})` 构造（缺省段），
+   `load()` 直接返回内存初值——**不读不写任何配置文件**（ConfigBase seed 语义）。
+3. 实例化 `NapukettoOneBot11Adapter`：九个 kernel api + self + groupCache +
+   `msgChannel = services.channel` + system 最小面（appVersion 来自
+   `NAPUTO_QQ_VERSION`；cleanCache 走 kernel PathWrapper；bot_exit/set_restart
+   同 cli 模式 process.exit(0)，由插件 driver 重启机制接管）。
+4. 调 adapter **`subscribeOnly()`**（公共方法，本特性为 adapter 唯一新增面）：
+   订阅 `Msg/onRecvMsg` 维护 messageUnique + 灰色通知翻译；**不装配网络传输 /
+   不起心跳 / 不广播 lifecycle**（与 `start()` 的差别仅在传输层）。
+5. `adapter.registry`（公共只读）遍历全部动作名平铺合并进共享 IPC 动作表：
+   handler = `(params) => act.handle(params)`——OB11 信封（status/retcode/data/
+   message）与 zod 校验 + 错误码映射在 `BaseAction.handle` 内完成。动作名空间
+   不冲突：kernel 动作点分命名（`msg.sendMessage`），OB11 snake_case（`send_like`）。
+6. broadcaster 挂一个仅 `send` 的桥适配器 → `sendEvent("ob11", post_type,
+   [事件对象])` 透出 OB11 格式事件。
+7. 返回 stop 函数：broadcaster 注销 + adapter `unsubscribeOnly()`。
+
+**可注入依赖**（`deps` 参数）：importModule / emitEvent / env / log——单测无需
+真实文件与子进程。

@@ -65,30 +65,43 @@ describe("tildeRange", () => {
 });
 
 describe("planSync", () => {
+    /** 全量 latest 映射（追踪 4 包）。 */
+    const fullLatest = {
+        "@napuketto/kernel": "0.0.3",
+        "@napuketto/loader": "0.0.6",
+        "@napuketto/adapter": "0.0.19",
+        "@napuketto/network": "0.0.1",
+    };
+
     it("全部最新 → 空变更集", () => {
         const deps = {
             "@napuketto/kernel": "~0.0.3",
             "@napuketto/loader": "~0.0.6",
+            "@napuketto/adapter": "~0.0.19",
+            "@napuketto/network": "~0.0.1",
         };
-        const latest = { "@napuketto/kernel": "0.0.3", "@napuketto/loader": "0.0.6" };
-        expect(planSync(deps, latest)).toEqual([]);
+        expect(planSync(deps, fullLatest)).toEqual([]);
     });
 
     it("部分过期 → 只列过期项", () => {
         const deps = {
             "@napuketto/kernel": "^0.0.2",
             "@napuketto/loader": "~0.0.6",
+            "@napuketto/adapter": "~0.0.19",
+            "@napuketto/network": "~0.0.1",
         };
-        const latest = { "@napuketto/kernel": "0.0.3", "@napuketto/loader": "0.0.6" };
-        expect(planSync(deps, latest)).toEqual([
+        expect(planSync(deps, fullLatest)).toEqual([
             { pkg: "@napuketto/kernel", from: "^0.0.2", to: "~0.0.3" },
         ]);
     });
 
     it("缺声明 → 标记 from (缺失)", () => {
-        const deps = { "@napuketto/loader": "~0.0.6" };
-        const latest = { "@napuketto/kernel": "0.0.3", "@napuketto/loader": "0.0.6" };
-        expect(planSync(deps, latest)).toEqual([
+        const deps = {
+            "@napuketto/loader": "~0.0.6",
+            "@napuketto/adapter": "~0.0.19",
+            "@napuketto/network": "~0.0.1",
+        };
+        expect(planSync(deps, fullLatest)).toEqual([
             { pkg: "@napuketto/kernel", from: "(缺失)", to: "~0.0.3" },
         ]);
     });
@@ -115,7 +128,12 @@ describe("latestFromDistTags", () => {
 });
 
 describe("TRACKED_PACKAGES", () => {
-    it("追踪 kernel 与 loader", () => {
-        expect(TRACKED_PACKAGES).toEqual(["@napuketto/kernel", "@napuketto/loader"]);
+    it("追踪 kernel / loader / adapter / network", () => {
+        expect(TRACKED_PACKAGES).toEqual([
+            "@napuketto/kernel",
+            "@napuketto/loader",
+            "@napuketto/adapter",
+            "@napuketto/network",
+        ]);
     });
 });

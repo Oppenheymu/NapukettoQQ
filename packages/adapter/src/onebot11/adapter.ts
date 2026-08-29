@@ -48,7 +48,8 @@ export class NapukettoOneBot11Adapter extends BaseProtocolAdapter<OB11Config> {
     private readonly msgChannel: MsgEventChannel;
     private readonly selfUin: string;
     private readonly oneBotApi: OneBotApi;
-    private readonly registry: ActionRegistry;
+    /** 动作注册表（公共只读：IPC 桥等装配方枚举动作名直接挂载）。 */
+    readonly registry: ActionRegistry;
     private unsubscribe: (() => void) | null = null;
     private transports: Ob11TransportSet | null = null;
     private heartbeatTimer: NodeJS.Timeout | null = null;
@@ -164,6 +165,23 @@ export class NapukettoOneBot11Adapter extends BaseProtocolAdapter<OB11Config> {
                 void this.broadcastMessageEvent(msg);
             });
         });
+    }
+
+    /**
+     * 仅启动接收链路（IPC 桥模式，2026-08-27）：订阅消息通道维护 messageUnique +
+     * 灰色通知翻译，与 start() 的差别仅在传输层——不装配 HTTP/WS、不起心跳、
+     * 不广播 lifecycle。配置经 seed 装配（load() 返回内存初值）。
+     */
+    async subscribeOnly(): Promise<void> {
+        const config = await this.config.load();
+        this.reportSelfMessage = config.reportSelfMessage;
+        this.messageFormat = config.messagePostFormat;
+        this.subscribe();
+    }
+
+    /** 仅退订（与 subscribeOnly 配对的进程级清理；传输关闭仍走 stop()）。 */
+    unsubscribeOnly(): void {
+        this.unsubscribeAll();
     }
 
     /**

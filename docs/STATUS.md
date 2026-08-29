@@ -138,6 +138,11 @@ msgService 299 方法**（addKernelMsgListener/sendMsg/fetchMsgList 全在）。
 - **adapter**：core 框架（BaseProtocolAdapter/BaseAction/ActionRegistry/AdapterRegistry/ProtocolConfig）
   + onebot11 全量（**79 个动作（含别名变体）**，message/group/friend/system 四分组 + api 聚合 OneBotApi + GroupCache
   消费 + error-map + CQ 码 + 事件模型 + HTTP/WS 传输 + 鉴权 + 心跳）
+- **koishi 插件 OB11 动作桥（2026-08-27）**：IPC 模式（`NAPUTO_IPC=1`）下 loader 检测
+  `NAPUTO_ADAPTER_ENTRY`/`NAPUTO_NETWORK_ENTRY` 注入时整表挂载 OB11 动作容器（79 动作
+  平铺合并进 IPC 动作表 + `subscribeOnly()` 接收链路 + ob11 事件透出；零网络传输、
+  零配置文件 IO、fail-soft）——koishi 侧 `bot.internal._request("send_like", ...)` 直达
+  全部 OB11 动作；详见 loader design.md §9 与插件 design.md §5.14
 - **network**：完整（HttpServer/HttpClient/WsServer/WsClient/EventBroadcaster）
 - **media**：完整（image/audio(silk)/video(ffmpeg)）
 - **loader**：自建宿主引导（launcher `launchSelfHost` / locate-qq / host/core 引导编排）+ 闭源 stub QQNT.dll

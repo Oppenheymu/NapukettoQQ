@@ -12,6 +12,11 @@ export {
 export { attachIpcServices, createIpcActionsForCore } from "./ipc-bootstrap.js";
 export { decodeIpcMessage, encodeIpcMessage } from "./ipc-codec.js";
 export {
+    attachOb11IpcBridge,
+    type Ob11BridgeDeps,
+    type Ob11BridgeEnv,
+} from "./ipc-ob11.js";
+export {
     enableIpc,
     sendEvent,
     sendLog,

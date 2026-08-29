@@ -13,8 +13,16 @@
  * 本模块可被 vitest 直接单测。
  */
 
-/** 需要同步的 @napuketto/* 包（key = npm 包名）。 */
-export const TRACKED_PACKAGES = ["@napuketto/kernel", "@napuketto/loader"] as const;
+/**
+ * 需要同步的 @napuketto/* 包（key = npm 包名）。
+ * 2026-08-27：+ adapter / network（koishi 插件 OB11 动作桥子进程侧入口依赖，design.md §5.14）。
+ */
+export const TRACKED_PACKAGES = [
+    "@napuketto/kernel",
+    "@napuketto/loader",
+    "@napuketto/adapter",
+    "@napuketto/network",
+] as const;
 
 /** 单次变更项（planSync 产出）。 */
 export interface DepChange {

@@ -115,12 +115,22 @@ describe("fetchLatestVersions", () => {
 });
 
 describe("main", () => {
+    /** 全量 registry latest（追踪 4 包，任一缺失 → fetch 404 → main 抛错）。 */
+    const fullLatest = {
+        "@napuketto/kernel": "0.0.3",
+        "@napuketto/loader": "0.0.6",
+        "@napuketto/adapter": "0.0.19",
+        "@napuketto/network": "0.0.1",
+    };
+
     it("依赖已最新 → 不改写文件，退出码 0", async () => {
         const pkgPath = await writePkg({
             "@napuketto/kernel": "~0.0.3",
             "@napuketto/loader": "~0.0.6",
+            "@napuketto/adapter": "~0.0.19",
+            "@napuketto/network": "~0.0.1",
         });
-        stubFetch({ "@napuketto/kernel": "0.0.3", "@napuketto/loader": "0.0.6" });
+        stubFetch(fullLatest);
         const code = await main([`--pkg=${pkgPath}`]);
         expect(code).toBe(0);
         const after = JSON.parse(await readFile(pkgPath, "utf8")) as {
@@ -133,8 +143,10 @@ describe("main", () => {
         const pkgPath = await writePkg({
             "@napuketto/kernel": "^0.0.2",
             "@napuketto/loader": "~0.0.6",
+            "@napuketto/adapter": "~0.0.19",
+            "@napuketto/network": "~0.0.1",
         });
-        stubFetch({ "@napuketto/kernel": "0.0.3", "@napuketto/loader": "0.0.6" });
+        stubFetch(fullLatest);
         const code = await main([`--pkg=${pkgPath}`]);
         expect(code).toBe(0);
         const after = JSON.parse(await readFile(pkgPath, "utf8")) as {
@@ -146,7 +158,7 @@ describe("main", () => {
 
     it("--dry-run 不改写文件", async () => {
         const pkgPath = await writePkg({ "@napuketto/kernel": "^0.0.2" });
-        stubFetch({ "@napuketto/kernel": "0.0.3", "@napuketto/loader": "0.0.6" });
+        stubFetch(fullLatest);
         const code = await main([`--pkg=${pkgPath}`, "--dry-run"]);
         expect(code).toBe(0);
         const after = JSON.parse(await readFile(pkgPath, "utf8")) as {
@@ -162,7 +174,7 @@ describe("main", () => {
     });
 
     it("package.json 不存在 → 抛错", async () => {
-        stubFetch({ "@napuketto/kernel": "0.0.3", "@napuketto/loader": "0.0.6" });
+        stubFetch(fullLatest);
         await expect(main([`--pkg=${join(tmpDir, "nope.json")}`])).rejects.toThrow(/无法读取/);
     });
 });

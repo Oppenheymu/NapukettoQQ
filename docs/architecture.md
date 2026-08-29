@@ -42,7 +42,14 @@ apps/cli               启动编排（commander + 登录渲染 + 配置命令 + 
 @napuketto/adapter   kernel + network + media（协议适配器容器）
 @napuketto/loader    kernel（boot 引导）+ 无其他（唯一 C++ 组件：注入 + 引导 + Native Bypass 载具）
 apps/cli             kernel + adapter + loader
+apps/koishi-plugin-adapter（git submodule）kernel + loader + media + adapter + network
 ```
+
+> **koishi 插件 IPC 模式**（2026-08-27）：koishi 插件经 loader 拉起自建宿主子进程
+> （`NAPUTO_IPC=1`），共享 IPC 动作表 = kernel 点分动作 + **可选整表挂载的 OB11 动作
+> 容器**（app 层注入 `NAPUTO_ADAPTER_ENTRY`/`NAPUTO_NETWORK_ENTRY` 时，loader IPC 分支
+> 动态 import adapter/network 装配——仅注册表 + 接收链路，零网络传输；详见 loader
+> design.md §9）。loader 运行时动态 import 不构成编译期依赖，依赖方向约束不变。
 
 ## 3. 分层原则
 

@@ -9,6 +9,7 @@ import process from "node:process";
 import { env } from "../env.js";
 import {
     attachIpcServices,
+    attachOb11IpcBridge,
     createIpcActionsForCore,
     type IpcActionHandler,
     sendLogin,
@@ -395,6 +396,10 @@ export async function bootstrapWithCore(
     // 登录后把 kernel 服务动作并入登录期动作表（同一张 Map，服务端实时可见）
     if (env.NAPUTO_IPC === "1" && services !== null && ipcActions !== null) {
         attachIpcServices(ipcActions, services);
+        // OB11 动作桥（可选，2026-08-27）：app 层注入 adapter/network 入口时整表
+        // 挂载 OB11 动作容器（79 动作 + ob11 事件透出）；未注入静默跳过，装配
+        // 失败 fail-soft 降级纯 kernel 动作面（ipc-ob11.ts 内部兜底）
+        await attachOb11IpcBridge(ipcActions, services);
     }
     // 探测模式
     runProbePhase(kernel, ctx);

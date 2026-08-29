@@ -284,6 +284,9 @@ importers:
       '@koishijs/plugin-console':
         specifier: ^5.30.11
         version: 5.30.11(@koishijs/client@5.30.11(@types/node@26.2.0)(lightningcss@1.33.0)(postcss@8.5.26)(rollup@4.62.4)(typescript@7.0.2))(koishi@4.18.11(@cordisjs/plugin-http@0.6.3(cordis@3.18.1))(cordis@3.18.1))
+      '@napuketto/adapter':
+        specifier: ~0.0.19
+        version: link:../../packages/adapter
       '@napuketto/kernel':
         specifier: ~0.0.15
         version: link:../../packages/kernel
@@ -293,6 +296,9 @@ importers:
       '@napuketto/media':
         specifier: ~0.0.2
         version: link:../../packages/media
+      '@napuketto/network':
+        specifier: ~0.0.1
+        version: link:../../packages/network
     devDependencies:
       '@biomejs/biome':
         specifier: ^2.5.6
@@ -4001,8 +4007,8 @@ packages:
       jsdom:
         optional: true
 
-  vscode-uri@3.1.0:
-    resolution: {integrity: sha512-/BpdSx+yCQGnCvecbyXdxHDkuk55/G3xwnC0GqY4gmQ3j+A+g8kzzgB4Nk/SINjqn6+waqw3EgbVF2QKExkRxQ==}
+  vscode-uri@3.2.0:
+    resolution: {integrity: sha512-m2gXo3bn0G1kT9InzMf07fTbqMbGtyckj3bH5ktLO+1Ssv+yiATZ4dhwaQv9UZWxJh6E9IFGnQyjgWVDWVBDrg==}
 
   vue-demi@0.14.10:
     resolution: {integrity: sha512-nMZBOwuzabUO0nLgIcc6rycZEebF6eeUfaiQx9+WSk8e29IbLvPU9feI6tqW4kTo3hvoYAJkMh8n8D0fuISphg==}
@@ -5609,7 +5615,7 @@ snapshots:
     dependencies:
       '@volar/language-core': 2.4.28
       path-browserify: 1.0.1
-      vscode-uri: 3.1.0
+      vscode-uri: 3.2.0
     optional: true
 
   '@vue/compiler-core@3.5.41':
@@ -7681,7 +7687,7 @@ snapshots:
     transitivePeerDependencies:
       - msw
 
-  vscode-uri@3.1.0:
+  vscode-uri@3.2.0:
     optional: true
 
   vue-demi@0.14.10(vue@3.5.41(typescript@7.0.2)):
