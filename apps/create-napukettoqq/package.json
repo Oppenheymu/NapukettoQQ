@@ -1,6 +1,6 @@
 {
     "name": "create-napukettoqq",
-    "version": "0.2.30",
+    "version": "0.2.31",
     "description": "一键生成 NapukettoQQ 机器人项目（yarn/pnpm/npm create napukettoqq）",
     "type": "module",
     "files": [
@@ -17,7 +17,7 @@
     },
     "dependencies": {
         "@clack/prompts": "^1.7.0",
-        "@napuketto/cli": "workspace:*",
+        "@napuketto/cli": "^0.1.8",
         "picocolors": "^1.0.0"
     },
     "devDependencies": {
