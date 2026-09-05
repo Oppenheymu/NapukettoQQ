@@ -12,7 +12,7 @@
  */
 import { type StdioOptions, spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 import type { QqInstallInfo } from "./locate-qq.js";
@@ -52,7 +52,7 @@ export interface LaunchOptions {
     ipc?: boolean;
     /** 自建宿主入口（默认 dist/host/self-host.cjs）。 */
     selfHostEntry?: string;
-    /** Windows 版 node.exe 路径（linux 场景覆盖；缺省 ensureWinNode 下载）。 */
+    /** Windows 版 node.exe 路径（linux 下载覆盖 / win32 非 node 宿主时显式指定；缺省自动解析）。 */
     winNodePath?: string;
     /**
      * 子进程工作目录（缺省继承父进程 cwd）。
@@ -128,10 +128,10 @@ export async function launchSelfHost(options: LaunchOptions): Promise<LaunchResu
     }
     // spawn 命令：win32 = node.exe selfHostPath；linux = wine winNodePath selfHostPath
     // wine 场景 selfHostPath 也需转 Windows 路径（wine 内 node 读参数）
+    // winNodePath：resolveNodeExecutable 解析出的宿主 node（wine 下载 / win32 非
+    // node 宿主解析）；未解析（win32 标准 node 环境，execPath 即 node 自身）回退。
     const { command, args } = buildSpawnCommand({
-        ...(useWine && winNodePath !== undefined
-            ? { winNodePath }
-            : { winNodePath: process.execPath }),
+        ...(winNodePath !== undefined ? { winNodePath } : { winNodePath: process.execPath }),
         selfHostPath: useWine ? toWinePath(selfHostPath) : selfHostPath,
         wine: wineBinary(),
     });
@@ -161,13 +161,28 @@ export async function launchSelfHost(options: LaunchOptions): Promise<LaunchResu
     return { child, bootJsPath: selfHostPath };
 }
 
-/** 平台分支解析 node 可执行：win32 本机；linux wine + Windows 版 node.exe。 */
+/**
+ * 平台分支解析 node 可执行：win32 本机（非 node 宿主时解析真 node）；linux wine +
+ * Windows 版 node.exe（ensureWinNode 下载）。
+ */
 async function resolveNodeExecutable(options: LaunchOptions): Promise<{
     useWine: boolean;
     winNodePath: string | undefined;
 }> {
     if (!isLinux()) {
-        return { useWine: false, winNodePath: undefined };
+        // win32：标准 node 宿主（execPath 即 node）直接用自身；非 node 宿主
+        // （koishi CE 等 Bun 运行时，execPath=bun.exe）必须解析真 node——
+        // wrapper.node 的符号由 stub QQNT.dll 绑定到 node.exe，bun.exe 进程内
+        // 无此模块，LoadLibrary 报 1114「DLL 初始化例程失败」（2026-09-05 实测）。
+        if (isNodeExecutable(process.execPath)) {
+            return { useWine: false, winNodePath: undefined };
+        }
+        const hostNode = await resolveWinHostNode({
+            ...(options.winNodePath !== undefined ? { explicitPath: options.winNodePath } : {}),
+            ...(options.cwd !== undefined ? { dataRoot: options.cwd } : {}),
+            ...(options.onStage !== undefined ? { onStage: options.onStage } : {}),
+        });
+        return { useWine: false, winNodePath: hostNode };
     }
     // ⚠️ wine 预检（2026-08-23 WSL 生产事故）：spawn 前确认 wine 可执行——
     // 干净 WSL 环境默认没有 wine，缺失时给出安装指引（throw 可读错误，由
@@ -185,6 +200,96 @@ async function resolveNodeExecutable(options: LaunchOptions): Promise<{
     });
     options.onStage?.(`Windows 版 node.exe 就绪：${winNode.exePath}（${winNode.version}）`);
     return { useWine: true, winNodePath: winNode.exePath };
+}
+
+/** 可执行文件名是否 node（win32 宿主判定；node.exe / node 两种形态）。 */
+export function isNodeExecutable(execPath: string): boolean {
+    const name = basename(execPath).toLowerCase();
+    return name === "node.exe" || name === "node";
+}
+
+/** 系统 node 探测结果（win32，PATH 解析 + 可执行校验）。 */
+export interface SystemNodeInfo {
+    exePath: string;
+    version: string;
+}
+
+/** 行拆分（where 输出 \r\n / \n 兼容）。 */
+const LINE_SPLIT = /\r?\n/;
+
+/** 探测系统 PATH 上的 node（win32；where node 首条 + --version 校验可执行）。 */
+export function findSystemNode(): SystemNodeInfo | undefined {
+    const probe = spawnSync("where", ["node"], {
+        stdio: "pipe",
+        encoding: "utf8",
+        windowsHide: true,
+    });
+    if (probe.status !== 0 || !probe.stdout) {
+        return undefined;
+    }
+    const first = probe.stdout
+        .split(LINE_SPLIT)
+        .map((line) => line.trim())
+        .find((line) => line !== "");
+    if (first === undefined || !existsSync(first)) {
+        return undefined;
+    }
+    const ver = spawnSync(first, ["--version"], {
+        stdio: "pipe",
+        encoding: "utf8",
+        windowsHide: true,
+    });
+    const version = ver.status === 0 ? ver.stdout.trim() : "";
+    if (!version.startsWith("v")) {
+        return undefined;
+    }
+    return { exePath: resolve(first), version };
+}
+
+/** resolveWinHostNode 测试注入面（探测/下载替换为假实现）。 */
+export interface WinHostNodeResolvers {
+    findSystemNode?: () => SystemNodeInfo | undefined;
+    ensureWinNode?: typeof ensureWinNode;
+}
+
+/**
+ * win32 非 node 宿主时解析真 node.exe：显式覆盖（winNodePath 参数 /
+ * NAPUTO_WIN_NODE_PATH）> 系统 PATH node（离线可用，免下载）> ensureWinNode
+ * 下载（缓存幂等）。显式路径不存在时静默跳过（与 ensureWinNode 行为一致）。
+ */
+export async function resolveWinHostNode(
+    options: {
+        explicitPath?: string;
+        dataRoot?: string;
+        onStage?: (message: string) => void;
+    },
+    resolvers: WinHostNodeResolvers = {},
+): Promise<string | undefined> {
+    const findSystem = resolvers.findSystemNode ?? findSystemNode;
+    const ensure = resolvers.ensureWinNode ?? ensureWinNode;
+
+    const explicit = options.explicitPath ?? process.env["NAPUTO_WIN_NODE_PATH"];
+    if (explicit !== undefined && explicit !== "" && existsSync(explicit)) {
+        const exePath = resolve(explicit);
+        options.onStage?.(`使用显式指定 node：${exePath}`);
+        return exePath;
+    }
+
+    options.onStage?.(
+        `当前宿主非 node（${basename(process.execPath)}），解析 Windows 版 node.exe…`,
+    );
+
+    const sys = findSystem();
+    if (sys !== undefined) {
+        options.onStage?.(`系统 node ${sys.version}：${sys.exePath}`);
+        return sys.exePath;
+    }
+
+    const winNode = await ensure({
+        ...(options.dataRoot !== undefined ? { dataRoot: options.dataRoot } : {}),
+    });
+    options.onStage?.(`Windows 版 node.exe 就绪：${winNode.exePath}（${winNode.version}）`);
+    return winNode.exePath;
 }
 
 /** 注入 PATH（stub 目录 + wrapper.node 目录前置）与 STUB_DIR（wine 场景转 Z:\）。 */
