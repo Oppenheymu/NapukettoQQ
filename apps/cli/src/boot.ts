@@ -22,6 +22,7 @@ import { resolveConfigPath, resolveDataRoot } from "@napuketto/kernel";
 import {
     checkInstanceLock,
     defaultStubDir,
+    isNativeNoiseLine,
     launchSelfHost,
     type QqInstallInfo,
     resolveQqFiles,
@@ -47,18 +48,6 @@ async function packageEntry(pkg: string): Promise<string> {
     return fileURLToPath(url);
 }
 
-/**
- * 原生噪音行（wrapper.node 加载后直写 fd 的 C++ 日志，JS 层无法拦截，只能过滤）：
- *  - `<MMKV` / `<MemoryFile_Win32` / `<MMKV_IO`：MMKV 存储库刷屏（每次初始化打 ~6 行）
- *  - `loadSymbolFromShell` / `getNodeGetJsListApi` / `get symbol failed`：
- *    标准 node 无腾讯私有符号（NodeContextifyContextMetrics 等），GetProcAddress
- *    失败的加载警告（无害，纯噪音）
- *  - `loaded [mmkv.*] with N key-values`：MMKV 初始化完成行（野生日志，风格三，
- *    无统一前缀/时间戳，过滤）
- */
-const NATIVE_NOISE =
-    /<MMKV|<MemoryFile_Win32|<MMKV_IO|loadSymbolFromShell|getNodeGetJsListApi|get symbol failed|loaded \[mmkv/i;
-
 /** QR 透出标记行前缀（loader bootstrap-core 非 IPC 模式输出，cli 解析终端渲染）。 */
 const QR_LINE_PREFIX = "NAPUTO_QR ";
 
@@ -70,6 +59,7 @@ const QR_LINE_PREFIX = "NAPUTO_QR ";
  *
  * NAPUTO_QR 标记行（loader bootstrap-core 输出，QR 登录二维码数据）不转发，
  * 解析后用 qrcode 包渲染终端二维码；png 落盘与 URL 提示由 kernel 日志完成。
+ * 噪音判定走 loader 共享单一来源（isNativeNoiseLine，与 koishi IPC 路径同源）。
  */
 function forwardFiltered(input: NodeJS.ReadableStream, out: NodeJS.WritableStream): void {
     const lines = createInterface({ input });
@@ -78,7 +68,7 @@ function forwardFiltered(input: NodeJS.ReadableStream, out: NodeJS.WritableStrea
             renderTerminalQr(line.slice(QR_LINE_PREFIX.length));
             return;
         }
-        if (NATIVE_NOISE.test(line)) {
+        if (isNativeNoiseLine(line)) {
             return;
         }
         out.write(`${line}\n`);

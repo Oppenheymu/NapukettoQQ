@@ -47,6 +47,8 @@ export {
     IpcResultPayloadSchema,
     IpcStatusPayloadSchema,
 } from "./host/ipc/ipc-types.js";
+// wrapper 原生噪音行判定（cli 转发与 koishi IPC 共享单一来源，见 host/ipc/native-noise.ts）。
+export { isNativeNoiseLine } from "./host/ipc/native-noise.js";
 export type { InstanceLockCheck, InstanceLockInfo } from "./instance-lock.js";
 export {
     acquireInstanceLock,
