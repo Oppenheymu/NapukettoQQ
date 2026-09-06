@@ -291,7 +291,7 @@ importers:
         specifier: ~0.0.15
         version: link:../../packages/kernel
       '@napuketto/loader':
-        specifier: ~0.0.26
+        specifier: ~0.0.28
         version: link:../../packages/loader
       '@napuketto/media':
         specifier: ~0.0.2
