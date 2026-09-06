@@ -6,6 +6,9 @@
  * 装配 OB11/Satori 适配器。
  */
 
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { env } from "../env.js";
 import { setupMsgLogging } from "../msg-log.js";
 import type { CoreContextLike, EventChannelLike, KernelLike, LoginResultLike } from "../types.js";
 import { log } from "../util.js";
@@ -46,7 +49,23 @@ export async function createKernelServices(
     ctx: CoreContextLike,
     loginResult: LoginResultLike,
 ): Promise<KernelServices | null> {
-    const logger = kernel.createLogger?.({ console: true, base: { name: "loader" } });
+    // IPC 模式关 console：子进程 stdout 专用于 JSON 行协议，pino-pretty 并发写
+    // 会撕裂协议行（2026-09-06「能收不能发」事故根因，消息日志经此 logger 每
+    // 条消息都会污染）。落盘数据目录 logs/loader.log（消息纯文本另有
+    // napuketto-boot.log 兜底，见 msg-log.ts）；cli 模式 console 输出不变。
+    const ipcMode = env.NAPUTO_IPC === "1";
+    const logger = kernel.createLogger?.({
+        console: !ipcMode,
+        ...(ipcMode
+            ? {
+                  file:
+                      env.NAPUTO_CFG_DIR !== undefined
+                          ? join(env.NAPUTO_CFG_DIR, "logs", "loader.log")
+                          : join(tmpdir(), "napuketto-loader.log"),
+              }
+            : {}),
+        base: { name: "loader" },
+    });
     const session = ctx.session;
     if (!session) {
         log("bootstrap: session 为空，无法创建 kernel 服务");

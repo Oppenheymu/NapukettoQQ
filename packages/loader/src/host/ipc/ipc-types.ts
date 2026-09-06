@@ -85,6 +85,7 @@ export const IpcControlPayloadSchema = z.union([
         uin: z.string().optional(),
         qr: z.boolean().optional(),
     }), // 触发登录（预留）
+    z.object({ command: z.literal("status") }), // 状态查询：重播最近一条 status（丢失重同步，2026-09-06）
 ]);
 
 // ── 消息联合 ──

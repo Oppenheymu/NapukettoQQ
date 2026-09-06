@@ -6,13 +6,15 @@
  *  - action → 动作表执行 → result 响应（请求 id 匹配）
  *  - control stop/restart → 退出回调（默认 process.exit(0)，由驱动层重启）
  *  - control login → onLogin 回调（触发重新登录 / 强制扫码）
+ *  - control status → 重播最近一条 status（父进程丢失重同步，2026-09-06）
  *  - ping → 自动回 pong
  *  - 心跳：定期发 ping（koishi 插件探活）
  */
 import { createInterface } from "node:readline";
+import { log } from "../util.js";
 import { callIpcAction, type IpcActionHandler } from "./ipc-actions.js";
 import { decodeIpcMessage } from "./ipc-codec.js";
-import { sendPing, sendPong, sendResult } from "./ipc-sender.js";
+import { replayStatus, sendPing, sendPong, sendResult } from "./ipc-sender.js";
 import type { IpcControlPayload } from "./ipc-types.js";
 
 /** 心跳间隔（毫秒）。 */
@@ -45,7 +47,9 @@ export function startIpcServer(options: IpcServerOptions): () => void {
     rl.on("line", (line) => {
         const message = decodeIpcMessage(line);
         if (message === null) {
-            return; // 非法行：忽略（协议健壮性）
+            // 非法行：忽略但不静默（boot 日志留痕，便于发现协议/对端问题）
+            log(`[ipc] 忽略无法解析的 stdin 行: ${line.slice(0, 200)}`);
+            return;
         }
         switch (message.type) {
             case "action":
@@ -87,7 +91,7 @@ async function handleAction(
     sendResult(id, result);
 }
 
-/** 控制指令处理（stop/restart 退出；login 触发重新登录 / 强制扫码）。 */
+/** 控制指令处理（stop/restart 退出；login 触发重新登录 / 强制扫码；status 重播）。 */
 export function handleControl(
     payload: IpcControlPayload,
     onExit: () => void,
@@ -95,6 +99,11 @@ export function handleControl(
 ): void {
     if (payload.command === "stop" || payload.command === "restart") {
         onExit();
+        return;
+    }
+    // status：重播最近一条 status（父进程丢失 ready 等关键消息后主动重同步）
+    if (payload.command === "status") {
+        replayStatus();
         return;
     }
     // login：透传 uin/qr（可选字段用条件展开，exactOptionalPropertyTypes 不显式赋 undefined）

@@ -2,6 +2,7 @@
  * ipc-server.test.ts：handleControl 控制指令分派单测（纯函数，mock 回调）。
  */
 import { describe, expect, it, vi } from "vitest";
+import { enableIpc, sendStatus } from "../ipc-sender.js";
 import { handleControl } from "../ipc-server.js";
 
 describe("handleControl", () => {
@@ -37,5 +38,25 @@ describe("handleControl", () => {
 
     it("login 未提供 onLogin → 不抛（忽略）", () => {
         expect(() => handleControl({ command: "login" }, vi.fn())).not.toThrow();
+    });
+
+    it("status → 不触发 onExit，重播最近一条 status（stdout 拦截验证）", () => {
+        const onExit = vi.fn();
+        const lines: string[] = [];
+        const write = vi.spyOn(process.stdout, "write").mockImplementation((chunk) => {
+            lines.push(String(chunk));
+            return true;
+        });
+        try {
+            enableIpc();
+            sendStatus("sessioning", "装配中");
+            const sentBefore = lines.length;
+            handleControl({ command: "status" }, onExit);
+            expect(onExit).not.toHaveBeenCalled();
+            expect(lines).toHaveLength(sentBefore + 1);
+            expect(lines.at(-1)).toBe(lines[sentBefore]); // 重播内容与原条一致
+        } finally {
+            write.mockRestore();
+        }
     });
 });

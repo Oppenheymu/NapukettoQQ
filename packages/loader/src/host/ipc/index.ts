@@ -18,6 +18,7 @@ export {
 } from "./ipc-ob11.js";
 export {
     enableIpc,
+    replayStatus,
     sendEvent,
     sendLog,
     sendLogin,

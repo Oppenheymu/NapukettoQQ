@@ -318,6 +318,10 @@ export async function bootstrapWithCore(
     const core: CoreLike = coreCtor.create({
         paths: { dataRoot: bootEnv.dataDir },
         logLevel: "info",
+        // IPC 模式关 console：stdout 专用于 JSON 行协议，pino-pretty 并发写会
+        // 撕裂协议行（2026-09-06「能收不能发」事故根因）；文件日志
+        // logs/napuketto.log 不受影响，cli 模式 console 输出不变
+        ...(env.NAPUTO_IPC === "1" ? { consoleLog: false } : {}),
     });
 
     // ⭐ IPC 模式：登录前就启动 stdin 服务端（只含 login.refreshQr 动作）。

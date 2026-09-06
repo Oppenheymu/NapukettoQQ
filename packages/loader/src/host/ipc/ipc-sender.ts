@@ -10,10 +10,16 @@ import {
     type IpcLogLevel,
     type IpcMessage,
     type IpcResultPayload,
+    type IpcStatusPayload,
 } from "./ipc-types.js";
 
 /** IPC 模式开关（self-host.ts 在 env.NAPUTO_IPC=1 时 enable）。 */
 let enabled = false;
+
+/** 最近一次 status payload 快照（control status 查询时重播）。
+ * 防御场景：ready 等关键 status 消息被 stdout 并发写撕裂丢失（原生 printf
+ * 直写 fd 等 JS 层拦不住的污染），父进程可主动查询重同步。 */
+let lastStatus: IpcStatusPayload | null = null;
 
 /** 启用 IPC 发送（幂等）。 */
 export function enableIpc(): void {
@@ -38,15 +44,20 @@ export function sendStatus(
     message?: string,
     error?: { code: string; message: string },
 ): void {
-    sendIpc({
-        v: IPC_VERSION,
-        type: "status",
-        payload: {
-            phase,
-            ...(message !== undefined ? { message } : {}),
-            ...(error !== undefined ? { error } : {}),
-        },
-    });
+    const payload: IpcStatusPayload = {
+        phase,
+        ...(message !== undefined ? { message } : {}),
+        ...(error !== undefined ? { error } : {}),
+    };
+    lastStatus = payload;
+    sendIpc({ v: IPC_VERSION, type: "status", payload });
+}
+
+/** 重播最近一条 status（control status 查询响应；从未发送过则忽略）。 */
+export function replayStatus(): void {
+    if (lastStatus !== null) {
+        sendIpc({ v: IPC_VERSION, type: "status", payload: lastStatus });
+    }
 }
 
 /** 登录状态（QR 状态机 idle/waiting_scan/scanned/logged_in/failed）。 */

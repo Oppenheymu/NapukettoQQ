@@ -113,6 +113,8 @@ export interface KernelLike {
         create(options: {
             paths: { dataRoot?: string | undefined };
             logLevel?: string | undefined;
+            /** IPC 模式传 false：stdout 专用于 JSON 行协议，console 流会撕裂协议行。 */
+            consoleLog?: boolean;
         }): CoreLike;
     };
     startNapuketto?: (options: {
@@ -148,10 +150,12 @@ export interface KernelLike {
     ChatType: Record<"GROUP" | "C2C", number>;
     toCanonicalElements(msg: unknown): CanonicalElementLike[];
     parseToml(raw: string): Record<string, unknown>;
-    // 日志（ADR-007）：kernel createLogger，loader 引导进程自建实例（console only）
+    // 日志（ADR-007）：kernel createLogger，loader 引导进程自建实例
+    // （IPC 模式 console:false + file 落盘——stdout 专用于 JSON 行协议）
     createLogger?: (opts: {
         level?: string;
         console?: boolean;
+        file?: string;
         base?: Record<string, unknown>;
     }) => LoggerLike;
     NTEventChannel: new (name: string) => EventChannelLike;
