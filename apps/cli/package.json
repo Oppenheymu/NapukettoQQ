@@ -1,6 +1,6 @@
 {
     "name": "@napuketto/cli",
-    "version": "0.1.10",
+    "version": "0.1.11",
     "description": "Command line interface for NapukettoQQ",
     "type": "module",
     "files": [
@@ -28,10 +28,10 @@
     },
     "license": "MIT",
     "dependencies": {
-        "@napuketto/kernel": "workspace:*",
-        "@napuketto/network": "workspace:*",
-        "@napuketto/adapter": "workspace:*",
-        "@napuketto/loader": "workspace:*",
+        "@napuketto/kernel": "^0.0.15",
+        "@napuketto/network": "^0.0.2",
+        "@napuketto/adapter": "^0.0.20",
+        "@napuketto/loader": "^0.0.27",
         "commander": "^15.0.0",
         "qrcode": "^1.5.4"
     }
