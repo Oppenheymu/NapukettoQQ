@@ -18,6 +18,7 @@ export {
 } from "./ipc-ob11.js";
 export {
     enableIpc,
+    lastIpcStatusPhase,
     replayStatus,
     sendEvent,
     sendLog,
@@ -27,6 +28,7 @@ export {
     sendQr,
     sendResult,
     sendStatus,
+    shouldSendGenericBootFailed,
 } from "./ipc-sender.js";
 export {
     handleControl,

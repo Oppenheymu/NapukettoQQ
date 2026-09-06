@@ -28,7 +28,12 @@ import {
     registerLockCleanup,
 } from "../../instance-lock.js";
 import { env } from "../env.js";
-import { enableIpc, sendStatus } from "../ipc/index.js";
+import {
+    enableIpc,
+    lastIpcStatusPhase,
+    sendStatus,
+    shouldSendGenericBootFailed,
+} from "../ipc/index.js";
 import { createState, errMsg, log } from "../util.js";
 import { bootstrap } from "./bootstrap.js";
 
@@ -148,7 +153,21 @@ log("[self-host] 调 bootstrap(state) ...");
 // void：显式忽略 IIFE promise（内部已 try/catch 兜底，不会 reject）
 void (async () => {
     try {
-        await bootstrap(state);
+        const ok = await bootstrap(state);
+        if (!ok) {
+            // 引导未完成（登录失败/服务装配失败/生命周期异常——bootstrap 内部
+            // 不抛错，具体原因见 NAPUTO_CFG_DIR 下 napuketto-boot.log）。
+            // 已发过更具体的 failed（如 NOT_LOGIN）则不覆盖，否则补发通用
+            // failed；随后退出，由 koishi driver 既有重启循环接管（cli 模式
+            // 同样退出——失败留驻只会以假 ready 干扰父进程判断，2026-09-06）。
+            if (shouldSendGenericBootFailed(ipcMode, lastIpcStatusPhase())) {
+                sendStatus("failed", "bootstrap 未完成", {
+                    code: "UNKNOWN",
+                    message: "bootstrap 未完成，详见 napuketto-boot.log",
+                });
+            }
+            process.exit(1);
+        }
         log("[self-host] bootstrap 完成");
         if (ipcMode) {
             sendStatus("ready");

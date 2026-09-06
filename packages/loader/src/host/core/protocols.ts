@@ -16,7 +16,13 @@ import { createKernelServices, type KernelServices } from "./kernel-services.js"
 
 export type { KernelServices } from "./kernel-services.js";
 
-/** 登录成功后装配协议：IPC 模式返回 kernel 服务（供 ipc-server），否则装配 OB11/Satori。 */
+/**
+ * 登录成功后装配协议：IPC 模式返回 kernel 服务（供 ipc-server），否则装配 OB11/Satori。
+ *
+ * 返回 null = 服务未装配（session 缺失 / OB11/Satori 装配失败）——调用方据此判
+ * 引导失败。env 未注入 adapter/network 入口时「跳过装配」仍返回服务（合法运行形态，
+ * 如纯 kernel 探测），不算失败。
+ */
 export async function startProtocols(
     kernel: KernelLike,
     ctx: CoreContextLike,
@@ -33,7 +39,10 @@ export async function startProtocols(
     try {
         await assembleOb11AndSatori(kernel, services, loginResult);
     } catch (e) {
+        // cli 模式跑宿主就是为了 OB11/Satori 服务——装配失败留驻无意义，
+        // 返回 null 让引导判失败退出（2026-09-06 起不再 fail-soft）。
         log(`bootstrap: 协议装配失败: ${errMsg(e)}`);
+        return null;
     }
     return services;
 }

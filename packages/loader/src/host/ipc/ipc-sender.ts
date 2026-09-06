@@ -60,6 +60,21 @@ export function replayStatus(): void {
     }
 }
 
+/** 最近一次 status 的 phase（从未发送过为 null）。
+ * 引导失败决策用：判断「是否已发过更具体的 failed」，避免通用 failed 覆盖具体错误码。 */
+export function lastIpcStatusPhase(): IpcBootPhase | null {
+    return lastStatus?.phase ?? null;
+}
+
+/** 引导未完成时是否补发通用 failed：仅 IPC 模式且最近一条不是 failed
+ * （已发过带具体错误码的 failed 时不覆盖，如登录失败的 NOT_LOGIN）。 */
+export function shouldSendGenericBootFailed(
+    ipcMode: boolean,
+    lastPhase: IpcBootPhase | null,
+): boolean {
+    return ipcMode && lastPhase !== "failed";
+}
+
 /** 登录状态（QR 状态机 idle/waiting_scan/scanned/logged_in/failed）。 */
 export function sendLogin(
     state: "idle" | "waiting_scan" | "scanned" | "logged_in" | "failed",

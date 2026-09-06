@@ -303,17 +303,19 @@ function runProbePhase(kernel: KernelLike, ctx: CoreContextLike): void {
     }
 }
 
-/** NapukettoCore 装配路径：create → attachWrapper → 登录 → 激活 → 协议 → 探测。 */
+/** NapukettoCore 装配路径：create → attachWrapper → 登录 → 激活 → 协议 → 探测。
+ * @returns 引导是否完整完成（协议服务装配成功 = true；登录失败/服务装配失败等
+ *   静默收敛为 false，具体原因见 napuketto-boot.log）。 */
 export async function bootstrapWithCore(
     kernel: KernelLike,
     state: SharedState,
     bootEnv: BootstrapEnv,
     Appid: string | number,
-): Promise<void> {
+): Promise<boolean> {
     // 装配层路径：NapukettoCore.create → attachWrapper → login
     const coreCtor = kernel.NapukettoCore;
     if (coreCtor === undefined) {
-        return;
+        return false;
     }
     const core: CoreLike = coreCtor.create({
         paths: { dataRoot: bootEnv.dataDir },
@@ -352,7 +354,7 @@ export async function bootstrapWithCore(
 
     if (typeof core.login !== "function") {
         log("bootstrap: kernel core missing login fn");
-        return;
+        return false;
     }
     // 打印可用快速登录账号（启动横幅）
     // NAPUTO_QUICK_UIN 强制指定快速登录账号（cli `-q <uin>` 透传，2026-08-07；
@@ -369,7 +371,7 @@ export async function bootstrapWithCore(
         if (env.NAPUTO_IPC === "1") {
             sendStatus("failed", "登录失败", { code: "NOT_LOGIN", message: "登录失败" });
         }
-        return;
+        return false;
     }
     log(
         `bootstrap: 登录成功 uin=${loginResult.uin} uid=${loginResult.uid} nick=${loginResult.nick}`,
@@ -395,10 +397,16 @@ export async function bootstrapWithCore(
     // P2-1 收发消息冒烟自检（NAPUTO_SMOKE=1）：MsgBridge + MsgApi 真发/收一条
     await runSmokeIfEnabled(kernel, ctx, loginResult);
 
-    // 协议装配：IPC 模式返回 kernel 服务（bootstrap 装配 ipc-server），非 IPC 装配 OB11/Satori
+    // 协议装配：IPC 模式返回 kernel 服务（bootstrap 装配 ipc-server），非 IPC 装配 OB11/Satori。
+    // null = 服务未装配（session 缺失 / OB11/Satori 装配失败）——引导判失败，
+    // 由 self-host 决定补发 failed 并退出（服务未装配的常驻进程只会以假 ready 干扰父进程）。
     const services = await startProtocols(kernel, ctx, loginResult);
+    if (services === null) {
+        log("bootstrap: 协议服务装配失败，引导中止");
+        return false;
+    }
     // 登录后把 kernel 服务动作并入登录期动作表（同一张 Map，服务端实时可见）
-    if (env.NAPUTO_IPC === "1" && services !== null && ipcActions !== null) {
+    if (env.NAPUTO_IPC === "1" && ipcActions !== null) {
         attachIpcServices(ipcActions, services);
         // OB11 动作桥（可选，2026-08-27）：app 层注入 adapter/network 入口时整表
         // 挂载 OB11 动作容器（79 动作 + ob11 事件透出）；未注入静默跳过，装配
@@ -407,4 +415,5 @@ export async function bootstrapWithCore(
     }
     // 探测模式
     runProbePhase(kernel, ctx);
+    return true;
 }

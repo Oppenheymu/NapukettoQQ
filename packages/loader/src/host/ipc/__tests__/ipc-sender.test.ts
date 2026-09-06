@@ -108,3 +108,37 @@ describe("ipc-sender status 快照与重播", () => {
         }
     });
 });
+
+describe("lastIpcStatusPhase / shouldSendGenericBootFailed（引导失败决策）", () => {
+    it("从未发送 status 时 lastIpcStatusPhase 为 null", async () => {
+        const sender = await freshSender();
+        expect(sender.lastIpcStatusPhase()).toBeNull();
+    });
+
+    it("lastIpcStatusPhase 跟随最新 phase（未 enable 也更新快照）", async () => {
+        const sender = await freshSender();
+        sender.sendStatus("booting");
+        expect(sender.lastIpcStatusPhase()).toBe("booting");
+        sender.sendStatus("failed", "登录失败", { code: "NOT_LOGIN", message: "登录失败" });
+        expect(sender.lastIpcStatusPhase()).toBe("failed");
+    });
+
+    it("非 IPC 模式（ipcMode=false）恒不补发通用 failed", async () => {
+        const sender = await freshSender();
+        expect(sender.shouldSendGenericBootFailed(false, null)).toBe(false);
+        expect(sender.shouldSendGenericBootFailed(false, "booting")).toBe(false);
+        expect(sender.shouldSendGenericBootFailed(false, "ready")).toBe(false);
+    });
+
+    it("IPC 模式且最近非 failed → 补发通用 failed", async () => {
+        const sender = await freshSender();
+        expect(sender.shouldSendGenericBootFailed(true, null)).toBe(true);
+        expect(sender.shouldSendGenericBootFailed(true, "booting")).toBe(true);
+        expect(sender.shouldSendGenericBootFailed(true, "logging")).toBe(true);
+    });
+
+    it("IPC 模式但最近已 failed → 不覆盖更具体的错误码", async () => {
+        const sender = await freshSender();
+        expect(sender.shouldSendGenericBootFailed(true, "failed")).toBe(false);
+    });
+});
