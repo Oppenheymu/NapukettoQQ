@@ -119,8 +119,9 @@ function createLoginControlHandler(
     core: CoreLike,
     Appid: string | number,
 ): (payload: { uin?: string; qr?: boolean }) => void {
+    // 该 handler 仅在 IPC 模式经 startIpcServer 的 onLogin 注册（见 bootstrapWithCore），
+    // 非 IPC 模式无 control 通道不会触达，故无条件走 JSON 行协议、无需再判 ipcMode
     return (payload) => {
-        const ipcMode = env.NAPUTO_IPC === "1";
         const opts: Record<string, unknown> = {
             appid: String(Appid),
             initTimeoutMs: 20000,
@@ -133,10 +134,10 @@ function createLoginControlHandler(
                 selfInfo?: { uin: string; uid: string; nick: string };
                 message?: string;
             }) => {
-                if (ipcMode && progress.qr !== undefined) {
+                if (progress.qr !== undefined) {
                     sendQr(progress.qr.pngBase64, progress.qr.qrcodeUrl);
                 }
-                if (ipcMode && isLoginState(progress.state)) {
+                if (isLoginState(progress.state)) {
                     sendLogin(progress.state, progress.selfInfo, progress.message);
                 }
             },
@@ -144,7 +145,7 @@ function createLoginControlHandler(
         void core
             .login(opts)
             .then((result) => {
-                if (ipcMode && result !== null) {
+                if (result !== null) {
                     sendLogin("logged_in", {
                         uin: result.uin,
                         uid: result.uid,
@@ -154,9 +155,7 @@ function createLoginControlHandler(
             })
             .catch((err) => {
                 log(`bootstrap: control login 失败: ${errMsg(err)}`);
-                if (ipcMode) {
-                    sendLogin("failed", undefined, errMsg(err));
-                }
+                sendLogin("failed", undefined, errMsg(err));
             });
     };
 }

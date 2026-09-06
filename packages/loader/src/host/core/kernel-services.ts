@@ -76,7 +76,7 @@ export async function createKernelServices(
     const bridge = new kernel.MsgBridge(session, channel);
     bridge.register();
     // 控制台消息日志（NapCat 同款：收到消息打印到控制台；渲染逻辑见 msg-log.ts）。
-    setupMsgLogging(kernel, channel, logger);
+    setupMsgLogging(kernel, channel, logger, !ipcMode);
     // kernel APIs
     const groupApi = new kernel.GroupApi(session);
     // channel 传入 MsgApi：sendMsg 后等 onMsgInfoListUpdate 确认（NapCat 式，2026-08-11）
