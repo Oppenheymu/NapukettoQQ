@@ -56,10 +56,7 @@ export class NapukettoSatoriAdapter extends BaseProtocolAdapter<SatoriConfig> {
             hooks: {
                 onStart: (config) => this.startTransports(config as SatoriConfig),
                 onStop: () => this.stopAll(),
-                onReload: () => {
-                    // 配置热更新重建传输（第一版：重启传输）
-                    return Promise.resolve();
-                },
+                onReload: (config) => this.reloadTransports(config as SatoriConfig),
             },
         });
         this.msgChannel = opts.msgChannel;
@@ -89,6 +86,15 @@ export class NapukettoSatoriAdapter extends BaseProtocolAdapter<SatoriConfig> {
     /** 当前登录信息（READY logins / meta / login.get 用）。 */
     private currentLogin(): Login {
         return toLogin(this.api.self, 0, true);
+    }
+
+    /**
+     * 配置热更新（2026-09-08 实现）：stop 旧传输/退订（广播 login-updated 离线）→
+     * 按新配置重建（广播在线）。Satori 无 IPC 桥模式，无传输时同样走重建路径。
+     */
+    private async reloadTransports(config: SatoriConfig): Promise<void> {
+        await this.stopAll();
+        await this.startTransports(config);
     }
 
     /** 广播 login-updated 事件（适配器启停时）。 */

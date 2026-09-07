@@ -5,9 +5,13 @@
  * 只订阅消息通道（维护 messageUnique + 灰色通知），不装配 HTTP/WS。
  * kernel apis 以宽松桩对象注入（动作注册表构造期只持有引用，不调用）。
  */
+
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { MsgEventChannel } from "@napuketto/kernel";
 import { EventBroadcaster } from "@napuketto/network";
-import { describe, expect, it, vi } from "vitest";
+import { afterAll, describe, expect, it, vi } from "vitest";
 import { ProtocolConfig } from "../core/index.js";
 import { NapukettoOneBot11Adapter, type OneBot11AdapterOptions } from "./adapter.js";
 import { ob11ConfigSchema } from "./helper/index.js";
@@ -184,5 +188,70 @@ describe("NapukettoOneBot11Adapter（request 事件链）", () => {
         ]);
         await new Promise((resolve) => setTimeout(resolve, 10));
         expect(events).toHaveLength(0);
+    });
+});
+
+describe("NapukettoOneBot11Adapter（reload 热更新，2026-09-08 T7）", () => {
+    let tmpRoot = "";
+    afterAll(() => {
+        if (tmpRoot !== "") {
+            rmSync(tmpRoot, { recursive: true, force: true });
+        }
+    });
+
+    /** 文件型配置适配器（broadcaster emit 捕获，msgChannel 计数订阅）。 */
+    function makeFileConfigAdapter(): {
+        adapter: NapukettoOneBot11Adapter;
+        events: Array<{ post_type?: string; sub_type?: string }>;
+        onCalls: ReturnType<typeof vi.fn>;
+        cfgPath: string;
+    } {
+        if (tmpRoot === "") {
+            tmpRoot = mkdtempSync(join(tmpdir(), "napuketto-ob11-reload-"));
+        }
+        const cfgPath = join(tmpRoot, "ob11.toml");
+        writeFileSync(cfgPath, "", "utf8");
+        const events: Array<{ post_type?: string; sub_type?: string }> = [];
+        const broadcaster = {
+            emit: (e: unknown) => events.push(e as { post_type?: string; sub_type?: string }),
+        } as unknown as EventBroadcaster;
+        const onCalls = vi.fn(() => () => undefined);
+        const adapter = new NapukettoOneBot11Adapter({
+            ...stubOptions(),
+            config: new ProtocolConfig({
+                path: cfgPath,
+                schema: ob11ConfigSchema,
+                defaults: ob11ConfigSchema.parse({}),
+            }),
+            broadcaster,
+            msgChannel: { on: onCalls } as unknown as MsgEventChannel,
+        });
+        return { adapter, events, onCalls, cfgPath };
+    }
+
+    it("reload 重建传输：lifecycle enable 二次广播 + 退订重订阅", async () => {
+        const { adapter, events, onCalls, cfgPath } = makeFileConfigAdapter();
+        await adapter.start();
+        const enables = () =>
+            events.filter((e) => e.post_type === "meta_event" && e.sub_type === "enable").length;
+        expect(enables()).toBe(1);
+        expect(onCalls).toHaveBeenCalledTimes(1);
+
+        // 配置变更 + reload → 传输重建（stop → start）
+        writeFileSync(cfgPath, 'token = "changed"\n', "utf8");
+        await adapter.reload();
+        expect(enables()).toBe(2);
+        expect(onCalls).toHaveBeenCalledTimes(2);
+        await adapter.stop();
+    });
+
+    it("subscribeOnly（IPC 桥）reload 不重建传输，仅刷新上报开关", async () => {
+        const { adapter, events } = makeFileConfigAdapter();
+        await adapter.subscribeOnly();
+        const before = events.length;
+        await adapter.reload();
+        // 无 lifecycle enable 广播（未走传输重建路径）
+        expect(events.slice(before).filter((e) => e.post_type === "meta_event").length).toBe(0);
+        adapter.unsubscribeOnly();
     });
 });

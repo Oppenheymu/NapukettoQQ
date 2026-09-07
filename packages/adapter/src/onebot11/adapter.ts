@@ -83,6 +83,8 @@ export class NapukettoOneBot11Adapter extends BaseProtocolAdapter<OB11Config> {
     private heartbeatTimer: NodeJS.Timeout | null = null;
     private reportSelfMessage = false;
     private messageFormat: "array" | "string" = "array";
+    /** IPC 桥模式标记（subscribeOnly 启动；reload 时跳过传输重建）。 */
+    private subscribedOnly = false;
 
     constructor(opts: OneBot11AdapterOptions) {
         super({
@@ -91,10 +93,7 @@ export class NapukettoOneBot11Adapter extends BaseProtocolAdapter<OB11Config> {
             hooks: {
                 onStart: (config) => this.startTransports(config as OB11Config),
                 onStop: () => this.stopAll(),
-                onReload: () => {
-                    // P2-6：配置热更新重建传输
-                    return Promise.resolve();
-                },
+                onReload: (config) => this.reloadTransports(config as OB11Config),
             },
         });
         this.msgChannel = opts.msgChannel;
@@ -104,6 +103,20 @@ export class NapukettoOneBot11Adapter extends BaseProtocolAdapter<OB11Config> {
         this.selfUin = opts.self.uin;
         this.oneBotApi = new OneBotApi(opts);
         this.registry = createOb11ActionRegistry({ api: this.oneBotApi });
+    }
+
+    /**
+     * 配置热更新（P2-6，2026-09-08 实现）：stop 旧传输/心跳/退订 → 按新配置重建。
+     * IPC 桥模式（subscribeOnly，无传输）只刷新上报开关字段，不重建。
+     */
+    private async reloadTransports(config: OB11Config): Promise<void> {
+        if (this.subscribedOnly) {
+            this.reportSelfMessage = config.reportSelfMessage;
+            this.messageFormat = config.messagePostFormat;
+            return;
+        }
+        await this.stopAll();
+        await this.startTransports(config);
     }
 
     /** 启动传输：装配（HTTP/WS）+ 打开 server/client + 广播 lifecycle enable + 起心跳。 */
@@ -249,11 +262,13 @@ export class NapukettoOneBot11Adapter extends BaseProtocolAdapter<OB11Config> {
         const config = await this.config.load();
         this.reportSelfMessage = config.reportSelfMessage;
         this.messageFormat = config.messagePostFormat;
+        this.subscribedOnly = true;
         this.subscribe();
     }
 
     /** 仅退订（与 subscribeOnly 配对的进程级清理；传输关闭仍走 stop()）。 */
     unsubscribeOnly(): void {
+        this.subscribedOnly = false;
         this.unsubscribeAll();
     }
 
