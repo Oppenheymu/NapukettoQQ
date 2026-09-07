@@ -8,12 +8,19 @@
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import {
     parseContentToCanonical,
     type SatoriToCanonicalDeps,
     satoriToCanonicalElements,
 } from "./element-convert.js";
+
+// transcodeVideo mock（video 归一化测试用，vi.hoisted 供工厂引用）
+const transcodeMock = vi.hoisted(() => vi.fn(async (input: string) => `${input}.mp4`));
+vi.mock("@napuketto/media", async (importOriginal) => ({
+    ...(await importOriginal<typeof import("@napuketto/media")>()),
+    transcodeVideo: transcodeMock,
+}));
 
 let tempDir = "";
 
@@ -171,6 +178,34 @@ describe("satoriToCanonicalElements", () => {
             { type: "image", path: img },
             { type: "video", path: video },
         ]);
+    });
+
+    it("video：mp4 直通不转码；非 mp4 经 transcodeVideo 归一化", async () => {
+        const deps = makeDeps();
+        transcodeMock.mockClear();
+        const mp4 = join(tempDir, "a.mp4");
+        await expect(
+            satoriToCanonicalElements([{ type: "video", attrs: { src: mp4 } }], deps),
+        ).resolves.toEqual([{ type: "video", path: mp4 }]);
+        expect(transcodeMock).not.toHaveBeenCalled();
+        const webm = join(tempDir, "b.webm");
+        writeFileSync(webm, "x");
+        await expect(
+            satoriToCanonicalElements([{ type: "video", attrs: { src: webm } }], deps),
+        ).resolves.toEqual([{ type: "video", path: `${webm}.mp4` }]);
+        expect(transcodeMock).toHaveBeenCalledWith(webm);
+    });
+
+    it("video：转码失败（transcodeMock 抛错）原样透传（fail-soft）", async () => {
+        const deps = makeDeps();
+        transcodeMock.mockRejectedValueOnce(new Error("no ffmpeg"));
+        const webm = join(tempDir, "c.webm");
+        writeFileSync(webm, "x");
+        await expect(
+            satoriToCanonicalElements([{ type: "video", attrs: { src: webm } }], deps),
+        ).resolves.toEqual([{ type: "video", path: webm }]);
+        transcodeMock.mockReset();
+        transcodeMock.mockImplementation(async (input: string) => `${input}.mp4`);
     });
 
     it("audio #!SILK 文件 → voice（不转码）", async () => {

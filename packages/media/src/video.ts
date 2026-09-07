@@ -5,6 +5,7 @@
  * - `transcodeVideo`：转码 / 缩放 / 帧率
  * - `getVideoInfo`：解析 ffprobe 输出取宽高与时长
  */
+import { existsSync } from "node:fs";
 import { execa } from "execa";
 import type { TranscodeOptions, VideoInfo } from "./types.js";
 import { MediaError } from "./types.js";
@@ -41,7 +42,7 @@ function replaceExt(input: string, ext: string): string {
     return `${dir}${stem}${ext}`;
 }
 
-/** 转码：按选项输出到替换扩展名后的路径（.mp4）。 */
+/** 转码：按选项输出到替换扩展名后的路径（.mp4）。ffmpeg 缺失/失败抛 MediaError。 */
 export async function transcodeVideo(input: string, opts: TranscodeOptions = {}): Promise<string> {
     const args = ["-y", "-i", input];
     if (opts.width !== undefined && opts.height !== undefined) {
@@ -57,10 +58,17 @@ export async function transcodeVideo(input: string, opts: TranscodeOptions = {})
     const output = replaceExt(input, ".mp4");
     args.push("-c:v", "libx264", "-preset", "fast", output);
 
+    let exitCode: number | undefined;
     try {
-        await execa("ffmpeg", args, { reject: false });
+        const result = await execa("ffmpeg", args, { reject: false });
+        exitCode = result.exitCode;
     } catch (err) {
-        throw new MediaError(`ffmpeg 转码失败: ${input}`, { cause: err });
+        throw new MediaError(`ffmpeg 不可用或转码失败: ${input}`, { cause: err });
+    }
+    // exitCode 校验（2026-09-08 T6 加固）：reject:false 不抛非零退出，此前
+    // 失败也返回 output 路径（文件不存在）——调用方拿到幽灵路径
+    if (exitCode !== 0 || !existsSync(output)) {
+        throw new MediaError(`ffmpeg 转码失败: ${input}（exit ${exitCode ?? "?"}）`);
     }
     return output;
 }

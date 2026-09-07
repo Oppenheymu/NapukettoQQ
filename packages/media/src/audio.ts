@@ -52,6 +52,73 @@ export async function decodeSilkToPcm(
     return { pcmPath, durationMs: result.duration };
 }
 
+/** 解码 SILK → WAV 输出选项。 */
+export interface DecodeSilkToWavOptions {
+    /** 采样率（缺省 24000，QQ 语音协议值）。 */
+    sampleRate?: number;
+    /** 输出目录（缺省输入同目录；收方向解码建议 tmpdir，避免污染 NT 数据目录）。 */
+    outDir?: string;
+}
+
+/** 解码结果（WAV）。 */
+export interface DecodedWav {
+    wavPath: string;
+    durationMs: number;
+}
+
+/**
+ * 解码 SILK → WAV 文件（pcm_s16le 单声道 + 44 字节头，通用可播放格式）。
+ * 收方向语音接线用（koishi h.audio / 外部客户端）：QQ 语音是 silk v3，
+ * 多数播放器无法直接解码，落 WAV 后以本地路径消费。
+ */
+export async function decodeSilkToWav(
+    input: string,
+    options: DecodeSilkToWavOptions = {},
+): Promise<DecodedWav> {
+    const sampleRate = options.sampleRate ?? SILK_SAMPLE_RATE;
+    const buffer = await readFile(input);
+    if (!isSilk(buffer)) {
+        throw new MediaError(`不是有效的 SILK 文件: ${input}`);
+    }
+    const result = await decode(buffer, sampleRate);
+    const { dir, name } = outputTarget(input, ".wav", options.outDir);
+    const wav = wrapPcmInWav(result.data, sampleRate);
+    await writeFile(join(dir, name), wav);
+    return { wavPath: join(dir, name), durationMs: result.duration };
+}
+
+/** 输出目标（目录 + 文件名；outDir 优先，否则输入同目录替换扩展名）。 */
+function outputTarget(input: string, ext: string, outDir?: string): { dir: string; name: string } {
+    const base = input.replaceAll("\\", "/").split("/").pop() ?? "audio";
+    const dot = base.lastIndexOf(".");
+    const stem = dot > 0 ? base.slice(0, dot) : base;
+    const name = `${stem}${ext}`;
+    const dir = outDir !== undefined ? outDir : dirname(input);
+    mkdirSync(dir, { recursive: true });
+    return { dir, name };
+}
+
+/** PCM（s16le 单声道）→ WAV 文件字节（44 字节头 + 数据）。 */
+function wrapPcmInWav(pcm: Uint8Array, sampleRate: number): Buffer {
+    const bytesPerSample = 2;
+    const blockAlign = bytesPerSample; // 单声道
+    const header = Buffer.alloc(44);
+    header.write("RIFF", 0, "ascii");
+    header.writeUInt32LE(36 + pcm.byteLength, 4);
+    header.write("WAVE", 8, "ascii");
+    header.write("fmt ", 12, "ascii");
+    header.writeUInt32LE(16, 16); // fmt 块长度（PCM 固定 16）
+    header.writeUInt16LE(1, 20); // PCM
+    header.writeUInt16LE(1, 22); // 单声道
+    header.writeUInt32LE(sampleRate, 24);
+    header.writeUInt32LE((sampleRate * blockAlign) | 0, 28); // 字节率
+    header.writeUInt16LE(blockAlign, 32);
+    header.writeUInt16LE(bytesPerSample * 8, 34); // 位深
+    header.write("data", 36, "ascii");
+    header.writeUInt32LE(pcm.byteLength, 40);
+    return Buffer.concat([header, Buffer.from(pcm)]);
+}
+
 /**
  * 编码任意音频为 SILK 文件（返回输出路径，输出紧随输入文件）。
  *
