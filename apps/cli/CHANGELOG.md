@@ -1,5 +1,21 @@
 # @napuketto/cli
 
+## 0.1.13
+
+### Patch Changes
+
+- 9b92ca5: feat(cli): 按账号运维命令——napuketto status/stop/restart [-q <uin>]（PID 状态文件 + 存活检测 + win32 树杀 taskkill /T /F + detached 重启）；supervisor 子进程 stdio 管道化逐行账号前缀转发，账号/ supervisor 运行时状态（pid/启动时间/守护重启计数）结构化落盘 runtime.json / supervisor.json
+- Updated dependencies [f13c291]
+- Updated dependencies [43a42e1]
+- Updated dependencies [59e5492]
+- Updated dependencies [36b0144]
+- Updated dependencies [968ed50]
+- Updated dependencies [94cdb8e]
+- Updated dependencies [d480a06]
+  - @napuketto/loader@0.0.29
+  - @napuketto/adapter@0.0.21
+  - @napuketto/kernel@0.0.16
+
 ## 0.1.12
 
 ### Patch Changes
