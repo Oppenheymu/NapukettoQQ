@@ -8,7 +8,14 @@
  * 翻译为纯函数（ADR-008）：只读入参（RawMessage），不调 API、不读缓存。
  */
 
-import type { MsgEventChannel, RawMessage } from "@napuketto/kernel";
+import type {
+    BuddyEventChannel,
+    BuddyReq,
+    GroupEventChannel,
+    GroupNotify,
+    MsgEventChannel,
+    RawMessage,
+} from "@napuketto/kernel";
 import { toCanonicalElements } from "@napuketto/kernel";
 import type { EventBroadcaster } from "@napuketto/network";
 import {
@@ -25,11 +32,22 @@ import type { OB11Config } from "./helper/index.js";
 import { collectReceiveNeeds, type ReceiveTranslateContext } from "./helper/index.js";
 import { toOb11MessageEvent } from "./helper/message-event.js";
 import { collectGrayTipUids, hasGrayTip, toOb11NoticeEvent } from "./helper/notice.js";
+import {
+    narrowBuddyReqs,
+    type RequestTranslateContext,
+    toOb11FriendRequestEvent,
+    toOb11GroupRequestEvent,
+} from "./helper/request.js";
 import type { Ob11TransportSet } from "./transport.js";
 import { assembleOb11Transports } from "./transport.js";
 
 /** 毫秒 → 秒（Unix 时间戳）。 */
 const MS_TO_SEC = 1000;
+
+/** 最小 logger 面（校准日志用：未知事件形状打 raw JSON；缺省静默）。 */
+export interface AdapterLoggerLike {
+    warn(obj: unknown, msg?: string): void;
+}
 
 /** 适配器构造参数（api 相关字段继承 OneBotApiOptions，P2-16 聚合）。 */
 export interface OneBot11AdapterOptions extends OneBotApiOptions {
@@ -39,6 +57,12 @@ export interface OneBot11AdapterOptions extends OneBotApiOptions {
     broadcaster: EventBroadcaster;
     /** kernel 消息事件通道（消息收链路入口）。 */
     msgChannel: MsgEventChannel;
+    /** kernel 群事件通道（可选：Group/onGroupNotifiesUpdated → OB11 request 源）。 */
+    groupChannel?: GroupEventChannel;
+    /** kernel 好友事件通道（可选：Buddy/onBuddyReqChange → OB11 request 源）。 */
+    friendChannel?: BuddyEventChannel;
+    /** 校准日志（可选：未知事件形状 raw JSON；IPC 模式传 loader pino 实例）。 */
+    logger?: AdapterLoggerLike;
 }
 
 /** OneBot 11 协议适配器。 */
@@ -46,11 +70,14 @@ export class NapukettoOneBot11Adapter extends BaseProtocolAdapter<OB11Config> {
     readonly protocol = "onebot11";
 
     private readonly msgChannel: MsgEventChannel;
+    private readonly groupChannel: GroupEventChannel | undefined;
+    private readonly friendChannel: BuddyEventChannel | undefined;
+    private readonly calibLogger: AdapterLoggerLike | undefined;
     private readonly selfUin: string;
     private readonly oneBotApi: OneBotApi;
     /** 动作注册表（公共只读：IPC 桥等装配方枚举动作名直接挂载）。 */
     readonly registry: ActionRegistry;
-    private unsubscribe: (() => void) | null = null;
+    private unsubscribes: Array<() => void> = [];
     private transports: Ob11TransportSet | null = null;
     private heartbeatTimer: NodeJS.Timeout | null = null;
     private reportSelfMessage = false;
@@ -70,6 +97,9 @@ export class NapukettoOneBot11Adapter extends BaseProtocolAdapter<OB11Config> {
             },
         });
         this.msgChannel = opts.msgChannel;
+        this.groupChannel = opts.groupChannel;
+        this.friendChannel = opts.friendChannel;
+        this.calibLogger = opts.logger;
         this.selfUin = opts.self.uin;
         this.oneBotApi = new OneBotApi(opts);
         this.registry = createOb11ActionRegistry({ api: this.oneBotApi });
@@ -143,28 +173,58 @@ export class NapukettoOneBot11Adapter extends BaseProtocolAdapter<OB11Config> {
         }
     }
 
-    /** 订阅 kernel 消息事件（幂等）。 */
+    /** 订阅 kernel 事件（消息 + 群通知 + 好友请求，幂等）。 */
     private subscribe(): void {
-        if (this.unsubscribe !== null) {
+        if (this.unsubscribes.length > 0) {
             return;
         }
         // onRecvMsg 回调参数为消息数组（2026-08-07 运行时实证）——遍历逐条翻译。
-        this.unsubscribe = this.msgChannel.on("Msg/onRecvMsg", (msgs) => {
-            forEachRawMessage(msgs, (msg) => {
-                // grayTip（系统事件）→ notice；否则 → 消息事件
-                if (hasGrayTip(msg)) {
-                    this.broadcastNotice(msg).catch(() => {
-                        // notice 翻译失败静默（grayTip 解析宽容）
-                    });
-                    return;
-                }
-                // 自身消息：默认不上报（OB11 规范行为；reportSelfMessage=true 时上报）
-                if (!this.reportSelfMessage && String(msg.senderUin) === this.selfUin) {
-                    return;
-                }
-                void this.broadcastMessageEvent(msg);
-            });
-        });
+        this.unsubscribes.push(
+            this.msgChannel.on("Msg/onRecvMsg", (msgs) => {
+                forEachRawMessage(msgs, (msg) => {
+                    // grayTip（系统事件）→ notice；否则 → 消息事件
+                    if (hasGrayTip(msg)) {
+                        this.broadcastNotice(msg).catch(() => {
+                            // notice 翻译失败静默（grayTip 解析宽容）
+                        });
+                        return;
+                    }
+                    // 自身消息：默认不上报（OB11 规范行为；reportSelfMessage=true 时上报）
+                    if (!this.reportSelfMessage && String(msg.senderUin) === this.selfUin) {
+                        return;
+                    }
+                    void this.broadcastMessageEvent(msg);
+                });
+            }),
+        );
+        // 群系统通知 → OB11 group request（仅未处理的邀请/申请；doubt 可疑通知跳过）
+        if (this.groupChannel !== undefined) {
+            this.unsubscribes.push(
+                this.groupChannel.on("Group/onGroupNotifiesUpdated", (doubt, notifies) => {
+                    if (doubt || !Array.isArray(notifies)) {
+                        return;
+                    }
+                    void this.broadcastGroupRequests(notifies);
+                }),
+            );
+        }
+        // 好友申请 → OB11 friend request（参数形状待真实事件校准，防御性收窄）
+        if (this.friendChannel !== undefined) {
+            this.unsubscribes.push(
+                this.friendChannel.on("Buddy/onBuddyReqChange", (arg) => {
+                    const reqs = narrowBuddyReqs(arg);
+                    if (reqs === null) {
+                        // 未知形状：raw 日志积累校准数据（T10 实测后回填 narrowBuddyReqs）
+                        this.calibLogger?.warn(
+                            { raw: JSON.stringify(arg)?.slice(0, 2000) },
+                            "ob11: onBuddyReqChange 未知参数形状",
+                        );
+                        return;
+                    }
+                    void this.broadcastFriendRequests(reqs);
+                }),
+            );
+        }
     }
 
     /**
@@ -228,10 +288,57 @@ export class NapukettoOneBot11Adapter extends BaseProtocolAdapter<OB11Config> {
         }
     }
 
+    /** 广播群系统通知 → OB11 group request 事件（批量 uidToUin 后翻译，纯函数）。 */
+    private async broadcastGroupRequests(notifies: unknown[]): Promise<void> {
+        const uids: string[] = [];
+        for (const n of notifies) {
+            const notify = n as { user1?: { uid?: unknown }; user2?: { uid?: unknown } };
+            for (const u of [notify.user1, notify.user2]) {
+                if (typeof u?.uid === "string" && u.uid !== "") {
+                    uids.push(u.uid);
+                }
+            }
+        }
+        let uidToUin = new Map<string, string>();
+        if (uids.length > 0) {
+            try {
+                uidToUin = await this.oneBotApi.uidToUin(uids);
+            } catch {
+                // uid 解析失败：退化为 uid 数值（不阻塞请求上报）
+            }
+        }
+        const ctx: RequestTranslateContext = { selfUin: this.selfUin, uidToUin };
+        for (const n of notifies) {
+            const event = toOb11GroupRequestEvent(n as GroupNotify, ctx);
+            if (event !== null) {
+                this.broadcastEvent(event);
+            }
+        }
+    }
+
+    /** 广播好友申请 → OB11 friend request 事件（批量 uidToUin 后翻译，纯函数）。 */
+    private async broadcastFriendRequests(reqs: BuddyReq[]): Promise<void> {
+        const uids = reqs.map((r) => r.friendUid).filter((uid) => uid !== "");
+        let uidToUin = new Map<string, string>();
+        if (uids.length > 0) {
+            try {
+                uidToUin = await this.oneBotApi.uidToUin(uids);
+            } catch {
+                // uid 解析失败：退化为 uid 数值（不阻塞请求上报）
+            }
+        }
+        const ctx: RequestTranslateContext = { selfUin: this.selfUin, uidToUin };
+        for (const req of reqs) {
+            this.broadcastEvent(toOb11FriendRequestEvent(req, ctx));
+        }
+    }
+
     /** 退订（幂等）。 */
     private unsubscribeAll(): void {
-        this.unsubscribe?.();
-        this.unsubscribe = null;
+        for (const off of this.unsubscribes) {
+            off();
+        }
+        this.unsubscribes = [];
     }
 
     /**

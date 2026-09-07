@@ -127,6 +127,11 @@ export async function attachOb11IpcBridge(
             config: protocolConfig,
             broadcaster,
             msgChannel: services.channel,
+            // OB11 request 事件源（2026-09-08）：群通知 + 好友申请推送
+            groupChannel: services.groupChannel,
+            friendChannel: services.friendChannel,
+            // 校准日志（pino 实例，未知事件形状 raw JSON）
+            logger: services.logger as { warn(obj: unknown, msg?: string): void } | undefined,
             msgApi: services.msgApi,
             groupApi: services.groupApi,
             groupNotifyApi: services.groupNotifyApi,

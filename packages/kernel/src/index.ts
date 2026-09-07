@@ -28,8 +28,8 @@ export {
     WebApi,
     WebHonorType,
 } from "./apis/index.js";
-export type { GroupEventChannel, MsgEventChannel } from "./bridge/index.js";
-export { GroupBridge, MsgBridge } from "./bridge/index.js";
+export type { BuddyEventChannel, GroupEventChannel, MsgEventChannel } from "./bridge/index.js";
+export { FriendBridge, GroupBridge, MsgBridge } from "./bridge/index.js";
 export type { GroupCacheOptions } from "./cache/index.js";
 export { GroupCache } from "./cache/index.js";
 export type { CoreContext, CoreContextOptions } from "./context.js";
@@ -80,6 +80,7 @@ export {
 } from "./login/index.js";
 export type {
     BuddyCategory,
+    BuddyListener,
     BuddyReq,
     CanonicalElement,
     DesktopPathConfig,

@@ -23,6 +23,7 @@ export type {
 } from "./entities.js";
 export { ChatType, GrayTipSubType, TipGroupElementType } from "./entities.js";
 export type {
+    BuddyListener,
     GroupListener,
     GroupMemberListChange,
     MsgListener,

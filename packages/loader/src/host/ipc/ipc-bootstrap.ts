@@ -84,6 +84,7 @@ export function attachIpcServices(
     const stops: Array<() => void> = [];
     forwardChannel(services.channel, stops);
     forwardChannel(services.groupChannel, stops);
+    forwardChannel(services.friendChannel, stops);
 
     return () => {
         for (const stop of stops) {

@@ -22,6 +22,8 @@ export interface KernelServices {
     channel: EventChannelLike;
     /** 群事件通道（Group/onGroupListUpdate 等）。 */
     groupChannel: EventChannelLike;
+    /** 好友事件通道（Buddy/onBuddyReqChange 等；OB11 request 事件源）。 */
+    friendChannel: EventChannelLike;
     /** kernel apis（宽松 unknown，装配方按需断言——OB11 用完整面，IPC 动作表用最小面）。 */
     msgApi: unknown;
     groupApi: unknown;
@@ -91,6 +93,10 @@ export async function createKernelServices(
     const groupChannel = new kernel.NTEventChannel("Group");
     const groupBridge = new kernel.GroupBridge(session, groupChannel);
     groupBridge.register();
+    // 好友事件通道 + 桥（OB11 request/friend 事件源，2026-09-08）
+    const friendChannel = new kernel.NTEventChannel("Buddy");
+    const friendBridge = new kernel.FriendBridge(session, friendChannel);
+    friendBridge.register();
     const groupCache = new kernel.GroupCache({ channel: groupChannel, groupApi });
     groupCache.register();
     const groupNotifyApi = new kernel.GroupNotifyApi(session);
@@ -108,6 +114,7 @@ export async function createKernelServices(
         logger,
         channel,
         groupChannel,
+        friendChannel,
         msgApi,
         groupApi,
         friendApi,

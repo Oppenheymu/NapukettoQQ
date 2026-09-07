@@ -34,4 +34,11 @@ export {
     type NoticeTranslateContext,
     toOb11NoticeEvent,
 } from "./notice.js";
+export {
+    isBuddyReqLike,
+    narrowBuddyReqs,
+    type RequestTranslateContext,
+    toOb11FriendRequestEvent,
+    toOb11GroupRequestEvent,
+} from "./request.js";
 export { toOb11GroupInfo, toOb11GroupMemberInfo } from "./translate.js";
