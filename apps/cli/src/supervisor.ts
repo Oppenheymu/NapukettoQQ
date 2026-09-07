@@ -10,10 +10,12 @@
  */
 import { type ChildProcess, spawn } from "node:child_process";
 import process from "node:process";
+import { createInterface } from "node:readline";
 import { resolveDataRoot } from "@napuketto/kernel";
 import { loadCliConfig } from "./config-cmds.js";
 import type { CliAccountConfig, CliConfig } from "./config-parse.js";
 import { logger } from "./logger.js";
+import { writeAccountRuntime, writeSupervisorRuntime } from "./runtime-state.js";
 
 /** 默认重启延迟（毫秒）。 */
 const DEFAULT_RESTART_DELAY_MS = 2000;
@@ -56,7 +58,20 @@ interface SupervisorCtx {
     autoRestart: boolean;
     stubDir?: string;
     children: Map<string, ChildProcess>;
+    /** 每账号守护重启计数（写 runtime.json 用）。 */
+    restartCounts: Map<string, number>;
     isStopping: () => boolean;
+}
+
+/** 子进程输出前缀转发（stdout/stderr 逐行 `[uin] ` 前缀；pino 行结构化保留在行内）。 */
+function forwardPrefixed(stream: NodeJS.ReadableStream | null, uin: string): void {
+    if (stream === null) {
+        return;
+    }
+    const rl = createInterface({ input: stream });
+    rl.on("line", (line) => {
+        process.stdout.write(`[${uin}] ${line}\n`);
+    });
 }
 
 /** 启动一个账号子进程（exit 后按 autoRestart 守护重启）。 */
@@ -64,23 +79,47 @@ function startAccount(ctx: SupervisorCtx, acct: CliAccountConfig): void {
     if (ctx.isStopping()) {
         return;
     }
-    logger.info({ qq: acct.qq }, "启动账号");
+    const restartCount = ctx.restartCounts.get(acct.qq) ?? 0;
+    logger.info({ qq: acct.qq, pid: process.pid, restartCount }, "启动账号");
     const args = [ctx.entry, "-q", acct.qq, "--data-dir", ctx.dataRoot];
     if (ctx.stubDir !== undefined) {
         args.push("--stub-dir", ctx.stubDir);
     }
+    // stdio 管道化（2026-09-08 T8）：逐行前缀转发（多账号输出可辨别），
+    // 替代 inherit——结构化状态（runtime.json：pid/启动时间/重启计数）同步落盘
     const child = spawn(process.execPath, args, {
-        stdio: "inherit",
+        stdio: ["inherit", "pipe", "pipe"],
     });
+    forwardPrefixed(child.stdout, acct.qq);
+    forwardPrefixed(child.stderr, acct.qq);
     ctx.children.set(acct.qq, child);
+    writeAccountRuntime(ctx.dataRoot, {
+        uin: acct.qq,
+        pid: child.pid ?? 0,
+        startedAt: new Date().toISOString(),
+        kind: "supervisor-child",
+        status: "running",
+        restartCount,
+    });
     child.on("exit", (code, signal) => {
         ctx.children.delete(acct.qq);
         logger.info({ qq: acct.qq, code, signal: signal ?? "none" }, "账号退出");
         if (!ctx.isStopping() && ctx.autoRestart) {
             // 守护：延迟重启（关闭信号到达前无限重试，由 SIGINT/SIGTERM 终止）
+            ctx.restartCounts.set(acct.qq, restartCount + 1);
             setTimeout(() => {
                 startAccount(ctx, acct);
             }, ctx.restartDelayMs);
+        } else {
+            writeAccountRuntime(ctx.dataRoot, {
+                uin: acct.qq,
+                pid: child.pid ?? 0,
+                startedAt: new Date().toISOString(),
+                kind: "supervisor-child",
+                status: "exited",
+                exitCode: code,
+                restartCount,
+            });
         }
     });
     child.on("error", (err) => {
@@ -123,6 +162,7 @@ export async function runSupervisor(opts: SupervisorOptions = {}): Promise<void>
     const restartDelayMs = resolveRestartDelay(opts, config);
     const [, entry = ""] = process.argv;
     const children = new Map<string, ChildProcess>();
+    const restartCounts = new Map<string, number>();
     let stopping = false;
     const ctx: SupervisorCtx = {
         dataRoot,
@@ -131,8 +171,16 @@ export async function runSupervisor(opts: SupervisorOptions = {}): Promise<void>
         autoRestart: config.autoRestart,
         ...(opts.stubDir !== undefined ? { stubDir: opts.stubDir } : {}),
         children,
+        restartCounts,
         isStopping: () => stopping,
     };
+
+    // supervisor 自身状态落盘（napuketto status/stop 消费）
+    writeSupervisorRuntime(dataRoot, {
+        pid: process.pid,
+        startedAt: new Date().toISOString(),
+        accounts: accounts.map((a) => a.qq),
+    });
 
     for (const acct of accounts) {
         startAccount(ctx, acct);

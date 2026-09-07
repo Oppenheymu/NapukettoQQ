@@ -19,6 +19,7 @@ import { Command } from "commander";
 import { runSingleAccount } from "./boot.js";
 import { cmdConfigApply, cmdConfigInit, cmdConfigList, loadCliConfig } from "./config-cmds.js";
 import { logger } from "./logger.js";
+import { cmdRestart, cmdStatus, cmdStop } from "./ops-commands.js";
 import { runSupervisor } from "./supervisor.js";
 
 /** commander collect：累积 -q 多值。 */
@@ -106,6 +107,54 @@ function registerSupervisorCommand(program: Command): void {
         .action(async () => {
             try {
                 await runSupervisor(rootDataDir(program));
+            } catch (err) {
+                reportError(err);
+                process.exitCode = 1;
+            }
+        });
+}
+
+/** 注册运维子命令（status/stop/restart，2026-09-08 T8；-d 复用主命令 option）。 */
+function registerOpsCommands(program: Command): void {
+    program
+        .command("status")
+        .description("查看各账号运行状态（读 runtime.json + 进程存活检测）")
+        .option("-q, --qq <uin>", "只看指定账号")
+        .action(async (opts: { qq?: string }) => {
+            try {
+                cmdStatus(resolveDataRoot(rootDataDir(program).dataDir), {
+                    ...(opts.qq !== undefined ? { qq: opts.qq } : {}),
+                });
+            } catch (err) {
+                reportError(err);
+                process.exitCode = 1;
+            }
+        });
+    program
+        .command("stop")
+        .description(
+            "停止账号进程树（无 -q 停 supervisor 全部；-q 停单账号，supervisor 守护时会自动拉起）",
+        )
+        .option("-q, --qq <uin>", "目标账号（缺省停 supervisor + 全部账号）")
+        .action(async (opts: { qq?: string }) => {
+            try {
+                await cmdStop(resolveDataRoot(rootDataDir(program).dataDir), {
+                    ...(opts.qq !== undefined ? { qq: opts.qq } : {}),
+                });
+            } catch (err) {
+                reportError(err);
+                process.exitCode = 1;
+            }
+        });
+    program
+        .command("restart")
+        .description("重启账号（无 -q 重启 supervisor 全量；-q 重启单账号；detached 拉起）")
+        .option("-q, --qq <uin>", "目标账号（缺省重启 supervisor 全量）")
+        .action(async (opts: { qq?: string }) => {
+            try {
+                await cmdRestart(resolveDataRoot(rootDataDir(program).dataDir), {
+                    ...(opts.qq !== undefined ? { qq: opts.qq } : {}),
+                });
             } catch (err) {
                 reportError(err);
                 process.exitCode = 1;
@@ -211,6 +260,7 @@ function main(): void {
 
     registerConfigCommands(program);
     registerSupervisorCommand(program);
+    registerOpsCommands(program);
     registerMainAction(program);
 
     program.parse(process.argv);

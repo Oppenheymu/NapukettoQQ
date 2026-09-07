@@ -29,6 +29,7 @@ import {
 } from "@napuketto/loader";
 import QRCode from "qrcode";
 import { logger } from "./logger.js";
+import { writeAccountRuntime } from "./runtime-state.js";
 
 /** 单账号启动选项。 */
 export interface BootOptions {
@@ -175,10 +176,30 @@ export async function runSingleAccount(opts: BootOptions = {}): Promise<void> {
         forwardFiltered(child.stderr, process.stderr);
     }
 
+    // 单账号运行时状态落盘（napuketto status/stop 消费，2026-09-08 T8；
+    // pid 记 boot 进程——树杀连带 self-host 孙进程）
+    writeAccountRuntime(dataRoot, {
+        uin: opts.qq ?? "default",
+        pid: process.pid,
+        ...(child.pid !== undefined ? { selfHostPid: child.pid } : {}),
+        startedAt: new Date().toISOString(),
+        kind: "single-boot",
+        status: "running",
+    });
+
     // 常驻：等待自建宿主进程退出
     await new Promise<void>((resolve) => {
         child.on("exit", (code) => {
             logger.info({ code }, "自建宿主进程退出");
+            writeAccountRuntime(dataRoot, {
+                uin: opts.qq ?? "default",
+                pid: process.pid,
+                ...(child.pid !== undefined ? { selfHostPid: child.pid } : {}),
+                startedAt: new Date().toISOString(),
+                kind: "single-boot",
+                status: "exited",
+                exitCode: code,
+            });
             resolve();
         });
         child.on("error", (err) => {
