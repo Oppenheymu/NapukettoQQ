@@ -84,7 +84,7 @@ export const IpcControlPayloadSchema = z.union([
         command: z.literal("login"),
         uin: z.string().optional(),
         qr: z.boolean().optional(),
-    }), // 触发登录（预留）
+    }), // 触发登录（uin 指定账号 / qr=true 强制扫码；登录期成功结果抢占初始登录竞速，2026-09-08）
     z.object({ command: z.literal("status") }), // 状态查询：重播最近一条 status（丢失重同步，2026-09-06）
 ]);
 

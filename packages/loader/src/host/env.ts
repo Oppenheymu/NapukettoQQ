@@ -26,6 +26,8 @@ const env = {
     NAPUTO_STUB_DIR: process.env["NAPUTO_STUB_DIR"],
     /** 强制指定快速登录账号（防风控账号挂起）。 */
     NAPUTO_QUICK_UIN: process.env["NAPUTO_QUICK_UIN"],
+    /** 强制扫码登录（=1：跳过快速登录直接 QR；koishi 面板「扫码登录」重启路径）。 */
+    NAPUTO_QR_ONLY: process.env["NAPUTO_QR_ONLY"],
     /** 收发消息冒烟自检开关（=1 触发）。 */
     NAPUTO_SMOKE: process.env["NAPUTO_SMOKE"],
     /** IPC 子进程模式（=1：koishi 插件驱动——stdout 走 JSON 行协议，stdin 收 action/control）。 */

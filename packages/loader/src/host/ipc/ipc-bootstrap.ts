@@ -17,7 +17,13 @@ import {
 import { sendEvent } from "./ipc-sender.js";
 
 /** 订阅事件通道 → event 消息转发（事件名 "Service/method" 拆分）。 */
-function forwardChannel(channel: KernelServices["channel"], stops: Array<() => void>): void {
+function forwardChannel(
+    channel: KernelServices["channel"] | undefined,
+    stops: Array<() => void>,
+): void {
+    if (channel === undefined || channel === null) {
+        return;
+    }
     if (typeof channel.onAny !== "function") {
         return;
     }

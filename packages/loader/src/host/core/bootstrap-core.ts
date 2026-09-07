@@ -72,17 +72,19 @@ function isLoginState(value: string): value is LoginStateLike {
 /** 非 IPC 模式 QR 透出标记行前缀（cli forwardFiltered 解析后终端渲染）。 */
 const QR_LINE_PREFIX = "NAPUTO_QR ";
 
-/** 登录参数（NAPUTO_QUICK_UIN 强制指定 / ref 目标 / 默认）。 */
+/** 登录参数（NAPUTO_QUICK_UIN 强制指定 / ref 目标 / qrOnly 强制扫码 / 默认）。 */
 function buildLoginOpts(
     Appid: string | number,
     forcedUin: string | undefined,
     ref: LoginTargetRef,
+    qrOnly = false,
 ): Record<string, unknown> {
-    const quickUin = forcedUin ?? ref.targetUin;
+    const quickUin = qrOnly ? undefined : (forcedUin ?? ref.targetUin);
     const opts: Record<string, unknown> = {
         appid: Appid,
         initTimeoutMs: 20000,
         ...(quickUin !== undefined ? { quickUin } : {}),
+        ...(qrOnly ? { qrOnly: true } : {}),
     };
     const ipcMode = env.NAPUTO_IPC === "1";
     // 登录进度回调：QR 阶段透出二维码数据（cli 终端渲染 / koishi IPC 转发共用）。
@@ -114,10 +116,21 @@ function buildLoginOpts(
     return opts;
 }
 
-/** control login 指令 → 重新登录（qr=true 强制扫码跳过快速登录，uin 指定账号）。 */
-function createLoginControlHandler(
+/**
+ * control login 抢占引用（2026-09-08）：初始登录竞速期间，control login
+ * （如强制扫码）成功的结果经 resolve 接管 doLogin——否则快速登录风控挂起时
+ * 强制扫码虽能出码登录，bootstrap 的 doLogin 永远不 settle，装配链不跑。
+ */
+export interface LoginPreemptRef {
+    resolve: ((result: LoginResultLike) => void) | null;
+}
+
+/** control login 指令 → 重新登录（qr=true 强制扫码跳过快速登录，uin 指定账号）。
+ * 登录期（初始 doLogin 竞速中）成功结果经 preemptRef 接管引导链。 */
+export function createLoginControlHandler(
     core: CoreLike,
     Appid: string | number,
+    preemptRef?: LoginPreemptRef,
 ): (payload: { uin?: string; qr?: boolean }) => void {
     // 该 handler 仅在 IPC 模式经 startIpcServer 的 onLogin 注册（见 bootstrapWithCore），
     // 非 IPC 模式无 control 通道不会触达，故无条件走 JSON 行协议、无需再判 ipcMode
@@ -151,6 +164,10 @@ function createLoginControlHandler(
                         uid: result.uid,
                         nick: result.nick ?? "",
                     });
+                    // 登录期抢占：初始 doLogin 仍在竞速等待时，用本结果接管引导链
+                    preemptRef?.resolve?.(result);
+                } else {
+                    sendLogin("failed", undefined, "登录返回空结果");
                 }
             })
             .catch((err) => {
@@ -330,11 +347,18 @@ export async function bootstrapWithCore(
     // 子进程不读 stdin → 指令不可达；同时心跳 ping（15s）提前启动，
     // 防扫码耗时超过 45s 被 driver 误判失联强杀（2026-08-13 结构性修复）。
     let ipcActions: Map<string, IpcActionHandler> | null = null;
+    // control login 抢占（2026-09-08）：初始登录竞速——doLogin 与 control login
+    // 先 settle 者胜。快速登录风控挂起时「强制扫码」control login 成功的结果
+    // 接管引导链（否则 doLogin 永远不 settle，出码登录成功也到不了 ready）。
+    const preempt: LoginPreemptRef = { resolve: null };
+    const preemptLogin = new Promise<LoginResultLike>((resolve) => {
+        preempt.resolve = resolve;
+    });
     if (env.NAPUTO_IPC === "1") {
         ipcActions = createIpcActionsForCore(core);
         startIpcServer({
             actions: ipcActions,
-            onLogin: createLoginControlHandler(core, Appid),
+            onLogin: createLoginControlHandler(core, Appid, preempt),
         });
     }
 
@@ -355,16 +379,25 @@ export async function bootstrapWithCore(
         log("bootstrap: kernel core missing login fn");
         return false;
     }
-    // 打印可用快速登录账号（启动横幅）
     // NAPUTO_QUICK_UIN 强制指定快速登录账号（cli `-q <uin>` 透传，2026-08-07；
     // 也用于实验/自建宿主验证，防止自动选中风控账号 3054108135 导致挂起）。
+    // NAPUTO_QR_ONLY 强制扫码（2026-09-08）：跳过快速登录直接 QR——
+    // koishi 面板「扫码登录」的重启路径（qrOnly 一次性，登录后 env 不再生效）。
+    // 打印可用快速登录账号（启动横幅）
     const forcedUin = env.NAPUTO_QUICK_UIN;
+    const qrOnly = env.NAPUTO_QR_ONLY === "1";
     const ref: LoginTargetRef = { targetUin: undefined };
     await pickLoginAccount(kernel, ctx, ref, forcedUin);
     if (env.NAPUTO_IPC === "1") {
         sendStatus("logging");
     }
-    const loginResult = await doLogin(core, buildLoginOpts(Appid, forcedUin, ref));
+    const loginResult = await Promise.race([
+        doLogin(core, buildLoginOpts(Appid, forcedUin, ref, qrOnly)),
+        preemptLogin,
+    ]);
+    // 竞速结束：清掉抢占口（后续 control login 不再接管——ready 态重登需
+    // 装配链重跑，走 control restart 整进程重启，见 design.md）
+    preempt.resolve = null;
     if (loginResult === null) {
         log("bootstrap: 登录失败，引导中止");
         if (env.NAPUTO_IPC === "1") {
