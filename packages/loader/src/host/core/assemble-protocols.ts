@@ -97,7 +97,9 @@ export async function assembleOb11AndSatori(
             groupChannel: services.groupChannel,
             friendChannel: services.friendChannel,
             // 校准日志（pino 实例，未知事件形状 raw JSON）
-            logger: services.logger as { warn(obj: unknown, msg?: string): void } | undefined,
+            logger: services.logger as
+                | { warn(obj: unknown, msg?: string): void; info(obj: unknown, msg?: string): void }
+                | undefined,
             msgApi: services.msgApi,
             groupApi: services.groupApi,
             groupNotifyApi: services.groupNotifyApi,

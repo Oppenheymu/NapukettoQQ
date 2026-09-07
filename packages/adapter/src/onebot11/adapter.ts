@@ -47,6 +47,7 @@ const MS_TO_SEC = 1000;
 /** 最小 logger 面（校准日志用：未知事件形状打 raw JSON；缺省静默）。 */
 export interface AdapterLoggerLike {
     warn(obj: unknown, msg?: string): void;
+    info(obj: unknown, msg?: string): void;
 }
 
 /** 适配器构造参数（api 相关字段继承 OneBotApiOptions，P2-16 聚合）。 */
@@ -224,6 +225,18 @@ export class NapukettoOneBot11Adapter extends BaseProtocolAdapter<OB11Config> {
                     void this.broadcastFriendRequests(reqs);
                 }),
             );
+            // 好友列表变化：payload 形状未知（friend_add notice 的候选数据源），
+            // 只打 raw 校准日志不翻译——待真实事件回填
+            for (const evt of ["Buddy/onBuddyListChange", "Buddy/onBuddyListChangedV2"] as const) {
+                this.unsubscribes.push(
+                    this.friendChannel.on(evt, (arg) => {
+                        this.calibLogger?.info(
+                            { raw: JSON.stringify(arg)?.slice(0, 2000) },
+                            `ob11: ${evt} raw（friend_add 校准数据）`,
+                        );
+                    }),
+                );
+            }
         }
     }
 
@@ -282,7 +295,11 @@ export class NapukettoOneBot11Adapter extends BaseProtocolAdapter<OB11Config> {
         if (uids.length > 0) {
             uidToUin = await this.oneBotApi.uidToUin(uids);
         }
-        const notice = toOb11NoticeEvent(msg, { selfUin: this.selfUin, uidToUin });
+        const notice = toOb11NoticeEvent(msg, {
+            selfUin: this.selfUin,
+            uidToUin,
+            ...(this.calibLogger !== undefined ? { logger: this.calibLogger } : {}),
+        });
         if (notice !== null) {
             this.broadcastEvent(notice);
         }

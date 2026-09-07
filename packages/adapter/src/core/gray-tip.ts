@@ -23,7 +23,7 @@ export function collectGrayTipUids(msg: RawMessage): string[] {
         if (g === undefined) {
             continue;
         }
-        collectUids(uids, g.revokeElement?.operatorUid);
+        collectUids(uids, g.revokeElement?.operatorUid, g.aioOpGrayTipElement?.peerUid);
         const grp = g.groupElement;
         if (grp === undefined) {
             continue;

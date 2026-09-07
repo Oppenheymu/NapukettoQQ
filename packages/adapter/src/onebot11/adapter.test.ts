@@ -97,7 +97,10 @@ describe("NapukettoOneBot11Adapter（IPC 桥面）", () => {
 
 describe("NapukettoOneBot11Adapter（request 事件链）", () => {
     /** 构造带群/好友通道的适配器（broadcaster emit 打桩捕获事件）。 */
-    function makeWithRequestChannels(logger?: { warn(obj: unknown, msg?: string): void }): {
+    function makeWithRequestChannels(logger?: {
+        warn(obj: unknown, msg?: string): void;
+        info(obj: unknown, msg?: string): void;
+    }): {
         adapter: NapukettoOneBot11Adapter;
         msg: ReturnType<typeof captureChannel>;
         group: ReturnType<typeof captureChannel>;
@@ -164,7 +167,8 @@ describe("NapukettoOneBot11Adapter（request 事件链）", () => {
 
     it("onBuddyReqChange 未知参数形状静默跳过（校准 logger 可选）", async () => {
         const warn = vi.fn();
-        const { adapter, friend, events } = makeWithRequestChannels({ warn });
+        const info = vi.fn();
+        const { adapter, friend, events } = makeWithRequestChannels({ warn, info });
         await adapter.subscribeOnly();
         friend.handlers.get("Buddy/onBuddyReqChange")?.({ unexpected: true });
         await new Promise((resolve) => setTimeout(resolve, 10));
