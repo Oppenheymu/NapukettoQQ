@@ -28,8 +28,10 @@ export interface OneBotSystemOptions {
     appVersion: string;
     /** 缓存清理回调（clean_cache 用，未配置抛错）。 */
     cleanCache?: () => Promise<void>;
-    /** 缓存目录（download_file 保存路径）。 */
+    /** 缓存目录（download_file 保存路径 / get_image 主动下载落盘）。 */
     cacheDir?: string;
+    /** QQ NT global 目录（get_image/get_record 解析 NT 相对路径用，2026-09-08 T5）。 */
+    mediaBaseDir?: string;
     /** 进程退出回调（bot_exit 用）。 */
     exit?: () => Promise<void>;
     /** 进程重启回调（set_restart 用，缺省退化为退出）。 */
@@ -92,6 +94,8 @@ export class OneBotApi {
     readonly cleanCache: (() => Promise<void>) | undefined;
     /** 缓存目录（download_file 用）。 */
     readonly cacheDir: string | undefined;
+    /** QQ NT global 目录（媒体 NT 相对路径解析用）。 */
+    readonly mediaBaseDir: string | undefined;
     /** 进程退出回调（bot_exit 用）。 */
     readonly exit: (() => Promise<void>) | undefined;
     /** 进程重启回调（set_restart 用）。 */
@@ -114,6 +118,7 @@ export class OneBotApi {
         this.appVersion = opts.system.appVersion;
         this.cleanCache = opts.system.cleanCache;
         this.cacheDir = opts.system.cacheDir;
+        this.mediaBaseDir = opts.system.mediaBaseDir;
         this.exit = opts.system.exit;
         this.restart = opts.system.restart;
     }

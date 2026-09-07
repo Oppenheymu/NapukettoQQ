@@ -4,6 +4,8 @@
  * 严格解耦：只被协议层（adapter）依赖，kernel 不背媒体依赖。
  */
 export { decodeSilkToPcm, encodePcmToSilk, getSilkInfo, SILK_SAMPLE_RATE } from "./audio.js";
+export type { DownloadUrlOptions } from "./downloader.js";
+export { downloadUrl, inferExtension } from "./downloader.js";
 export { detectFileType, getImageSize } from "./image.js";
 export type {
     AudioInfo,

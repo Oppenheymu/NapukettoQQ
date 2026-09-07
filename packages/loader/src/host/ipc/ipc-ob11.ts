@@ -16,6 +16,7 @@ import { join } from "node:path";
 import process from "node:process";
 import type { KernelServices } from "../core/kernel-services.js";
 import { env } from "../env.js";
+import type { CoreContextLike, KernelLike } from "../types.js";
 import { errMsg, log } from "../util.js";
 import type { IpcActionHandler } from "./ipc-actions.js";
 import { sendEvent } from "./ipc-sender.js";
@@ -24,6 +25,21 @@ import { sendEvent } from "./ipc-sender.js";
 const BACKSLASH_RE = /\\/g;
 /** adapter 入口 index.mjs 后缀（子路径导出替换用）。 */
 const INDEX_MJS_RE = /index\.mjs$/;
+
+/** QQ NT global 目录（get_image/get_record 的 NT 相对路径解析基准，T5）：
+ * resolveQqUserDataRoot 从 wrapper util 读 QQ 用户数据根（Documents/Tencent Files）。 */
+export function resolveMediaBaseDir(kernel: KernelLike, ctx: CoreContextLike): string | undefined {
+    if (ctx === undefined || ctx === null) {
+        return undefined;
+    }
+    const wrapperExports = (ctx as unknown as { wrapper?: { exports?: unknown } | null }).wrapper
+        ?.exports;
+    const qqRoot = kernel.resolveQqUserDataRoot?.(wrapperExports) ?? null;
+    if (qqRoot === null) {
+        return undefined;
+    }
+    return kernel.resolveQqGlobalPath?.(qqRoot);
+}
 
 /** network 包最小面（@napuketto/network，动态 import）。 */
 interface NetworkModuleLike {
@@ -123,6 +139,8 @@ export async function attachOb11IpcBridge(
             defaults: adapter.ob11ConfigSchema.parse({}),
             seed: adapter.ob11ConfigSchema.parse({}),
         });
+        // QQ NT global 目录（get_image/get_record 的 NT 相对路径解析基准，T5）
+        const mediaBaseDir = resolveMediaBaseDir(services.kernel, services.ctx);
         const ob11 = new adapter.NapukettoOneBot11Adapter({
             config: protocolConfig,
             broadcaster,
@@ -156,6 +174,7 @@ export async function attachOb11IpcBridge(
                 },
                 // download_file：缓存目录
                 cacheDir: join(e.cfgDir ?? ".", "cache"),
+                ...(mediaBaseDir !== undefined ? { mediaBaseDir } : {}),
                 // bot_exit / set_restart：退出子进程，koishi 插件 driver 重启机制接管
                 exit: async () => {
                     log("ipc-ob11: bot_exit 触发，退出子进程");

@@ -1,10 +1,21 @@
 /**
- * get_image / get_record 动作：获取图片/语音文件信息（P2-14，简化版）
+ * get_image / get_record 动作：获取图片/语音文件（P2-14；2026-09-08 T5 接主动下载）
  *
- * message_id 反查 → fetchMsgsByMsgId → 找 PIC/PTT 元素 → 返回元素已有路径与 URL。
- * 不做主动下载/转码（NapCat 走 downloadRichMedia 事件驱动下载，待后续接入）。
+ * message_id 反查 → fetchMsgsByMsgId → 找 PIC/PTT 元素：
+ *  - 本地文件解析：NT 相对路径（sourcePath/filePath）按 mediaBaseDir（QQ NT
+ *    global 目录）解析为绝对路径，命中磁盘即返回 file
+ *  - 图片主动下载：本地未命中且有 picUrl → @napuketto/media downloadUrl 落
+ *    cacheDir/media/，返回 file（绝对路径）+ url + file_size/file_name
+ *  - 语音下载缺口：原生 downloadRichMedia 签名未探测（wrapper 字符串证据仅
+ *    方法名），本地未命中时返回原始 filePath（NT 相对）+ 元数据，待 T10 diag
+ *    实测后接入
  */
+
+import { randomUUID } from "node:crypto";
+import { existsSync } from "node:fs";
+import { join } from "node:path";
 import { kernelError, type RawElement } from "@napuketto/kernel";
+import { downloadUrl, inferExtension } from "@napuketto/media";
 import { z } from "zod";
 import { BaseAction } from "../../../core/index.js";
 import type { OneBotApi } from "../../api/one-bot-api.js";
@@ -29,7 +40,55 @@ export interface MediaInfoResult {
 }
 
 /** 媒体动作依赖（OneBotApi 视图）。 */
-export type GetMediaDeps = Pick<OneBotApi, "msgApi" | "messageUnique">;
+export type GetMediaDeps = Pick<
+    OneBotApi,
+    "msgApi" | "messageUnique" | "cacheDir" | "mediaBaseDir"
+>;
+
+/**
+ * NT 相对路径 → 本地绝对路径（存在才返回）。
+ * 候选：原样绝对路径 / mediaBaseDir 下相对路径（反斜杠归一化）。
+ */
+export function resolveLocalMediaFile(
+    relPath: string,
+    deps: { mediaBaseDir?: string | undefined },
+): string | null {
+    if (relPath === "") {
+        return null;
+    }
+    if (existsSync(relPath)) {
+        return relPath;
+    }
+    const base = deps.mediaBaseDir;
+    if (base !== undefined && base !== "") {
+        const joined = join(base, relPath.replaceAll("\\", "/"));
+        if (existsSync(joined)) {
+            return joined;
+        }
+    }
+    return null;
+}
+
+/** 图片主动下载（picUrl → cacheDir/media/<uuid>.<ext>；无 cacheDir/url 返回 null）。 */
+async function downloadImageToCache(
+    url: string,
+    deps: Pick<GetMediaDeps, "cacheDir">,
+): Promise<string | null> {
+    const cacheDir = deps.cacheDir;
+    if (cacheDir === undefined || cacheDir === "") {
+        return null;
+    }
+    const mediaDir = join(cacheDir, "media");
+    const { mkdir } = await import("node:fs/promises");
+    await mkdir(mediaDir, { recursive: true });
+    const dest = join(mediaDir, `${randomUUID()}${inferExtension(null, url)}`);
+    try {
+        await downloadUrl(url, dest);
+        return dest;
+    } catch {
+        return null;
+    }
+}
 
 /**
  * 反查消息并提取媒体元素路径。
@@ -56,40 +115,16 @@ async function resolveMedia(
     throw kernelError(`消息 ${id} 不包含${label}`, "NOT_FOUND");
 }
 
-/** 从消息元素提取媒体路径与 URL（PIC/PTT，纯函数）。 */
-function extractMediaPath(element: RawElement): MediaInfoResult | undefined {
-    const pic = element.picElement;
-    if (pic !== undefined) {
-        const out: MediaInfoResult = {};
-        const path = pic.sourcePath ?? pic.picPath;
-        if (path !== undefined) {
-            out.file = path;
-        }
-        if (pic.picUrl !== undefined) {
-            out.url = pic.picUrl;
-        }
-        if (Object.keys(out).length === 0) {
-            return undefined;
-        }
-        return out;
+/** 取 id 参数（message_id 优先，file 兜底）。 */
+function takeId(payload: GetMediaPayload, actionName: string): number | string {
+    const id = payload.message_id ?? payload.file;
+    if (id === undefined) {
+        throw kernelError(`${actionName} 需要 message_id 或 file`, "INVALID_PARAM");
     }
-    const ptt = element.pttElement;
-    if (ptt !== undefined && ptt.filePath !== undefined) {
-        return { file: ptt.filePath };
-    }
-    return undefined;
+    return id;
 }
 
-/** 提取语音元素（get_record 用）。 */
-function extractPttPath(element: RawElement): MediaInfoResult | undefined {
-    const ptt = element.pttElement;
-    if (ptt !== undefined && ptt.filePath !== undefined) {
-        return { file: ptt.filePath };
-    }
-    return undefined;
-}
-
-/** 获取图片信息（P2-14）。 */
+/** 获取图片信息（本地优先，picUrl 主动下载兜底）。 */
 export class GetImageAction extends BaseAction<GetMediaPayload, MediaInfoResult> {
     readonly name = "get_image";
     readonly schema = getMediaSchema;
@@ -102,24 +137,44 @@ export class GetImageAction extends BaseAction<GetMediaPayload, MediaInfoResult>
         this.deps = deps;
     }
 
-    protected _handle(payload: GetMediaPayload): Promise<MediaInfoResult> {
-        return this.resolve(payload, "图片", "get_image");
-    }
-
-    private resolve(
-        payload: GetMediaPayload,
-        label: string,
-        actionName: string,
-    ): Promise<MediaInfoResult> {
-        const id = payload.message_id ?? payload.file;
-        if (id === undefined) {
-            throw kernelError(`${actionName} 需要 message_id 或 file`, "INVALID_PARAM");
+    protected async _handle(payload: GetMediaPayload): Promise<MediaInfoResult> {
+        const id = takeId(payload, "get_image");
+        const base = await resolveMedia(id, "图片", this.deps, (el) => {
+            const pic = el.picElement;
+            if (pic === undefined) {
+                return undefined;
+            }
+            const out: MediaInfoResult = {};
+            if (pic.fileSize !== undefined) {
+                out.file_size = pic.fileSize;
+            }
+            if (pic.fileName !== undefined) {
+                out.file_name = pic.fileName;
+            }
+            if (pic.picUrl !== undefined) {
+                out.url = pic.picUrl;
+            }
+            const rel = pic.sourcePath ?? pic.picPath;
+            if (rel !== undefined) {
+                const local = resolveLocalMediaFile(rel, this.deps);
+                if (local !== null) {
+                    out.file = local;
+                }
+            }
+            return out;
+        });
+        // 本地未命中且有 URL → 主动下载到缓存目录
+        if (base.file === undefined && base.url !== undefined) {
+            const downloaded = await downloadImageToCache(base.url, this.deps);
+            if (downloaded !== null) {
+                base.file = downloaded;
+            }
         }
-        return resolveMedia(id, label, this.deps, extractMediaPath);
+        return base;
     }
 }
 
-/** 获取语音信息（P2-14）。 */
+/** 获取语音信息（本地文件解析；主动下载缺口见文件头注释）。 */
 export class GetRecordAction extends BaseAction<GetMediaPayload, MediaInfoResult> {
     readonly name = "get_record";
     readonly schema = getMediaSchema;
@@ -133,10 +188,22 @@ export class GetRecordAction extends BaseAction<GetMediaPayload, MediaInfoResult
     }
 
     protected async _handle(payload: GetMediaPayload): Promise<MediaInfoResult> {
-        const id = payload.message_id ?? payload.file;
-        if (id === undefined) {
-            throw kernelError("get_record 需要 message_id 或 file", "INVALID_PARAM");
-        }
-        return await resolveMedia(id, "语音", this.deps, extractPttPath);
+        const id = takeId(payload, "get_record");
+        return await resolveMedia(id, "语音", this.deps, (el) => {
+            const ptt = el.pttElement;
+            if (ptt === undefined || ptt.filePath === undefined) {
+                return undefined;
+            }
+            const out: MediaInfoResult = {};
+            if (ptt.fileSize !== undefined) {
+                out.file_size = ptt.fileSize;
+            }
+            if (ptt.fileName !== undefined) {
+                out.file_name = ptt.fileName;
+            }
+            const local = resolveLocalMediaFile(ptt.filePath, this.deps);
+            out.file = local ?? ptt.filePath;
+            return out;
+        });
     }
 }

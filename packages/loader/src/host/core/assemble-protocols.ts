@@ -89,6 +89,13 @@ export async function assembleOb11AndSatori(
             defaults: adapter.ob11ConfigSchema.parse({}),
             seed: adapter.ob11ConfigSchema.parse(ob11Section),
         });
+        // QQ NT global 目录（get_image/get_record 的 NT 相对路径解析基准，T5）：
+        // resolveQqUserDataRoot 从 wrapper util 读 QQ 用户数据根（Documents/Tencent Files）
+        const wrapperExports = (
+            services.ctx as unknown as { wrapper?: { exports?: unknown } | null }
+        ).wrapper?.exports;
+        const qqRoot = kernel.resolveQqUserDataRoot?.(wrapperExports) ?? null;
+        const mediaBaseDir = qqRoot !== null ? kernel.resolveQqGlobalPath?.(qqRoot) : undefined;
         const ob11 = new adapter.NapukettoOneBot11Adapter({
             config: ob11Config,
             broadcaster,
@@ -123,6 +130,9 @@ export async function assembleOb11AndSatori(
                 },
                 // download_file：缓存目录
                 cacheDir: join(env.NAPUTO_CFG_DIR || ".", "cache"),
+                // QQ NT global 目录（get_image/get_record 的 NT 相对路径解析基准，T5）；
+                // mediaBaseDir 在 adapter 构造前解析（下方 ob11 构造处）
+                ...(mediaBaseDir !== undefined ? { mediaBaseDir } : {}),
                 // bot_exit / set_restart：进程控制（退出 QQ 主进程由 launcher 观察）
                 exit: async () => {
                     log("bootstrap: bot_exit 触发，退出 QQ 主进程");
