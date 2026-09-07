@@ -221,10 +221,25 @@ msgService 299 方法**（addKernelMsgListener/sendMsg/fetchMsgList 全在）。
 
 ### 端到端实测（2026-09-08 T10）
 - [x] 实机跑 `pnpm start`（自建宿主），`NAPUTO_SMOKE=1` 冒烟收发验证通过（群消息真实接收，历史）
-- [x] **OneBot 外部链路端到端（2026-09-08 T10）**：OB11 HTTP 服务 + 临时 WS 客户端脚本
-  （scripts/e2e-ob11-client.mjs）验证事件上报与动作调用往返——结果见轮次报告
-- [x] **内存实测（2026-09-08 T10）**：自建宿主登录态 node 进程 WorkingSet 实测，
-  对照 NapCat 纯 Node ~237MB——结果见轮次报告
+- [x] **OneBot 外部链路端到端（2026-09-08 T10 ✅ 通过）**：OB11 WS（127.0.0.1:3001，
+  token 鉴权）+ 临时客户端脚本（scripts/e2e-ob11-client.mjs）——事件上报（meta
+  heartbeat）+ 动作调用往返（get_login_info retcode=0）全通；**抓到并修复两个
+  真实 bug**：① WS 查询参数鉴权从未生效（new URL 相对路径必抛，连接全 4401）
+  ② 动作缺 params 一律 1400（规范允许省略，现缺省 {}）
+- [x] **内存实测（2026-09-08 T10）**：登录态 + session READY + OB11 WS 装配稳态：
+  self-host 进程 ~186MB（wrapper+kernel+adapter）+ boot 转发进程 ~54MB，
+  合计 ~240MB——与 NapCat 纯 Node ~237MB 同量级（差 ~3MB）
+- [x] **读类返回形状校准（2026-09-08 T10 ✅）**：经 OB11 动作面实测
+  get_group_member_info（kernel getMemberInfo 的 infos Map 提取路径正确）、
+  get_group_member_list、get_group_system_msg（getSingleScreenNotifies 路径，
+  当前无待处理请求返回三空数组）全部 retcode=0；校准脚本
+  scripts/e2e-shape-calibration.mjs（写类严禁调用）
+- [x] **Buddy 列表事件 payload 首次真实捕获**：onBuddyListChange = BuddyCategory[]
+  全量快照（含 buddyList 明细 uid/uin/coreInfo/baseInfo/status/vasInfo）；
+  onBuddyListChangedV2 = boolean。→ friend_add 翻译策略应为快照 diff（下一轮）
+- [x] **多账号实测**：跳过——本机配置仅 1 个有效账号段（第二段为注释模板），
+  按约束不自行添加账号
+- [x] **poke 实测**：本轮会话无真实 poke 事件到达，翻译口径仍待校准（raw 日志持续积累）
 - [ ] 多账号实测（本机 2 个有效账号段；未在本轮执行则遗留下一轮）
 
 ### 协议能力对齐（下一轮）

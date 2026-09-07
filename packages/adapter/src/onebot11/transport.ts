@@ -25,10 +25,13 @@ import type { OB11Config } from "./helper/index.js";
 /** Authorization 头前缀。 */
 const BEARER_PREFIX = "Bearer ";
 
-/** 校验 URL 查询参数里的 access_token（WS client 连接 URL 可能带）。 */
+/** 校验 URL 查询参数里的 access_token（WS client 连接 URL 可能带）。
+ * ⚠️ req.url 是纯路径（无 origin），new URL(相对路径) 必抛——2026-09-08
+ * T10 E2E 实测抓到的 bug（查询参数鉴权从未生效，WS 全被 4401 关闭），
+ * 用 dummy base 解析。 */
 function hasAccessTokenQuery(url: string, token: string): boolean {
     try {
-        const parsed = new URL(url);
+        const parsed = new URL(url, "http://localhost");
         return parsed.searchParams.get("access_token") === token;
     } catch {
         return false;

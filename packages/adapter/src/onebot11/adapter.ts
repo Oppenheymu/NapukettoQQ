@@ -379,7 +379,9 @@ export class NapukettoOneBot11Adapter extends BaseProtocolAdapter<OB11Config> {
      */
     async handleRequest(req: unknown, respond: (res: unknown) => void): Promise<void> {
         const parsed = (req ?? {}) as { action?: unknown; params?: unknown; echo?: unknown };
-        const { action: rawAction, params, echo } = parsed;
+        // params 缺省 {}（OB11 规范允许省略；schema 校验在动作内，此处不判类型）
+        const { action: rawAction, echo } = parsed;
+        const params = parsed.params ?? {};
         let action = "";
         if (typeof rawAction === "string") {
             action = rawAction;
