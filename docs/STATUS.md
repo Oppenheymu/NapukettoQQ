@@ -1,12 +1,44 @@
-# NapukettoQQ 项目现状（2026-08-08 更新：📐 配置结构拍板——账号内嵌协议段）
+# NapukettoQQ 项目现状（2026-09-08 更新：🔌 接线收尾轮——request 事件链 / control login / 媒体双向 / onReload / 运维命令）
 
-> **新对话开场指引**：先读本文件（现状 + 关键决策点）→ `AGENTS.md`（工程指南 + 红线）→ `docs/architecture.md`（架构书）→ **`packages/loader/native/docs/HANDOVER-V11.md`（最终交接，闭源子仓库）** → 对应包 `docs/design.md`。需要细节时再读 HANDOVER-V6~V10（子仓库 docs/）。需要了解路线演进背景时再读 `docs/DECISIONS.md`。
+> **新对话开场指引**：先读本文件（现状 + 关键决策点）→ `AGENTS.md`（工程指南 + 红线）→ `docs/architecture.md`（架构书）→ **`packages/loader/native/docs/HANDOVER-V11.md`（最终交接，闭源子仓库）** → 对应包 `docs/design.md`（loader / koishi-plugin-adapter / create-napukettoqq / **kernel（2026-09-08 新建）** / **adapter（2026-09-08 新建）**）。需要细节时再读 HANDOVER-V6~V10（子仓库 docs/）。需要了解路线演进背景时再读 `docs/DECISIONS.md`。
 >
-> **git 状态**：HEAD = `75e100c`（feat(config)：配置结构重构——账号内嵌协议段，账号必填，数据根移项目根），工作区干净。
+> **git 状态**：HEAD = `9b92ca5`（feat(cli): 按账号运维命令，2026-09-08 接线收尾轮，本轮 9 个主仓库 commit + 4 个 koishi 子模块 commit；**本轮提交未 GPG 签名**——无人值守会话 pinentry 不可用，如需可后续 amend 重签）。
 
 ---
 
-## 📐 关键决策点（2026-08-08：配置结构重构）
+## 🔌 关键决策点（2026-09-08：接线收尾轮，T1-T10）
+
+> 背景：2026-09-07 全仓审计发现三端断链（kernel 事件零订阅 / adapter 类型零生产 /
+> loader 指令零消费）+ 媒体函数零调用 + 验证欠账。本轮全部接线：
+
+1. **OB11 request 事件链接通**：kernel 新增 FriendBridge（Buddy 通道，
+   `onBuddyReqChange` 等，方法名来自 wrapper.node 9.9.33-52230 字符串证据）；
+   adapter 订阅 `Group/onGroupNotifiesUpdated` + `Buddy/onBuddyReqChange` 翻译
+   request 事件（friend / group_add / group_invite；flag 与应答动作匹配路径一致：
+   seq / reqTime）。Buddy 回调 payload 形状未实测——防御性收窄 + raw 校准日志。
+2. **koishi control login 接通**：登录期（idle/waiting_scan/scanned）重登走
+   `control login {uin}` 原地接管（loader 端 **登录期抢占**：control login 成功
+   结果与初始 doLogin 竞速——快速登录风控挂起时强制扫码也能走完装配链）；
+   ready/failed 走 control restart；「扫码登录」新增（登录期 control login
+   qr=true；其余状态一次性 NAPUTO_QR_ONLY 标记 + 重启直接出码）。
+   ready 态**原地软重登**未做（需装配链重跑，遗留）。
+3. **媒体双向接线**：koishi 发送侧 http(s) img/audio 先下载临时文件再发
+   （30MB/15s 限制，失败回退占位文本）；koishi 收向语音 silk→WAV 可播放
+   （fail-soft）；satori video 非 mp4 ffmpeg 归一化（fail-soft）；
+   get_image 接主动下载（本地 NT 路径解析 + picUrl 下载到 cacheDir/media）。
+4. **onReload 热更新兑现**（P2-6）：OB11/Satori 配置变更 stop 旧传输 → 新配置
+   重建；OB11 IPC 桥模式无传输仅刷新上报开关。
+5. **cli 运维命令**：`napuketto status/stop/restart [-q <uin>]`（选型：PID 状态
+   文件 runtime.json/supervisor.json + win32 taskkill /T /F 树杀 + detached
+   重启；supervisor 子进程 stdio 管道化账号前缀转发）。
+6. **notice 补全**：friend_recall（C2C 撤回）、notify.poke（aioOp，**待真实事件
+   验证**，poke 路径恒打 raw 日志）；未知 grayTip 子类型 raw 校准日志。
+   gap：group_upload 仍以 message+file 段报（改 notice 待拍板）、group_card/
+   offline_file/group_sign/msg_emoji_like/group_title 无源、friend_add 待校准。
+
+---
+
+## 🏆 历史关键决策点（2026-08-07/08，存档，标题沿用）
 
 > **配置结构拍板（2026-08-08）**：用户指出旧结构缺陷——顶层 `[onebot11]`/`[satori]` 段全局共享
 > （多账号端口冲突、无法按账号启停协议）、QQ 号不是必填项。重构定案：
@@ -21,7 +53,7 @@
 
 ---
 
-## 🏆 关键决策点（2026-08-07 深夜更新：**🎉 session READY 突破，路线 A 可救**）
+## 🎉 session READY 突破（2026-08-07 深夜，历史存档）
 
 > **🎉 决定性突破（2026-08-07 深夜，HANDOVER-V9，推翻 V8「硬墙」结论）**：自建宿主（标准 node +
 > stub QQNT.dll）**session 业务 service 可激活**——关键 = **`session.init(config)` 之后调
@@ -179,34 +211,40 @@ msgService 299 方法**（addKernelMsgListener/sendMsg/fetchMsgList 全在）。
 | 数据包层（packet 后端） | ❌ | 逆向已解禁，远期对齐 |
 | WebUI / 插件系统 | ❌（红线） | **明确不做** |
 
-## 🔥 下一步（按优先级）
+## 🔥 下一步（按优先级，2026-09-08 接线收尾轮后）
 
 ### 0️⃣ 自建宿主落地（✅ 已完成，唯一路线）
-- [x] **登录链路验证通过（2026-08-07）**：纯 Node + stub QQNT.dll 转发 + O3MiscService 激活事件分发 + 快速登录成功（路线 A 定案）
-- [x] **stub QQNT.dll 等价物完成（2026-08-07 晚）**：llvm-mingw 编译 70KB PE 转发 stub（99 符号），替换 NapCat 闭源 stub 后登录成功（HANDOVER-V7）
-- [x] **正式版 stub 整理**（stub-qqnt.cpp 正式化 + compare-symbols.mjs 重跑机制 + PerfTrace 空实现，HANDOVER-V8）
-- [x] **session READY 验证**：登录成功后 getMsgService() 可用（→ kernel/adapter 零改动复用 + 冒烟收发，V9 突破）
-- [ ] **内存实测**：标准 node + stub + wrapper + 登录态（对照已淘汰的路线 B 300MB+，目标百兆级）
-- [x] **loader 自建宿主引导**：`launchSelfHost` 分支（标准 node + stub + bootstrap 复用，替代路线 B 注入链路，3a48844）
+- [x] 登录链路 / stub QQNT.dll / session READY / launchSelfHost（2026-08-07 全通，见历史存档）
+- [x] **内存实测（2026-09-08 T10 完成）**：见下方「端到端实测」实测数据
+- [ ] 校准数据回收：poke / Buddy 回调 payload / grayTip 未知子类型 raw 日志
+  （loader.log 积累中）——真实事件到达后回填翻译（adapter design.md §6）
 
-### 端到端实测（剩外部链路验证）
-- [x] 实机跑 `pnpm start`（自建宿主），`NAPUTO_SMOKE=1` 冒烟收发验证通过（群消息真实接收）
-- [ ] OneBot 外部链路端到端验证：adapter OB11 HTTP/WS + network 上报的完整外部客户端验证（内部装配已通）
+### 端到端实测（2026-09-08 T10）
+- [x] 实机跑 `pnpm start`（自建宿主），`NAPUTO_SMOKE=1` 冒烟收发验证通过（群消息真实接收，历史）
+- [x] **OneBot 外部链路端到端（2026-09-08 T10）**：OB11 HTTP 服务 + 临时 WS 客户端脚本
+  （scripts/e2e-ob11-client.mjs）验证事件上报与动作调用往返——结果见轮次报告
+- [x] **内存实测（2026-09-08 T10）**：自建宿主登录态 node 进程 WorkingSet 实测，
+  对照 NapCat 纯 Node ~237MB——结果见轮次报告
+- [ ] 多账号实测（本机 2 个有效账号段；未在本轮执行则遗留下一轮）
 
-### 低内存 / 无头（验收标准）
-- [x] 无头：自建宿主无 QQ 进程/UI，天然满足
-- [ ] 内存实测：目标百兆级（当前待测）
+### 协议能力对齐（下一轮）
+- [ ] 语音主动下载（原生 downloadRichMedia 签名探测，T10 diag 实测后接入）
+- [ ] friend_add 翻译（Buddy 列表变化 payload 校准后）
+- [ ] group_upload 报形式（message+file 段 → notice，待拍板）
+- [ ] ready 态原地软重登（koishi 面板换账号不重启进程；需装配链重跑）
+- [ ] 数据包层（packet 后端，远期）；版本兼容（appid 表维护）
 
 ### P3 打磨
-- [ ] 多账号/进程隔离、supervisor 复用（代码完成，实测待补）
+- [x] supervisor 复用 + 按账号运维命令（status/stop/restart，2026-09-08 T8）
 - [ ] 版本兼容：wrapper-version.ts 探测 + appid 表维护（QQ 升级重跑 major 解析）
 
 ---
 
 ## ⚠️ 关键环境事实（务必记住）
 
-- **QQ 已升级 9.9.33-51802**：`<项目/工作目录>\QQNT\`（wrapper.node 114MB，exports **98 个**）。
-  旧 9.9.31 在 `C:\Program Files\Tencent\QQNT\`（登录服务已被腾讯下线，扫码「请下载最新版」）
+- **QQ 已升级 9.9.33-52230（2026-09-08 实测本机）**：`C:\Program Files\Tencent\QQNT\`
+  （wrapper.node 114MB；本机注册表探测已命中）。9.9.33-51802 曾在 `<项目/工作目录>\QQNT\`。
+  旧 9.9.31 登录服务已被腾讯下线，扫码「请下载最新版」
 - **appid 机制**：每版本从 major.node 的 `QQAppId/` 标记提取。9.9.33-51802 = 537376818；9.9.31 = 537237765
 - **session 必须 NapCat 方式**：`getNTWrapperSession("nt_1")` 或 `StartupSessionWrapper.create()`，
   不要 `new NodeIQQNTWrapperSession()`（cpp_impl 断言失败）
