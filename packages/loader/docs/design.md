@@ -390,3 +390,68 @@ fail-soft——import/构造失败只 log 降级，不阻断登录链路）：
 
 **可注入依赖**（`deps` 参数）：importModule / emitEvent / env / log——单测无需
 真实文件与子进程。
+
+---
+
+## 10. 登录控制相位机与 ready 态软重登（2026-09-08 A1/A2）
+
+`src/host/core/relogin.ts`：control login（koishi 面板「重新登录/扫码登录」→
+IPC control 指令）的成功结果按**引导相位**分派，取代 2026-09-08 T2 的
+「无条件 sendLogin(logged_in) + preemptRef 接管」。
+
+### 10.1 相位机（LoginControl）
+
+```
+login-race ──竞速 settle──→ assembling ──装配成功──→ ready（软重登窗口）
+     │                          │
+     └────── 任一失败路径 ──────→ aborted（进程将退出）
+```
+
+| 相位 | control login 成功结果的处理 |
+|---|---|
+| login-race | ① **登录期抢占**：sendLogin(logged_in) + 经 preemptRef 接管初始 doLogin 竞速（T2 既有语义：快速登录风控挂起时强制扫码也能走完装配链） |
+| ready | ② **软重登**：`deps.reassemble` 清理旧装配面 → 用新登录结果重跑装配链 → 重播 sendStatus(ready) + sendLogin(logged_in, 新 selfInfo) |
+| assembling / aborted | ③ **忽略**（仅日志）——A1 修复：引导失败进程将退出时无条件上报 logged_in 会制造 failed→logged_in 误导序列（koishi driver 收到 logged_in 但子进程无协议装配，上线后所有请求失败）；装配进行中的并发结果同样不干扰初次装配 |
+
+- **互斥（防重入拍板）**：control login 全程 claim/release 互斥——在途登录/
+  重装配期间的新指令直接忽略（仅 boot 日志留痕，不发登录消息，面板随首个
+  流程的真实状态收敛）。排队方案否决：软重登窗口短（秒级）且登录本身可长
+  时间在途（等扫码），排队会让面板状态与实际流程脱节。
+- 失败路径：core.login null/抛错 → sendLogin(failed)；软重登重装配失败 →
+  sendStatus(failed) + process.exit(1)（旧服务已清、新服务未立，进程不可再
+  用，交 koishi driver 重启循环回收）。
+
+### 10.2 重装配（bootstrapWithCore 的 softRelogin 闭包）
+
+清理顺序（协议消费方 → 事件转发 → kernel 层）：
+
+1. `attachOb11IpcBridge` stop：broadcaster 注销 + `unsubscribeOnly()` +
+   **OB11 动作表条目移除**（重挂前必先停旧，snake_case 与 kernel 点分命名
+   不冲突）
+2. `attachIpcServices` stop：三条通道 forwardChannel 退订 + **kernel 动作表
+   条目移除**
+3. `KernelServices.dispose()`（kernel-services.ts 新增清理面，幂等）：
+   Msg/Group/Friend 三桥 `unregister()` + GroupCache `unregister()` +
+   消息日志退订（setupMsgLogging 改返回退订函数）
+
+重装配（`runAssembly`，与初次引导共用）：replaceSession（自建宿主恒 null）→
+activateSession（幂等：session 已激活跳过——同账号软重登保留 session；**跨
+账号 session 有效性未实测**，由 koishi 侧 checkIdentity 拒绝换账号兜底）→
+waitSessionReady → sendStatus(sessioning) → startProtocols →
+attachIpcServices → attachOb11IpcBridge。初次引导额外含 NAPUTO_SMOKE 冒烟
+（一次性，重装配不跑）。
+
+cli 模式（非 IPC）无 control 通道，不触达软重登；为完整性
+`assembleOb11AndSatori` 改返回 ob11/satori 适配器 stop（存
+`services.stopAdapters`），并修复内部 catch 吞错——装配失败现在正常抛给
+startProtocols 判引导失败退出（回归 2026-09-06 的设计意图）。
+
+### 10.3 koishi 侧配合（apps/koishi-plugin-adapter）
+
+- 决策表（login-actions.ts）：登录期 + **logged_in（ready 态）** + client
+  可用 → control login（plan 携带 soft 标记）；failed / client 不可用 →
+  restart 不变。
+- **换账号防线**：driver 的 ready 幂等守卫使软重登完成后 onReady 不重触发，
+  checkIdentity 改由登录消息面补位——logged_in 携带 selfInfo 时（driver-events
+  `onLoggedIn` → bot.handleLoggedIn）复核账号一致性，不一致拒绝上线（同
+  2026-08-20 生产事故防线）；同账号通过并同步昵称刷新。

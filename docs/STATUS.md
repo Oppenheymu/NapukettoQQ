@@ -1,12 +1,42 @@
-# NapukettoQQ 项目现状（2026-09-08 更新：🔌 接线收尾轮——request 事件链 / control login / 媒体双向 / onReload / 运维命令）
+# NapukettoQQ 项目现状（2026-09-08 更新：🔌 接线收尾轮——request 事件链 / control login / 媒体双向 / onReload / 运维命令；🌙 登录与装配链生命周期收尾轮——A1 竞态修复 + A2 ready 态软重登）
 
 > **新对话开场指引**：先读本文件（现状 + 关键决策点）→ `AGENTS.md`（工程指南 + 红线）→ `docs/architecture.md`（架构书）→ **`packages/loader/native/docs/HANDOVER-V11.md`（最终交接，闭源子仓库）** → 对应包 `docs/design.md`（loader / koishi-plugin-adapter / create-napukettoqq / **kernel（2026-09-08 新建）** / **adapter（2026-09-08 新建）**）。需要细节时再读 HANDOVER-V6~V10（子仓库 docs/）。需要了解路线演进背景时再读 `docs/DECISIONS.md`。
 >
-> **git 状态**：HEAD = `9b92ca5`（feat(cli): 按账号运维命令，2026-09-08 接线收尾轮，本轮 9 个主仓库 commit + 4 个 koishi 子模块 commit；**本轮提交未 GPG 签名**——无人值守会话 pinentry 不可用，如需可后续 amend 重签）。
+> **git 状态**：HEAD = `3fa6425` 基础上的登录生命周期收尾轮（loader 相位机 + koishi 软重登，详见「🌙 关键决策点」；**本轮提交未 GPG 签名**——无人值守会话 pinentry 不可用，如需可后续 amend 重签）。
 
 ---
 
-## 🔌 关键决策点（2026-09-08：接线收尾轮，T1-T10）
+## 🌙 关键决策点（2026-09-08：登录与装配链生命周期收尾轮，A1+A2）
+
+> loader design.md §10 为本轮完整设计书。核心：
+
+1. **A1 登录竞态修复**：control login 成功结果改为按**引导相位**分派
+   （`relogin.ts` LoginControl：login-race → assembling → ready / aborted）——
+   引导失败（aborted）或装配进行中（assembling）迟到的成功结果**不再上报**
+   logged_in（原无条件上报会制造 failed→logged_in 误导序列：koishi 收到
+   logged_in 但子进程无协议装配，上线后所有请求失败）。
+2. **A2 ready 态原地软重登**：ready 相位 control login 成功 → 清理旧装配面
+   （OB11 桥退订+动作表移除 → IPC 事件转发退订+动作表移除 → 三桥/缓存/
+   消息日志 dispose）→ 用新登录结果重跑装配链 → 重播 ready + logged_in。
+   koishi 决策表 logged_in 态改走 control login（不再整进程重启）；failed
+   与登录期行为不变。防重入：control login 全程互斥，在途指令忽略（拍板：
+   不排队——软重登窗口秒级而登录可在途很久，排队会面板失真）。
+3. **软重登换账号防线**：driver ready 幂等守卫下 onReady 不重触发，
+   checkIdentity 由 logged_in 登录消息面补位（driver-events onLoggedIn）——
+   换账号登录拒绝上线（同 2026-08-20 事故防线）。跨账号 session 有效性
+   未实测（activateSession 幂等守卫下同账号复用 session），静态推演 +
+   单测覆盖（bootstrap-relogin.test.ts 断言清理顺序/重装配调用/状态推送）。
+4. **顺手修复**：cli 模式 assembleOb11AndSatori 内部 catch 吞错（protocols.ts
+   「装配失败判引导失败退出」意图被短路，装配失败曾以假 ready 留驻）——
+   现正常抛出；同函数返回 ob11/satori stop（存 services.stopAdapters）。
+   kernel-services 新增 dispose()；setupMsgLogging 返回退订函数。
+5. **并行会话注意**：本轮工作区同时存在另一会话的 kernel/adapter WIP
+   （语音主动下载 B1，downloadPtt/downloadRichMedia）——本轮提交严格按
+   文件路径外科式隔离，未触碰。
+
+---
+
+## 🔌 关键决策点（2026-09-08：接线收尾轮，T1-T10，历史存档）
 
 > 背景：2026-09-07 全仓审计发现三端断链（kernel 事件零订阅 / adapter 类型零生产 /
 > loader 指令零消费）+ 媒体函数零调用 + 验证欠账。本轮全部接线：
@@ -21,7 +51,8 @@
    结果与初始 doLogin 竞速——快速登录风控挂起时强制扫码也能走完装配链）；
    ready/failed 走 control restart；「扫码登录」新增（登录期 control login
    qr=true；其余状态一次性 NAPUTO_QR_ONLY 标记 + 重启直接出码）。
-   ready 态**原地软重登**未做（需装配链重跑，遗留）。
+   ~~ready 态**原地软重登**未做（需装配链重跑，遗留）~~
+   → **同日晚些的「登录生命周期收尾轮」已实现**（见上方 🌙 第 2 条）。
 3. **媒体双向接线**：koishi 发送侧 http(s) img/audio 先下载临时文件再发
    （30MB/15s 限制，失败回退占位文本）；koishi 收向语音 silk→WAV 可播放
    （fail-soft）；satori video 非 mp4 ffmpeg 归一化（fail-soft）；
@@ -246,7 +277,9 @@ msgService 299 方法**（addKernelMsgListener/sendMsg/fetchMsgList 全在）。
 - [ ] 语音主动下载（原生 downloadRichMedia 签名探测，T10 diag 实测后接入）
 - [ ] friend_add 翻译（Buddy 列表变化 payload 校准后）
 - [ ] group_upload 报形式（message+file 段 → notice，待拍板）
-- [ ] ready 态原地软重登（koishi 面板换账号不重启进程；需装配链重跑）
+- [x] ready 态原地软重登（koishi 面板不重启进程重登；2026-09-08 登录生命周期
+  收尾轮 A2 完成——loader 相位机 + 重装配 + koishi 决策表/checkIdentity 补位，
+  见 🌙 决策点与 loader design.md §10；跨账号真实切换实测待补）
 - [ ] 数据包层（packet 后端，远期）；版本兼容（appid 表维护）
 
 ### P3 打磨
