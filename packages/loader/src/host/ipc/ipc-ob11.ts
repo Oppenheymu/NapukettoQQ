@@ -200,6 +200,8 @@ export async function attachOb11IpcBridge(
             actions.set(name, (params) => act.handle(params));
             mounted++;
         }
+        // registry.names 是挂载面的超集（act 缺失仅跳过挂载，delete 多删无害——
+        // snake_case 与 kernel 点分命名不冲突）
 
         // OB11 事件 → IPC event 通道（service="ob11"，name=post_type，args=[完整事件]）
         const bridgeAdapter = {
@@ -213,6 +215,11 @@ export async function attachOb11IpcBridge(
         return () => {
             broadcaster.unregister(bridgeAdapter);
             ob11.unsubscribeOnly();
+            // 移除挂载的动作表条目（软重登重装配清理，2026-09-08）：
+            // 重挂载前必先停旧（bootstrap-core softRelogin 顺序）
+            for (const name of ob11.registry.names) {
+                actions.delete(name);
+            }
         };
     } catch (err) {
         // fail-soft：降级为纯 kernel 动作面（登录链路不阻断）

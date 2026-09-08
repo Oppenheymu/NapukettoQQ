@@ -171,12 +171,18 @@ export interface KernelLike {
         session: unknown,
         deps: { uidToUin: (uins: string[]) => Promise<Map<string, string>> },
     ) => unknown;
-    GroupBridge: new (session: unknown, channel: EventChannelLike) => { register(): void };
-    FriendBridge: new (session: unknown, channel: EventChannelLike) => { register(): void };
+    GroupBridge: new (
+        session: unknown,
+        channel: EventChannelLike,
+    ) => { register(): void; unregister(): void };
+    FriendBridge: new (
+        session: unknown,
+        channel: EventChannelLike,
+    ) => { register(): void; unregister(): void };
     GroupCache: new (options: {
         channel: EventChannelLike;
         groupApi: GroupApiLike;
-    }) => { register(): void };
+    }) => { register(): void; unregister(): void };
     GroupNotifyApi: new (session: unknown) => unknown;
     TicketApi: new (
         session: unknown,

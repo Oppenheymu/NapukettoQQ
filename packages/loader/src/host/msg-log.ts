@@ -79,14 +79,16 @@ function formatMessageLog(kernel: KernelLike, msg: unknown): MessageLogLine {
 
 /**
  * 消息日志订阅（onRecvMsg 回调参数为消息数组——2026-08-07 运行时实证，遍历逐条打印）。
+ * 返回退订函数（软重登重装配时清理旧订阅，2026-09-08）；通道返回面宽松
+ * （EventChannelLike.on 返回 unknown），非函数时退化为 no-op。
  */
 export function setupMsgLogging(
     kernel: KernelLike,
     channel: EventChannelLike,
     logger: LoggerLike | undefined,
     colorize: boolean,
-): void {
-    channel.on("Msg/onRecvMsg", (msgs) => {
+): () => void {
+    const off = channel.on("Msg/onRecvMsg", (msgs) => {
         forEachRawMessage(msgs, (m) => {
             try {
                 const { plain, colored } = formatMessageLog(kernel, m);
@@ -101,4 +103,10 @@ export function setupMsgLogging(
             }
         });
     });
+    // 通道返回面宽松（on 返回 unknown）：非函数 = 无退订能力，退化 no-op
+    return typeof off === "function"
+        ? (off as () => void)
+        : () => {
+              // 无退订能力（理论不达：NTEventChannel.on 恒返回退订函数）
+          };
 }

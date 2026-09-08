@@ -96,5 +96,10 @@ export function attachIpcServices(
         for (const stop of stops) {
             stop();
         }
+        // 移除并入的动作表条目（软重登重装配清理，2026-09-08）：点分命名与
+        // OB11 snake_case / login.refreshQr 不冲突；重装配在同表重挂前必先停旧
+        for (const name of full.keys()) {
+            actions.delete(name);
+        }
     };
 }

@@ -26,6 +26,7 @@ interface Onebot11ModuleLike {
         options: Record<string, unknown>,
     ) => {
         start(): Promise<unknown>;
+        stop(): Promise<void>;
     };
 }
 
@@ -36,6 +37,7 @@ interface SatoriModuleLike {
         options: Record<string, unknown>,
     ) => {
         start(): Promise<unknown>;
+        stop(): Promise<void>;
     };
 }
 
@@ -44,17 +46,29 @@ interface AdapterCoreModuleLike {
     ProtocolConfig: new (options: Record<string, unknown>) => unknown;
 }
 
-/** 装配 OB11 + Satori 适配器（登录成功后，非 IPC 模式）。 */
+/**
+ * 装配 OB11 + Satori 适配器（登录成功后，非 IPC 模式）。
+ *
+ * 返回停止函数（ob11/satori 适配器 stop：传输关闭 + 订阅清理；装配跳过时
+ * no-op）——startProtocols 存入 services.stopAdapters，供未来非 IPC 软重登
+ * 清理（当前软重登仅 IPC 模式有触发通道，见 relogin.ts）。
+ *
+ * ⚠️ 装配失败**抛出**（2026-09-08 修复）：cli 模式跑宿主就是为了 OB11/Satori
+ * 服务，此处吞错会让 startProtocols 误判成功、以假 ready 留驻（内部 catch
+ * 曾把 protocols.ts「装配失败返回 null 判引导失败」的意图整个短路）。
+ */
 export async function assembleOb11AndSatori(
     kernel: KernelLike,
     services: KernelServices,
     loginResult: LoginResultLike,
-): Promise<void> {
+): Promise<() => Promise<void>> {
     const adapterEntry = env.NAPUTO_ADAPTER_ENTRY;
     const networkEntry = env.NAPUTO_NETWORK_ENTRY;
     if (!adapterEntry || !networkEntry) {
         log("bootstrap: NAPUTO_ADAPTER_ENTRY/NETWORK_ENTRY 未设置，跳过协议装配");
-        return;
+        return async () => {
+            // 未装配，无资源可清
+        };
     }
     try {
         const network = (await import(
@@ -176,7 +190,14 @@ export async function assembleOb11AndSatori(
         });
         await satori.start();
         log("bootstrap: satori adapter started");
+        return async () => {
+            // 适配器 stop 幂等（started 标志守卫）：传输关闭 + kernel 事件退订
+            await ob11.stop();
+            await satori.stop();
+        };
     } catch (e) {
+        // 抛给 startProtocols 判引导失败（见函数头注释；不再吞错 fail-soft）
         log(`bootstrap: 协议装配失败: ${errMsg(e)}`);
+        throw e;
     }
 }

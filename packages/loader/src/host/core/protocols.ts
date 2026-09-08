@@ -37,7 +37,7 @@ export async function startProtocols(
         return services;
     }
     try {
-        await assembleOb11AndSatori(kernel, services, loginResult);
+        services.stopAdapters = await assembleOb11AndSatori(kernel, services, loginResult);
     } catch (e) {
         // cli 模式跑宿主就是为了 OB11/Satori 服务——装配失败留驻无意义，
         // 返回 null 让引导判失败退出（2026-09-06 起不再 fail-soft）。

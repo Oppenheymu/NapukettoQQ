@@ -19,8 +19,15 @@ import {
 } from "../ipc/index.js";
 import type { CoreContextLike, CoreLike, KernelLike, LoginResultLike } from "../types.js";
 import { errMsg, log, type SharedState } from "../util.js";
+import type { KernelServices } from "./kernel-services.js";
 import { doLogin, type LoginTargetRef, pickLoginAccount } from "./login.js";
 import { startProtocols } from "./protocols.js";
+import {
+    createLoginControlHandler,
+    isLoginState,
+    LoginControl,
+    type LoginPreemptRef,
+} from "./relogin.js";
 import {
     collectCandidateSessions,
     isSessionUsable,
@@ -58,15 +65,6 @@ function probeCreatedSession(state: SharedState, ctx: CoreContextLike): void {
     } catch (e) {
         log(`BOOT: create() 探测失败: ${errMsg(e)}`);
     }
-}
-
-/** 登录状态字面量（IPC login 消息，与 kernel LoginState 对齐）。 */
-const LOGIN_STATES = ["idle", "waiting_scan", "scanned", "logged_in", "failed"] as const;
-type LoginStateLike = (typeof LOGIN_STATES)[number];
-
-/** 宽松收窄（kernel onLoginProgress.state 是 string）。 */
-function isLoginState(value: string): value is LoginStateLike {
-    return (LOGIN_STATES as readonly string[]).includes(value);
 }
 
 /** 非 IPC 模式 QR 透出标记行前缀（cli forwardFiltered 解析后终端渲染）。 */
@@ -114,67 +112,6 @@ function buildLoginOpts(
         }
     };
     return opts;
-}
-
-/**
- * control login 抢占引用（2026-09-08）：初始登录竞速期间，control login
- * （如强制扫码）成功的结果经 resolve 接管 doLogin——否则快速登录风控挂起时
- * 强制扫码虽能出码登录，bootstrap 的 doLogin 永远不 settle，装配链不跑。
- */
-export interface LoginPreemptRef {
-    resolve: ((result: LoginResultLike) => void) | null;
-}
-
-/** control login 指令 → 重新登录（qr=true 强制扫码跳过快速登录，uin 指定账号）。
- * 登录期（初始 doLogin 竞速中）成功结果经 preemptRef 接管引导链。 */
-export function createLoginControlHandler(
-    core: CoreLike,
-    Appid: string | number,
-    preemptRef?: LoginPreemptRef,
-): (payload: { uin?: string; qr?: boolean }) => void {
-    // 该 handler 仅在 IPC 模式经 startIpcServer 的 onLogin 注册（见 bootstrapWithCore），
-    // 非 IPC 模式无 control 通道不会触达，故无条件走 JSON 行协议、无需再判 ipcMode
-    return (payload) => {
-        const opts: Record<string, unknown> = {
-            appid: String(Appid),
-            initTimeoutMs: 20000,
-            qrFallback: true,
-            ...(payload.uin !== undefined ? { quickUin: payload.uin } : {}),
-            ...(payload.qr === true ? { qrOnly: true } : {}),
-            onLoginProgress: (progress: {
-                state: string;
-                qr?: { pngBase64: string; qrcodeUrl: string };
-                selfInfo?: { uin: string; uid: string; nick: string };
-                message?: string;
-            }) => {
-                if (progress.qr !== undefined) {
-                    sendQr(progress.qr.pngBase64, progress.qr.qrcodeUrl);
-                }
-                if (isLoginState(progress.state)) {
-                    sendLogin(progress.state, progress.selfInfo, progress.message);
-                }
-            },
-        };
-        void core
-            .login(opts)
-            .then((result) => {
-                if (result !== null) {
-                    sendLogin("logged_in", {
-                        uin: result.uin,
-                        uid: result.uid,
-                        nick: result.nick ?? "",
-                    });
-                    // 登录期抢占：初始 doLogin 仍在竞速等待时，用本结果接管引导链
-                    preemptRef?.resolve?.(result);
-                } else {
-                    sendLogin("failed", undefined, "登录返回空结果");
-                }
-            })
-            .catch((err) => {
-                log(`bootstrap: control login 失败: ${errMsg(err)}`);
-                sendLogin("failed", undefined, errMsg(err));
-            });
-    };
 }
 
 /** V2 登录后替换 session：优先 QQ 主 session，其次 vehicle 单例表；自建宿主例外。 */
@@ -354,11 +291,28 @@ export async function bootstrapWithCore(
     const preemptLogin = new Promise<LoginResultLike>((resolve) => {
         preempt.resolve = resolve;
     });
+    // 登录控制相位机（A1/A2，relogin.ts）：登录竞速 → 装配 → ready（软重登窗口）
+    const control = new LoginControl(preempt);
+    // 软重登延迟绑定：IPC 服务端先于 attachWrapper 启动（登录期 control 指令
+    // 可达优先），softRelogin 闭包依赖 ctx，就绪后注入。相位机保证 ready 态
+    // （装配完成后）才会触达软重登路径，届时必已绑定。
+    const reassembleRef: {
+        current: ((loginResult: LoginResultLike) => Promise<boolean>) | null;
+    } = { current: null };
     if (env.NAPUTO_IPC === "1") {
         ipcActions = createIpcActionsForCore(core);
         startIpcServer({
             actions: ipcActions,
-            onLogin: createLoginControlHandler(core, Appid, preempt),
+            onLogin: createLoginControlHandler(core, Appid, control, {
+                reassemble: (loginResult) => {
+                    const fn = reassembleRef.current;
+                    if (fn === null) {
+                        log("bootstrap: softRelogin 未就绪（理论不可达：相位机 ready 守卫）");
+                        return Promise.resolve(false);
+                    }
+                    return fn(loginResult);
+                },
+            }),
         });
     }
 
@@ -369,6 +323,72 @@ export async function bootstrapWithCore(
         `bootstrap: attachWrapper OK, engine=${typeof ctx.engine}, session=${ctx.session !== null}`,
     );
 
+    // 装配产物句柄（软重登重装配的清理面：OB11 桥 → IPC 服务 → kernel 服务）
+    let services: KernelServices | null = null;
+    let stopIpcServices: (() => void) | null = null;
+    let stopOb11Bridge: (() => void) | null = null;
+
+    /**
+     * 装配链尾部（登录成功后；初次引导与软重登共用）。
+     * @returns 装配是否成功（协议服务未装配 = false，调用方判引导失败）。
+     */
+    const runAssembly = async (
+        loginResult: LoginResultLike,
+        initial: boolean,
+    ): Promise<boolean> => {
+        // ⭐ V2 登录后替换 session：优先 QQ 主 session（渲染进程已 init），
+        // 其次 vehicle 激活的单例表 session。替换 kernel 自建的无效 session。
+        // 自建宿主（NAPUTO_SELF_HOST）恒 null（见 replaceSession）。
+        const chosen = replaceSession(kernel, core, state, ctx);
+        // ⭐ 激活目标：优先候选 session，否则 kernel 自建 session（幂等：已激活跳过）。
+        await activateSession(kernel, state, ctx, chosen, loginResult, Appid, bootEnv);
+        // 等 session 就绪（getMsgService 非 null）——init 完成后才有
+        await waitSessionReady(kernel, ctx);
+        if (env.NAPUTO_IPC === "1") {
+            sendStatus("sessioning");
+        }
+        if (initial) {
+            // P2-1 收发消息冒烟自检（NAPUTO_SMOKE=1，仅初次引导一次性执行）
+            await runSmokeIfEnabled(kernel, ctx, loginResult);
+        }
+        // 协议装配：IPC 模式返回 kernel 服务（bootstrap 装配 ipc-server），非 IPC
+        // 装配 OB11/Satori。null = 服务未装配——引导判失败，由 self-host 决定补发
+        // failed 并退出（服务未装配的常驻进程只会以假 ready 干扰父进程）。
+        const newServices = await startProtocols(kernel, ctx, loginResult);
+        if (newServices === null) {
+            log("bootstrap: 协议服务装配失败，引导中止");
+            return false;
+        }
+        // 登录后把 kernel 服务动作并入登录期动作表（同一张 Map，服务端实时可见）
+        if (env.NAPUTO_IPC === "1" && ipcActions !== null) {
+            stopIpcServices = attachIpcServices(ipcActions, newServices);
+            // OB11 动作桥（可选，2026-08-27）：app 层注入 adapter/network 入口时整表
+            // 挂载 OB11 动作容器（79 动作 + ob11 事件透出）；未注入静默跳过，装配
+            // 失败 fail-soft 降级纯 kernel 动作面（ipc-ob11.ts 内部兜底）
+            stopOb11Bridge = await attachOb11IpcBridge(ipcActions, newServices);
+        }
+        services = newServices;
+        return true;
+    };
+
+    /**
+     * 软重登重装配（ready 态 control login 成功，relogin.ts 经 deps 调用）：
+     * 清理旧装配面 → 用新登录结果重跑装配链（A2，2026-09-08）。
+     * 清理顺序：协议消费方（OB11 桥退订+动作表移除）→ IPC 事件转发/动作表
+     * → kernel 桥/缓存/消息日志（dispose，幂等）。失败返回 false（上报退出）。
+     */
+    const softRelogin = async (loginResult: LoginResultLike): Promise<boolean> => {
+        log(`bootstrap: 软重登 uin=${loginResult.uin}——清理旧装配并重跑装配链`);
+        stopOb11Bridge?.();
+        stopOb11Bridge = null;
+        stopIpcServices?.();
+        stopIpcServices = null;
+        services?.dispose();
+        services = null;
+        return await runAssembly(loginResult, false);
+    };
+    reassembleRef.current = softRelogin;
+
     probeCreatedSession(state, ctx);
     // 多源 session 就绪探测（5s 间隔，60s 上限）
     startSessionProbe(state, ctx);
@@ -377,6 +397,7 @@ export async function bootstrapWithCore(
 
     if (typeof core.login !== "function") {
         log("bootstrap: kernel core missing login fn");
+        control.abort();
         return false;
     }
     // NAPUTO_QUICK_UIN 强制指定快速登录账号（cli `-q <uin>` 透传，2026-08-07；
@@ -395,10 +416,11 @@ export async function bootstrapWithCore(
         doLogin(core, buildLoginOpts(Appid, forcedUin, ref, qrOnly)),
         preemptLogin,
     ]);
-    // 竞速结束：清掉抢占口（后续 control login 不再接管——ready 态重登需
-    // 装配链重跑，走 control restart 整进程重启，见 design.md）
-    preempt.resolve = null;
+    // 竞速结束：关抢占口进入装配期（后续 control login 走 ready 态软重登
+    // 或按相位忽略，见 relogin.ts 相位机——A1 修复迟到结果的误导上报）
+    control.beginAssembly();
     if (loginResult === null) {
+        control.abort();
         log("bootstrap: 登录失败，引导中止");
         if (env.NAPUTO_IPC === "1") {
             sendStatus("failed", "登录失败", { code: "NOT_LOGIN", message: "登录失败" });
@@ -416,35 +438,12 @@ export async function bootstrapWithCore(
         });
     }
 
-    // ⭐ V2 登录后替换 session：优先 QQ 主 session（渲染进程已 init），
-    // 其次 vehicle 激活的单例表 session。替换 kernel 自建的无效 session。
-    const chosen = replaceSession(kernel, core, state, ctx);
-    // ⭐ 激活目标：优先候选 session，否则 kernel 自建 session。
-    await activateSession(kernel, state, ctx, chosen, loginResult, Appid, bootEnv);
-    // 等 session 就绪（getMsgService 非 null）——init 完成后才有
-    await waitSessionReady(kernel, ctx);
-    if (env.NAPUTO_IPC === "1") {
-        sendStatus("sessioning");
-    }
-    // P2-1 收发消息冒烟自检（NAPUTO_SMOKE=1）：MsgBridge + MsgApi 真发/收一条
-    await runSmokeIfEnabled(kernel, ctx, loginResult);
-
-    // 协议装配：IPC 模式返回 kernel 服务（bootstrap 装配 ipc-server），非 IPC 装配 OB11/Satori。
-    // null = 服务未装配（session 缺失 / OB11/Satori 装配失败）——引导判失败，
-    // 由 self-host 决定补发 failed 并退出（服务未装配的常驻进程只会以假 ready 干扰父进程）。
-    const services = await startProtocols(kernel, ctx, loginResult);
-    if (services === null) {
-        log("bootstrap: 协议服务装配失败，引导中止");
+    if (!(await runAssembly(loginResult, true))) {
+        control.abort();
         return false;
     }
-    // 登录后把 kernel 服务动作并入登录期动作表（同一张 Map，服务端实时可见）
-    if (env.NAPUTO_IPC === "1" && ipcActions !== null) {
-        attachIpcServices(ipcActions, services);
-        // OB11 动作桥（可选，2026-08-27）：app 层注入 adapter/network 入口时整表
-        // 挂载 OB11 动作容器（79 动作 + ob11 事件透出）；未注入静默跳过，装配
-        // 失败 fail-soft 降级纯 kernel 动作面（ipc-ob11.ts 内部兜底）
-        await attachOb11IpcBridge(ipcActions, services);
-    }
+    // 装配完成：开启软重登窗口（control login 原地重登 + 重装配）
+    control.markReady();
     // 探测模式
     runProbePhase(kernel, ctx);
     return true;

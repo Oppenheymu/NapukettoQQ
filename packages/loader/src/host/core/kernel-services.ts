@@ -43,6 +43,19 @@ export interface KernelServices {
     engine: unknown;
     /** NodeQQNTWrapperUtil（诊断用：原生 copyFile 验证富媒体文件放置）。 */
     util: unknown;
+    /**
+     * 释放 kernel 服务资源（软重登重装配前清理，2026-09-08）：注销三条桥 +
+     * 群缓存退订 + 消息日志退订。幂等（桥/缓存 unregister 自身判空）。
+     * 协议面（OB11 桥 / IPC 事件转发 / cli 模式网络适配器）由各自装配方
+     * 的 stop 函数清理，不在本面。
+     */
+    dispose(): void;
+    /**
+     * cli 模式（非 IPC）网络适配器停止面（ob11/satori stop，startProtocols
+     * 装配后填入）。软重登当前仅 IPC 模式有触发通道（control login），此面
+     * 为非 IPC 场景预留的完整清理面。未装配时缺省。
+     */
+    stopAdapters?: () => Promise<void>;
 }
 
 /** 登录成功后创建 kernel 业务服务（channel/bridge/cache/apis）。失败返回 null。 */
@@ -78,7 +91,8 @@ export async function createKernelServices(
     const bridge = new kernel.MsgBridge(session, channel);
     bridge.register();
     // 控制台消息日志（NapCat 同款：收到消息打印到控制台；渲染逻辑见 msg-log.ts）。
-    setupMsgLogging(kernel, channel, logger, !ipcMode);
+    // 返回退订函数（软重登重装配时清理）。
+    const offMsgLogging = setupMsgLogging(kernel, channel, logger, !ipcMode);
     // kernel APIs
     const groupApi = new kernel.GroupApi(session);
     // channel 传入 MsgApi：sendMsg 后等 onMsgInfoListUpdate 确认（NapCat 式，2026-08-11）
@@ -131,5 +145,13 @@ export async function createKernelServices(
         // util：wrapper exports 上的 NodeQQNTWrapperUtil（诊断用原生 copyFile）
         util: (ctx as unknown as { exports?: { NodeQQNTWrapperUtil?: unknown } }).exports
             ?.NodeQQNTWrapperUtil,
+        dispose: () => {
+            // 幂等清理：桥 unregister 判空、groupCache.unsubscribes 判空
+            bridge.unregister();
+            groupBridge.unregister();
+            friendBridge.unregister();
+            groupCache.unregister();
+            offMsgLogging();
+        },
     };
 }
