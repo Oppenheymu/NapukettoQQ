@@ -2,7 +2,7 @@
 
 > **新对话开场指引**：先读本文件（现状 + 关键决策点）→ `AGENTS.md`（工程指南 + 红线）→ `docs/architecture.md`（架构书）→ **`packages/loader/native/docs/HANDOVER-V11.md`（最终交接，闭源子仓库）** → 对应包 `docs/design.md`（loader / koishi-plugin-adapter / create-napukettoqq / **kernel（2026-09-08 新建）** / **adapter（2026-09-08 新建）**）。需要细节时再读 HANDOVER-V6~V10（子仓库 docs/）。需要了解路线演进背景时再读 `docs/DECISIONS.md`。
 >
-> **git 状态**：HEAD = `3fa6425` 基础上的登录生命周期收尾轮（loader 相位机 + koishi 软重登，详见「🌙 关键决策点」；**本轮提交未 GPG 签名**——无人值守会话 pinentry 不可用，如需可后续 amend 重签）。
+> **git 状态**：2026-09-08 晚已完成**全链补签 + 历史线性化**（rebase 重写：20 个提交全部 GPG 签名、纯线性无合并；并行会话推来的重复历史链已随改写移除，内容零损失）。HEAD = `4cdc19f`（pnpm-lock 同步）；**旧哈希全部作废**（3fa6425 / a1f8a2a / 9562829 / 7faed0f 等），引用旧哈希的文档与脚本以提交信息为准。登录生命周期收尾轮详见「🌙 关键决策点」。
 
 ---
 
