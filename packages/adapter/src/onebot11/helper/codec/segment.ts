@@ -88,6 +88,12 @@ const CANONICAL_TO_SEGMENT: Record<string, (el: never) => OB11MessageSegment> = 
         type: "video" as const,
         data: mediaData(el.path, el.url),
     }),
+    // 群/私聊文件（B4，2026-09-08）：data.file 取文件名（缺省路径）——go-cqhttp
+    // 兼容形状;此前 file 元素被静默丢弃（转换表无此键）
+    file: (el: Extract<CanonicalElement, { type: "file" }>) => ({
+        type: "file" as const,
+        data: { file: el.name ?? el.path },
+    }),
     reply: (el: Extract<CanonicalElement, { type: "reply" }>) => ({
         type: "reply" as const,
         data: { id: el.messageId },
@@ -183,6 +189,10 @@ const CQ_SEGMENT_BUILDERS: Record<string, CqSegmentBuilder> = {
     video: (params) => ({
         type: "video",
         data: mediaData(params["file"] ?? "", params["url"]),
+    }),
+    file: (params) => ({
+        type: "file",
+        data: { file: params["file"] ?? "" },
     }),
     reply: (params) => ({ type: "reply", data: { id: params["id"] ?? "" } }),
     forward: (params) => ({ type: "forward", data: { id: params["id"] ?? "" } }),

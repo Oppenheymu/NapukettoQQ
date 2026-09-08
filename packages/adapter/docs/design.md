@@ -27,8 +27,27 @@ Buddy/onBuddyListChange(dV2)     →  subscribe()（2026-09-08）    →  仅 ra
   - friend_recall：C2C grayTip REVOKE。
   - notify.poke：aioOpGrayTipElement——**待真实事件验证**（口径：user_id=发送者，
     target_id=aioOp.peerUid，group_id=群号/C2C 0；poke 路径始终打 raw 日志）。
+    **手动触发指引（校准用）**：需另一个 QQ 号在群里/私聊戳机器人账号
+    （手机 QQ「戳一戳」或群内双击头像戳一戳），产生的 aioOp grayTip 会打
+    `ob11: poke grayTip raw（待真实事件校准）` raw 日志——日志去向：
+    IPC 模式（koishi）落 `<cfgDir>/logs/loader.log`；cli 模式仅 console
+    （boot 转发终端输出）。拿到 raw 后校准 toPoke 的 user_id/target_id/
+    group_id 口径并移除「待验证」标注。
+  - friend_add（B2，2026-09-08）：数据源 = kernel `BuddyCache` 快照 diff
+    （`Buddy/onBuddyListChange` 全量快照，T10 实证 = BuddyCategory[]，
+    明细在 category.buddyList；首帧只建 baseline 不发事件）→
+    `BuddyCache/onBuddyAdded` → `toFriendAdd`（user_id = coreInfo.uin）。
+    diff/baseline 在 kernel 缓存层，adapter 翻译纯函数；onBuddyRemoved
+    仅维护缓存（OB11 无 friend_remove 通知类型，不翻译）。
+  - group_upload（B4，2026-09-08）：配置开关 `groupUploadAsNotice`
+    （默认 false）。false = message 事件 + **file 段透出**（go-cqhttp 兼容；
+    代码考古发现此前 file 元素被静默丢弃——转换表无 file 键，本版本起补齐，
+    属修复而非行为变更）；true = 含 fileElement 的群消息改报 group_upload
+    notice（user_id + file{id=fileUuid, name, size, busid=102}）替代
+    message 事件。onRecvMsg 分支判定在 adapter.ts（grayTip → 文件开关 →
+    reportSelfMessage → message）。
   - 未知/未翻译 grayTip 子类型（JSON/BUDDY/ESSENCE/GROUP_NOTIFY/FILE 等）打
-    raw JSON 校准日志（friend_add / lucky_notify / honor / essence 翻译的
+    raw JSON 校准日志（lucky_notify / honor / essence 翻译的
     数据源积累入口）。
 - **校准 logger**：`OneBot11AdapterOptions.logger`（warn/info 最小面），
   装配方传 pino 实例；缺省静默。
@@ -48,7 +67,7 @@ Buddy/onBuddyListChange(dV2)     →  subscribe()（2026-09-08）    →  仅 ra
 - **satori**：stopAll（广播 login-updated 离线）→ startTransports（新配置装配，
   广播在线）。无 IPC 桥模式，恒走重建。
 
-## 3. get_image / get_record（action/message/get-media.ts，2026-09-08 接主动下载）
+## 3. get_image / get_record（action/message/get-media.ts，2026-09-08 接主动下载；B1 语音原生下载）
 
 - **本地解析**：NT 相对路径（sourcePath/filePath）按 `mediaBaseDir`（QQ NT
   global 目录）解析绝对路径，磁盘命中即返回 file。mediaBaseDir 由装配方
@@ -57,8 +76,13 @@ Buddy/onBuddyListChange(dV2)     →  subscribe()（2026-09-08）    →  仅 ra
 - **图片主动下载**：本地未命中且有 picUrl → `@napuketto/media downloadUrl`
   落 `cacheDir/media/`，返回 file（绝对路径）+ url + file_size/file_name；
   失败回退 url-only（不抛错）。
-- **语音缺口**：无 URL 可下载，本地未命中返回原始 NT 相对路径 +
-  元数据——原生 downloadRichMedia 签名未探测，待 T10 实测后接入。
+- **语音主动下载（B1，2026-09-08）**：本地未命中 → kernel
+  `MsgApi.downloadPtt`（原生 `msgService.downloadRichMedia` 单参对象
+  {msgId, elemId, chatType, downloadType:2, thumbSize:0} → 轮询
+  getMsgsByMsgId 等 filePath/transferStatus 就绪，约 10s 超时）→ 落盘后
+  返回 file 绝对路径；下载失败回退现状（原始 filePath + 元数据，不抛错）。
+  实测注意：transferStatus=2（数据库已下载态）时原生调用为 no-op——磁盘
+  缺失场景无法经此恢复（详见 kernel design.md §5）。
 
 ## 4. satori 媒体（helper/element/media-convert.ts）
 
@@ -71,9 +95,9 @@ Buddy/onBuddyListChange(dV2)     →  subscribe()（2026-09-08）    →  仅 ra
 adapter 依赖 `@napuketto/media`（encodePcmToSilk / decodeSilkToWav /
 transcodeVideo / downloadUrl / inferExtension）。kernel 不依赖 media。
 
-## 6. 已知缺口（下一轮）
+## 6. 已知缺口（2026-09-08 B 轮后）
 
-- 语音主动下载（原生 downloadRichMedia）。
-- poke 翻译字段校准（首次真实事件后）。
-- friend_add 翻译（Buddy 列表变化 payload 校准后）。
-- group_upload 是否改 notice 报形式（待用户拍板，见 §1 gap 清单）。
+- poke 翻译字段校准（首次真实事件后；手动触发指引见 §1）。
+- group_card / offline_file / group_sign / msg_emoji_like / group_title
+  （无对应 kernel 事件源）。
+- onBuddyReqChange payload 形状（BuddyReq 字段 words 等待真实事件校准）。

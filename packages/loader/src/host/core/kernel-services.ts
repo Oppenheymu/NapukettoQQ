@@ -24,6 +24,8 @@ export interface KernelServices {
     groupChannel: EventChannelLike;
     /** 好友事件通道（Buddy/onBuddyReqChange 等；OB11 request 事件源）。 */
     friendChannel: EventChannelLike;
+    /** 好友缓存（B2，2026-09-08：onBuddyListChange 快照 diff → onBuddyAdded/Removed；OB11 friend_add 源）。 */
+    buddyCache: unknown;
     /** kernel apis（宽松 unknown，装配方按需断言——OB11 用完整面，IPC 动作表用最小面）。 */
     msgApi: unknown;
     groupApi: unknown;
@@ -113,6 +115,9 @@ export async function createKernelServices(
     friendBridge.register();
     const groupCache = new kernel.GroupCache({ channel: groupChannel, groupApi });
     groupCache.register();
+    // 好友缓存（B2）：快照 diff 归一化事件（OB11 friend_add 源）
+    const buddyCache = new kernel.BuddyCache({ channel: friendChannel, logger });
+    buddyCache.register();
     const groupNotifyApi = new kernel.GroupNotifyApi(session);
     const ticketApi = new kernel.TicketApi(session);
     const richMediaApi = new kernel.RichMediaApi(session);
@@ -133,6 +138,7 @@ export async function createKernelServices(
         groupApi,
         friendApi,
         groupCache,
+        buddyCache,
         groupNotifyApi,
         ticketApi,
         richMediaApi,
@@ -151,6 +157,7 @@ export async function createKernelServices(
             groupBridge.unregister();
             friendBridge.unregister();
             groupCache.unregister();
+            buddyCache.unregister();
             offMsgLogging();
         },
     };

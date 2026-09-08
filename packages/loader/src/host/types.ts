@@ -183,6 +183,14 @@ export interface KernelLike {
         channel: EventChannelLike;
         groupApi: GroupApiLike;
     }) => { register(): void; unregister(): void };
+    BuddyCache: new (options: {
+        channel: EventChannelLike;
+        logger?: unknown;
+    }) => {
+        events: EventChannelLike;
+        register(): void;
+        unregister(): void;
+    };
     GroupNotifyApi: new (session: unknown) => unknown;
     TicketApi: new (
         session: unknown,

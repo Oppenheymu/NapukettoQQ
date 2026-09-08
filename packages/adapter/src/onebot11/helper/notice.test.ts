@@ -6,7 +6,7 @@
  */
 import { ChatType, GrayTipSubType, type RawMessage } from "@napuketto/kernel";
 import { describe, expect, it, vi } from "vitest";
-import { toOb11NoticeEvent } from "./notice.js";
+import { toFriendAdd, toOb11NoticeEvent } from "./notice.js";
 
 const CTX = { selfUin: "10001", uidToUin: new Map([["u9", "90009"]]) };
 
@@ -121,5 +121,25 @@ describe("toOb11NoticeEvent：群成员变动（既有口径回归）", () => {
             CTX,
         );
         expect(event).toMatchObject({ notice_type: "group_increase", sub_type: "invite" });
+    });
+});
+
+describe("toFriendAdd（B2，快照 diff 源）", () => {
+    it("coreInfo.uin 优先 → friend_add(user_id)", () => {
+        const event = toFriendAdd(
+            { uid: "u1", uin: "1", coreInfo: { uid: "u1", uin: "10086", nick: "n" } },
+            "10001",
+        );
+        expect(event).toMatchObject({
+            post_type: "notice",
+            notice_type: "friend_add",
+            self_id: 10001,
+            user_id: 10086,
+        });
+    });
+
+    it("coreInfo 缺失回退顶层 uin;全缺 user_id=NaN 容忍(不抛错)", () => {
+        expect(toFriendAdd({ uid: "u1", uin: "10087" }, "10001").user_id).toBe(10087);
+        expect(toFriendAdd({ uid: "u1" }, "10001").post_type).toBe("notice");
     });
 });

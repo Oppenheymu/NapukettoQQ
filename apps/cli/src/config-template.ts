@@ -61,6 +61,10 @@ reportSelfMessage = false
 # 消息内容格式：array = 消息段数组（标准 OneBot 11），string = CQ 码字符串
 messagePostFormat = "array"
 
+# 群文件报形式：false（默认）= message 事件 + file 段（go-cqhttp 兼容）；
+# true = 群文件消息改报 group_upload notice 事件（替代 message 事件）
+groupUploadAsNotice = false
+
 # ---- HTTP 反向服务器（接收第三方 POST 指令），可配置多个 ----
 [[accounts.onebot11.httpServers]]
 enabled = true

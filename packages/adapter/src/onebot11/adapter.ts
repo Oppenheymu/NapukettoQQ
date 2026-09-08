@@ -9,6 +9,7 @@
  */
 
 import type {
+    BuddyCacheEventChannel,
     BuddyEventChannel,
     BuddyReq,
     GroupEventChannel,
@@ -16,7 +17,7 @@ import type {
     MsgEventChannel,
     RawMessage,
 } from "@napuketto/kernel";
-import { toCanonicalElements } from "@napuketto/kernel";
+import { ChatType, toCanonicalElements } from "@napuketto/kernel";
 import type { EventBroadcaster } from "@napuketto/network";
 import {
     type ActionRegistry,
@@ -31,7 +32,14 @@ import { OneBotApi } from "./api/index.js";
 import type { OB11Config } from "./helper/index.js";
 import { collectReceiveNeeds, type ReceiveTranslateContext } from "./helper/index.js";
 import { toOb11MessageEvent } from "./helper/message-event.js";
-import { collectGrayTipUids, hasGrayTip, toOb11NoticeEvent } from "./helper/notice.js";
+import {
+    collectGrayTipUids,
+    hasFileElement,
+    hasGrayTip,
+    toFriendAdd,
+    toGroupUpload,
+    toOb11NoticeEvent,
+} from "./helper/notice.js";
 import {
     narrowBuddyReqs,
     type RequestTranslateContext,
@@ -62,6 +70,8 @@ export interface OneBot11AdapterOptions extends OneBotApiOptions {
     groupChannel?: GroupEventChannel;
     /** kernel 好友事件通道（可选：Buddy/onBuddyReqChange → OB11 request 源）。 */
     friendChannel?: BuddyEventChannel;
+    /** 好友缓存 diff 通道（可选：BuddyCache/onBuddyAdded → OB11 friend_add 源，B2）。 */
+    buddyCacheEvents?: BuddyCacheEventChannel;
     /** 校准日志（可选：未知事件形状 raw JSON；IPC 模式传 loader pino 实例）。 */
     logger?: AdapterLoggerLike;
 }
@@ -73,6 +83,7 @@ export class NapukettoOneBot11Adapter extends BaseProtocolAdapter<OB11Config> {
     private readonly msgChannel: MsgEventChannel;
     private readonly groupChannel: GroupEventChannel | undefined;
     private readonly friendChannel: BuddyEventChannel | undefined;
+    private readonly buddyCacheEvents: BuddyCacheEventChannel | undefined;
     private readonly calibLogger: AdapterLoggerLike | undefined;
     private readonly selfUin: string;
     private readonly oneBotApi: OneBotApi;
@@ -83,6 +94,8 @@ export class NapukettoOneBot11Adapter extends BaseProtocolAdapter<OB11Config> {
     private heartbeatTimer: NodeJS.Timeout | null = null;
     private reportSelfMessage = false;
     private messageFormat: "array" | "string" = "array";
+    /** 群文件报形式（B4）：true = fileElement 群消息报 group_upload notice 替代 message。 */
+    private groupUploadAsNotice = false;
     /** IPC 桥模式标记（subscribeOnly 启动；reload 时跳过传输重建）。 */
     private subscribedOnly = false;
 
@@ -99,6 +112,7 @@ export class NapukettoOneBot11Adapter extends BaseProtocolAdapter<OB11Config> {
         this.msgChannel = opts.msgChannel;
         this.groupChannel = opts.groupChannel;
         this.friendChannel = opts.friendChannel;
+        this.buddyCacheEvents = opts.buddyCacheEvents;
         this.calibLogger = opts.logger;
         this.selfUin = opts.self.uin;
         this.oneBotApi = new OneBotApi(opts);
@@ -113,6 +127,7 @@ export class NapukettoOneBot11Adapter extends BaseProtocolAdapter<OB11Config> {
         if (this.subscribedOnly) {
             this.reportSelfMessage = config.reportSelfMessage;
             this.messageFormat = config.messagePostFormat;
+            this.groupUploadAsNotice = config.groupUploadAsNotice;
             return;
         }
         await this.stopAll();
@@ -126,6 +141,7 @@ export class NapukettoOneBot11Adapter extends BaseProtocolAdapter<OB11Config> {
         // 全局上报开关与消息格式（订阅处消费）
         this.reportSelfMessage = config.reportSelfMessage;
         this.messageFormat = config.messagePostFormat;
+        this.groupUploadAsNotice = config.groupUploadAsNotice;
         const broadcaster = this.getBroadcaster();
         if (broadcaster !== undefined) {
             this.transports = assembleOb11Transports({
@@ -209,6 +225,18 @@ export class NapukettoOneBot11Adapter extends BaseProtocolAdapter<OB11Config> {
                     if (!this.reportSelfMessage && String(msg.senderUin) === this.selfUin) {
                         return;
                     }
+                    // 群文件报形式开关（B4）：on = group_upload notice 替代 message 事件
+                    if (
+                        this.groupUploadAsNotice &&
+                        msg.chatType === ChatType.GROUP &&
+                        hasFileElement(msg)
+                    ) {
+                        const notice = toGroupUpload(msg, this.selfUin);
+                        if (notice !== null) {
+                            this.broadcastEvent(notice);
+                            return;
+                        }
+                    }
                     void this.broadcastMessageEvent(msg);
                 });
             }),
@@ -240,8 +268,9 @@ export class NapukettoOneBot11Adapter extends BaseProtocolAdapter<OB11Config> {
                     void this.broadcastFriendRequests(reqs);
                 }),
             );
-            // 好友列表变化：payload 形状未知（friend_add notice 的候选数据源），
-            // 只打 raw 校准日志不翻译——待真实事件回填
+            // 好友列表变化：T10 实证 = BuddyCategory[] 全量快照（翻译走 kernel
+            // BuddyCache diff，见下方 buddyCacheEvents）；此处 raw 日志保留积累
+            // 校准数据（快照字段较多，slice 截断）
             for (const evt of ["Buddy/onBuddyListChange", "Buddy/onBuddyListChangedV2"] as const) {
                 this.unsubscribes.push(
                     this.friendChannel.on(evt, (arg) => {
@@ -252,6 +281,16 @@ export class NapukettoOneBot11Adapter extends BaseProtocolAdapter<OB11Config> {
                     }),
                 );
             }
+        }
+        // 好友缓存 diff（B2，2026-09-08）：快照对比出的新增 → friend_add notice。
+        // diff/baseline 逻辑在 kernel BuddyCache（onBuddyListChange 全量快照，
+        // 首帧只建 baseline），adapter 翻译保持纯函数。
+        if (this.buddyCacheEvents !== undefined) {
+            this.unsubscribes.push(
+                this.buddyCacheEvents.on("BuddyCache/onBuddyAdded", (entry) => {
+                    this.broadcastEvent(toFriendAdd(entry, this.selfUin));
+                }),
+            );
         }
     }
 
@@ -264,6 +303,7 @@ export class NapukettoOneBot11Adapter extends BaseProtocolAdapter<OB11Config> {
         const config = await this.config.load();
         this.reportSelfMessage = config.reportSelfMessage;
         this.messageFormat = config.messagePostFormat;
+        this.groupUploadAsNotice = config.groupUploadAsNotice;
         this.subscribedOnly = true;
         this.subscribe();
     }

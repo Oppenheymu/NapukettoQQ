@@ -20,6 +20,7 @@ export type OB11MessageSegment =
     | { type: "image"; data: { file: string; url?: string } }
     | { type: "record"; data: { file: string; url?: string } }
     | { type: "video"; data: { file: string; url?: string } }
+    | { type: "file"; data: { file: string } }
     | { type: "reply"; data: { id: string } }
     | { type: "forward"; data: { id: string } }
     | { type: "json"; data: { data: string } }

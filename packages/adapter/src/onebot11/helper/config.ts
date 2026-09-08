@@ -68,6 +68,12 @@ export const ob11ConfigSchema = z.object({
     reportSelfMessage: z.boolean().default(false),
     /** 消息内容格式：array = 消息段数组（标准），string = CQ 码字符串。 */
     messagePostFormat: z.enum(MESSAGE_FORMATS).default("array"),
+    /**
+     * 群文件报形式（B4，2026-09-08）：false（缺省）= message 事件 + file 段
+     * （go-cqhttp 兼容;此前 file 元素被静默丢弃,本版本起透出）；true = 含
+     * fileElement 的群消息改报 group_upload notice 事件（替代 message 事件）。
+     */
+    groupUploadAsNotice: z.boolean().default(false),
     /** HTTP 反向服务器列表。 */
     httpServers: z.array(httpServerSchema).default([]),
     /** HTTP 正向上报列表。 */

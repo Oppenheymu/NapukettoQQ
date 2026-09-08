@@ -5,6 +5,8 @@
  */
 export type {
     BuddyCategory,
+    BuddyCoreInfo,
+    BuddyListEntry,
     BuddyReq,
     DoubtBuddyReq,
     NodeIKernelBuddyService,

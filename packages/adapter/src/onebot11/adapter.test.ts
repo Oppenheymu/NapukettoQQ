@@ -109,11 +109,13 @@ describe("NapukettoOneBot11Adapter（request 事件链）", () => {
         msg: ReturnType<typeof captureChannel>;
         group: ReturnType<typeof captureChannel>;
         friend: ReturnType<typeof captureChannel>;
+        buddyCache: ReturnType<typeof captureChannel>;
         events: unknown[];
     } {
         const msg = captureChannel();
         const group = captureChannel();
         const friend = captureChannel();
+        const buddyCache = captureChannel();
         const events: unknown[] = [];
         const broadcaster = { emit: (e: unknown) => events.push(e) } as unknown as EventBroadcaster;
         const adapter = new NapukettoOneBot11Adapter({
@@ -132,9 +134,12 @@ describe("NapukettoOneBot11Adapter（request 事件链）", () => {
             friendChannel: friend.channel as unknown as NonNullable<
                 OneBot11AdapterOptions["friendChannel"]
             >,
+            buddyCacheEvents: buddyCache.channel as unknown as NonNullable<
+                OneBot11AdapterOptions["buddyCacheEvents"]
+            >,
             ...(logger !== undefined ? { logger } : {}),
         });
-        return { adapter, msg, group, friend, events };
+        return { adapter, msg, group, friend, buddyCache, events };
     }
 
     it("subscribeOnly 订阅群通知与好友申请通道并广播 request 事件", async () => {
@@ -178,6 +183,26 @@ describe("NapukettoOneBot11Adapter（request 事件链）", () => {
         await new Promise((resolve) => setTimeout(resolve, 10));
         expect(warn).toHaveBeenCalledTimes(1);
         expect(events).toHaveLength(0);
+    });
+
+    it("buddyCacheEvents onBuddyAdded → friend_add 事件（B2）", async () => {
+        const { adapter, buddyCache, events } = makeWithRequestChannels();
+        await adapter.subscribeOnly();
+        expect(buddyCache.handlers.has("BuddyCache/onBuddyAdded")).toBe(true);
+        buddyCache.handlers.get("BuddyCache/onBuddyAdded")?.({
+            uid: "u1",
+            uin: "10086",
+            coreInfo: { uid: "u1", uin: "10086", nick: "新好友" },
+        });
+        await vi.waitFor(() => {
+            expect(
+                events.some(
+                    (e) =>
+                        (e as { notice_type?: string }).notice_type === "friend_add" &&
+                        (e as { user_id?: number }).user_id === 10086,
+                ),
+            ).toBe(true);
+        });
     });
 
     it("doubt 可疑群通知跳过不广播", async () => {
@@ -253,5 +278,101 @@ describe("NapukettoOneBot11Adapter（reload 热更新，2026-09-08 T7）", () =>
         // 无 lifecycle enable 广播（未走传输重建路径）
         expect(events.slice(before).filter((e) => e.post_type === "meta_event").length).toBe(0);
         adapter.unsubscribeOnly();
+    });
+});
+
+describe("NapukettoOneBot11Adapter（group_upload 报形式开关，B4）", () => {
+    /** 群文件消息（chatType=GROUP + fileElement）。 */
+    function fileMsg(): Parameters<ReturnType<typeof captureChannel>["channel"]["on"]>[1] {
+        return {
+            msgId: "9100",
+            msgSeq: "9",
+            msgTime: "1700000000000",
+            msgType: 2,
+            chatType: 2,
+            peerUid: "808",
+            peerUin: "808",
+            senderUid: "u9",
+            senderUin: "90009",
+            peerName: "群",
+            sendNickName: "某人",
+            elements: [
+                {
+                    elementType: 3,
+                    fileElement: {
+                        fileName: "doc.pdf",
+                        fileSize: "1024",
+                        fileUuid: "uuid-1",
+                        filePath: "nt_data/File/doc.pdf",
+                    },
+                },
+            ],
+        } as unknown as Parameters<ReturnType<typeof captureChannel>["channel"]["on"]>[1];
+    }
+
+    function makeAdapter(seed: Record<string, unknown>) {
+        const msg = captureChannel();
+        const events: unknown[] = [];
+        const broadcaster = { emit: (e: unknown) => events.push(e) } as unknown as EventBroadcaster;
+        const adapter = new NapukettoOneBot11Adapter({
+            ...stubOptions(),
+            config: new ProtocolConfig({
+                path: "ob11-test.toml",
+                schema: ob11ConfigSchema,
+                defaults: ob11ConfigSchema.parse({}),
+                seed: ob11ConfigSchema.parse(seed),
+            }),
+            broadcaster,
+            msgChannel: msg.channel,
+        });
+        return { adapter, msg, events };
+    }
+
+    it("off（默认）：message 事件 + file 段透出（此前被静默丢弃）", async () => {
+        const { adapter, msg, events } = makeAdapter({});
+        await adapter.subscribeOnly();
+        msg.handlers.get("Msg/onRecvMsg")?.([fileMsg()]);
+        await vi.waitFor(() => {
+            expect(events).toHaveLength(1);
+        });
+        const event = events[0] as {
+            post_type: string;
+            message: Array<{ type: string; data: Record<string, unknown> }>;
+        };
+        expect(event.post_type).toBe("message");
+        expect(event.message.some((s) => s.type === "file" && s.data["file"] === "doc.pdf")).toBe(
+            true,
+        );
+    });
+
+    it("on：group_upload notice 替代 message 事件", async () => {
+        const { adapter, msg, events } = makeAdapter({ groupUploadAsNotice: true });
+        await adapter.subscribeOnly();
+        msg.handlers.get("Msg/onRecvMsg")?.([fileMsg()]);
+        await vi.waitFor(() => {
+            expect(events).toHaveLength(1);
+        });
+        expect(events[0]).toMatchObject({
+            post_type: "notice",
+            notice_type: "group_upload",
+            group_id: 808,
+            user_id: 90009,
+            file: { id: "uuid-1", name: "doc.pdf", size: 1024, busid: 102 },
+        });
+    });
+
+    it("on 但非文件消息：仍走 message 事件", async () => {
+        const { adapter, msg, events } = makeAdapter({ groupUploadAsNotice: true });
+        await adapter.subscribeOnly();
+        msg.handlers.get("Msg/onRecvMsg")?.([
+            {
+                ...fileMsg(),
+                elements: [{ elementType: 1, textElement: { content: "普通消息" } }],
+            },
+        ]);
+        await vi.waitFor(() => {
+            expect(events).toHaveLength(1);
+        });
+        expect((events[0] as { post_type: string }).post_type).toBe("message");
     });
 });

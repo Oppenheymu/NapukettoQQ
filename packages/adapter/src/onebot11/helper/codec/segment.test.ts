@@ -81,8 +81,18 @@ describe("canonicalToSegment", () => {
         });
     });
 
-    it("file / 未知类型 → null（OB11 无法表达跳过）", () => {
-        expect(canonicalToSegment({ type: "file", path: "/a.bin" })).toBeNull();
+    it("file → file 段（name 优先，缺省 path；B4 透出）", () => {
+        expect(canonicalToSegment({ type: "file", path: "/a.bin", name: "a.bin" })).toEqual({
+            type: "file",
+            data: { file: "a.bin" },
+        });
+        expect(canonicalToSegment({ type: "file", path: "/cache/a.bin" })).toEqual({
+            type: "file",
+            data: { file: "/cache/a.bin" },
+        });
+    });
+
+    it("未知类型 → null（OB11 无法表达跳过）", () => {
         expect(canonicalToSegment({ type: "unknown" } as never)).toBeNull();
     });
 });

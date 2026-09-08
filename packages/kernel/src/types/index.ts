@@ -35,6 +35,8 @@ export type { CanonicalElement } from "./message-element.js";
 export { toCanonicalElements, toSendElements } from "./message-element.js";
 export type {
     BuddyCategory,
+    BuddyCoreInfo,
+    BuddyListEntry,
     BuddyProfileLikeResult,
     BuddyReq,
     DoubtBuddyReq,

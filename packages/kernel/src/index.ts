@@ -30,8 +30,13 @@ export {
 } from "./apis/index.js";
 export type { BuddyEventChannel, GroupEventChannel, MsgEventChannel } from "./bridge/index.js";
 export { FriendBridge, GroupBridge, MsgBridge } from "./bridge/index.js";
-export type { GroupCacheOptions } from "./cache/index.js";
-export { GroupCache } from "./cache/index.js";
+export type {
+    BuddyCacheEventChannel,
+    BuddyCacheListener,
+    BuddyCacheOptions,
+    GroupCacheOptions,
+} from "./cache/index.js";
+export { BuddyCache, GroupCache, narrowBuddyCategories } from "./cache/index.js";
 export type { CoreContext, CoreContextOptions } from "./context.js";
 export { createCoreContext } from "./context.js";
 export type { CoreLoginOptions, LoginProgress, NapukettoCoreOptions } from "./core.js";
@@ -80,6 +85,8 @@ export {
 } from "./login/index.js";
 export type {
     BuddyCategory,
+    BuddyCoreInfo,
+    BuddyListEntry,
     BuddyListener,
     BuddyReq,
     CanonicalElement,

@@ -7,14 +7,40 @@
  */
 import type { GeneralCallResult } from "./msg-service.js";
 
-/** 好友列表分类（getBuddyListV2 返回，说明书参考）。 */
+/** 好友核心信息（BuddyListEntry.coreInfo，2026-09-08 T10 实测）。 */
+export interface BuddyCoreInfo {
+    uid: string;
+    uin: string;
+    nick?: string;
+    remark?: string;
+    [key: string]: unknown;
+}
+
+/** 好友列表明细（BuddyCategory.buddyList 成员，2026-09-08 T10 实测快照）。 */
+export interface BuddyListEntry {
+    uid: string;
+    /** 顶层 uin（coreInfo.uin 同值；缺失时回退 coreInfo）。 */
+    uin?: string;
+    coreInfo?: BuddyCoreInfo;
+    baseInfo?: Record<string, unknown>;
+    [key: string]: unknown;
+}
+
+/**
+ * 好友列表分类（getBuddyListV2 返回 / onBuddyListChange 全量快照载荷）。
+ * ⚠️ 2026-09-08 T10 实测：onBuddyListChange 载荷 = BuddyCategory[]，分类项
+ * 含 buddyList 明细（uid/uin/coreInfo/baseInfo）；实测样本无 buddyUids——
+ * 两字段均按 optional 防御（旧描述的 buddyUids 保留兼容）。
+ */
 export interface BuddyCategory {
     categoryId: number;
     categorySortId: number;
     categroyName: string;
     categroyMbCount: number;
     onlineCount: number;
-    buddyUids: string[];
+    buddyUids?: string[];
+    /** 好友明细（onBuddyListChange 快照，T10 实证）。 */
+    buddyList?: BuddyListEntry[];
 }
 
 /** 好友申请（getBuddyReq 返回的 buddyReqs 成员，说明书参考，待探测校准）。 */

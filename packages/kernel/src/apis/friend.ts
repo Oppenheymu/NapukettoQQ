@@ -79,7 +79,10 @@ export class FriendApi {
             }
             categories = raw.data;
         }
-        const uids = categories.flatMap((cat) => cat.buddyUids);
+        // buddyList（明细,T10 实证）优先,buddyUids（旧描述字段）兜底
+        const uids = categories.flatMap(
+            (cat) => cat.buddyList?.map((b) => b.uid) ?? cat.buddyUids ?? [],
+        );
         let uinMap = new Map<string, string>();
         if (this.uidToUin !== undefined) {
             uinMap = await this.uidToUin(uids);
@@ -105,7 +108,7 @@ export class FriendApi {
         }
         return categories.map((cat) => {
             const buddies: Friend[] = [];
-            for (const uid of cat.buddyUids) {
+            for (const uid of cat.buddyList?.map((b) => b.uid) ?? cat.buddyUids ?? []) {
                 const friend = friendMap.get(uid);
                 if (friend !== undefined) {
                     buddies.push(friend);

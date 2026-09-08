@@ -148,6 +148,8 @@ export async function attachOb11IpcBridge(
             // OB11 request 事件源（2026-09-08）：群通知 + 好友申请推送
             groupChannel: services.groupChannel,
             friendChannel: services.friendChannel,
+            // OB11 friend_add 源（B2，2026-09-08）：好友缓存快照 diff 通道
+            buddyCacheEvents: (services.buddyCache as { events: unknown } | undefined)?.events,
             // 校准日志（pino 实例，未知事件形状 raw JSON）
             logger: services.logger as
                 | { warn(obj: unknown, msg?: string): void; info(obj: unknown, msg?: string): void }

@@ -17,6 +17,8 @@
  *
  * user_id/operator_id 都是 uin：接收 uidToUin Map（调用方批量转换后传入，保持纯函数）。
  */
+
+import type { BuddyListEntry } from "@napuketto/kernel";
 import {
     ChatType,
     type GrayTipElement,
@@ -30,17 +32,27 @@ export { collectGrayTipUids } from "../../core/gray-tip.js";
 
 import type {
     OB11Event,
+    OB11FriendAddNoticeEvent,
     OB11FriendRecallNoticeEvent,
     OB11GroupAdminNoticeEvent,
     OB11GroupBanNoticeEvent,
     OB11GroupDecreaseNoticeEvent,
     OB11GroupIncreaseNoticeEvent,
     OB11GroupRecallNoticeEvent,
+    OB11GroupUploadNoticeEvent,
     OB11NotifyNoticeEvent,
 } from "../event/index.js";
 
 /** 毫秒 → 秒（Unix 时间戳）。 */
 const MS_TO_SEC = 1000;
+
+/** 群文件业务类型（group_upload 的 file.busid,与 kernel 群文件系列同源语义）。 */
+const GROUP_FILE_BUS_ID = 102;
+
+/** 检查消息是否含文件元素（group_upload 开关分支判定）。 */
+export function hasFileElement(msg: RawMessage): boolean {
+    return msg.elements.some((el) => el.fileElement !== undefined);
+}
 
 /** grayTip 翻译上下文（uid→uin 映射，调用方批量转换）。 */
 export interface NoticeTranslateContext {
@@ -258,6 +270,50 @@ function toBan(
         operator_id: toUin(shutUp?.admin?.uid ?? adminUid, ctx),
         user_id: toUin(shutUp?.member?.uid ?? memberUid, ctx),
         duration: Number(shutUp?.duration ?? 0),
+    };
+}
+
+/**
+ * 好友添加（friend_add，B2，2026-09-08）。
+ * 数据源 = kernel BuddyCache 快照 diff（Buddy/onBuddyListChange 全量快照对比，
+ * 首帧 baseline 不发）——非 grayTip 路径。user_id 取 coreInfo.uin（顶层 uin 兜底）。
+ */
+export function toFriendAdd(entry: BuddyListEntry, selfUin: string): OB11FriendAddNoticeEvent {
+    const uin = entry.coreInfo?.uin ?? entry.uin ?? "";
+    return {
+        time: Math.floor(Date.now() / MS_TO_SEC),
+        self_id: Number(selfUin),
+        post_type: "notice",
+        notice_type: "friend_add",
+        user_id: Number(uin),
+    };
+}
+
+/**
+ * 群文件上传（group_upload，B4，2026-09-08）。
+ * 数据源 = 含 fileElement 的群消息（开关 groupUploadAsNotice=true 时替代
+ * message 事件报出）。file.id 取 fileUuid（缺省文件名）、size 取 fileSize、
+ * busid 固定 102（群文件业务类型，与 kernel GROUP_FILE_BIZ_TYPE 同源语义）。
+ */
+export function toGroupUpload(msg: RawMessage, selfUin: string): OB11GroupUploadNoticeEvent | null {
+    const el = msg.elements.find((e) => e.fileElement !== undefined);
+    const file = el?.fileElement;
+    if (file === undefined) {
+        return null;
+    }
+    return {
+        time: Math.floor(Number(msg.msgTime) / MS_TO_SEC),
+        self_id: Number(selfUin),
+        post_type: "notice",
+        notice_type: "group_upload",
+        group_id: Number(msg.peerUid),
+        user_id: Number(msg.senderUin),
+        file: {
+            id: file.fileUuid ?? file.fileName ?? "",
+            name: file.fileName ?? "",
+            size: Number(file.fileSize ?? 0),
+            busid: GROUP_FILE_BUS_ID,
+        },
     };
 }
 
