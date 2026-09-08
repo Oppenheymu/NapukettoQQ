@@ -80,6 +80,18 @@ export interface NodeIKernelMsgService {
         peer: Peer,
         ids: string[],
     ): Promise<GeneralCallResult & { msgList?: RawMessage[] }>;
+    /**
+     * 富媒体主动下载（get_record 语音下载，2026-09-08 B1 实测：单参数对象，
+     * resolve undefined——结果只能经重拉消息元素观察；参数残缺时静默 no-op 不抛错；
+     * transferStatus=2 已下载态调用为 no-op，详见 kernel design.md §5）。
+     */
+    downloadRichMedia(param: {
+        msgId: string;
+        elemId: string;
+        chatType: number;
+        downloadType: number;
+        thumbSize: number;
+    }): Promise<void>;
     setMsgRead(peer: Peer): Promise<GeneralCallResult>;
     /** 消息表情表态（set_msg_emoji_like；setOrCancel=true 点赞，false 取消）。 */
     setMsgEmojiLikes(

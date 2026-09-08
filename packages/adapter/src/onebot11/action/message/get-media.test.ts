@@ -1,8 +1,10 @@
 /**
- * get-media.test.ts：get_image / get_record 单测（2026-09-08 T5 主动下载接入）。
+ * get-media.test.ts：get_image / get_record 单测（2026-09-08 T5 主动下载接入；
+ * 2026-09-08 B1 语音接原生下载）。
  *
  * 覆盖：NT 相对路径本地解析（mediaBaseDir 命中/未命中）、图片 URL 主动下载
- * （fetch 桩 + cacheDir 落盘）、下载失败回退 url-only、语音本地命中/原始路径透出。
+ * （fetch 桩 + cacheDir 落盘）、下载失败回退 url-only、语音本地命中 /
+ * 原生 downloadPtt 落盘 / 下载失败回退原始路径。
  */
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -12,8 +14,15 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { MessageUnique } from "../../helper/message-unique.js";
 import { GetImageAction, GetRecordAction, resolveLocalMediaFile } from "./get-media.js";
 
-/** 桩依赖（msgApi.fetchMsgsByMsgId 可控返回）。 */
-function makeDeps(msg: RawMessage | null, extra: { mediaBaseDir?: string; cacheDir?: string }) {
+/** 桩依赖（msgApi.fetchMsgsByMsgId / downloadPtt 可控返回）。 */
+function makeDeps(
+    msg: RawMessage | null,
+    extra: {
+        mediaBaseDir?: string;
+        cacheDir?: string;
+        downloadPtt?: (msgId: string, peer: unknown) => Promise<unknown>;
+    } = {},
+) {
     const messageUnique = new MessageUnique();
     messageUnique.alloc(msg?.msgId ?? "m1", { chatType: 1, peerUid: "u1" });
     return {
@@ -22,6 +31,13 @@ function makeDeps(msg: RawMessage | null, extra: { mediaBaseDir?: string; cacheD
         mediaBaseDir: extra.mediaBaseDir,
         msgApi: {
             fetchMsgsByMsgId: vi.fn(async () => (msg === null ? [] : [msg])),
+            ...(extra.downloadPtt !== undefined
+                ? { downloadPtt: vi.fn(extra.downloadPtt) }
+                : {
+                      downloadPtt: vi.fn(async () => {
+                          throw new Error("下载不可用");
+                      }),
+                  }),
         },
     } as unknown as ConstructorParameters<typeof GetImageAction>[0];
 }
@@ -122,39 +138,84 @@ describe("GetImageAction", () => {
     });
 });
 
+/** 语音消息工厂。 */
+function pttMsg(ptt: Record<string, unknown>): RawMessage {
+    return {
+        ...(picMsg({}) as object),
+        elements: [{ elementType: 4, pttElement: ptt }],
+    } as unknown as RawMessage;
+}
+
 describe("GetRecordAction", () => {
-    it("本地命中 → file 绝对路径；未命中 → 原始 filePath 透出（语音下载缺口）", async () => {
+    it("本地命中 → file 绝对路径", async () => {
         const base = tempDir("voice");
         mkdirSync(join(base, "nt_data", "Ptt"), { recursive: true });
         writeFileSync(join(base, "nt_data/Ptt/1.silk").replaceAll("\\", "/"), "silk");
         const hit = (
             await new GetRecordAction(
-                makeDeps(
-                    {
-                        ...(picMsg({}) as object),
-                        elements: [
-                            { elementType: 4, pttElement: { filePath: "nt_data/Ptt/1.silk" } },
-                        ],
-                    } as unknown as RawMessage,
-                    { mediaBaseDir: base },
-                ),
+                makeDeps(pttMsg({ filePath: "nt_data/Ptt/1.silk" }), { mediaBaseDir: base }),
             ).handle({ message_id: 1 })
         ).data;
         expect(hit?.file).toContain("1.silk");
+    });
 
-        const miss = (
+    it("本地未命中 + 原生下载落盘 → file 绝对路径（B1）", async () => {
+        const base = tempDir("voice-dl");
+        mkdirSync(join(base, "nt_data", "Ptt"), { recursive: true });
+        const downloaded = join(base, "nt_data/Ptt/gone.silk").replaceAll("\\", "/");
+        writeFileSync(downloaded, "silk");
+        const result = (
             await new GetRecordAction(
                 makeDeps(
+                    pttMsg({
+                        filePath: "nt_data/Ptt/gone.silk",
+                        fileName: "gone.silk",
+                        fileSize: "10",
+                    }),
                     {
-                        ...(picMsg({}) as object),
-                        elements: [
-                            { elementType: 4, pttElement: { filePath: "nt_data/Ptt/gone.silk" } },
-                        ],
-                    } as unknown as RawMessage,
-                    { mediaBaseDir: base },
+                        mediaBaseDir: base,
+                        downloadPtt: async () => ({
+                            filePath: downloaded,
+                            fileName: "gone.silk",
+                            fileSize: "10",
+                            transferStatus: 2,
+                        }),
+                    },
                 ),
             ).handle({ message_id: 1 })
         ).data;
-        expect(miss?.file).toBe("nt_data/Ptt/gone.silk");
+        expect(result?.file?.replaceAll("\\", "/")).toBe(downloaded);
+        expect(result?.file_name).toBe("gone.silk");
+    });
+
+    it("本地未命中 + 下载失败/未落盘 → 回退原始 filePath + 元数据（不抛错）", async () => {
+        const result = (
+            await new GetRecordAction(
+                makeDeps(
+                    pttMsg({
+                        filePath: "nt_data/Ptt/gone.silk",
+                        fileName: "gone.silk",
+                        fileSize: "10",
+                    }),
+                    {
+                        mediaBaseDir: tempDir("voice-miss"),
+                        downloadPtt: async () => {
+                            throw new Error("语音下载未完成（超时）");
+                        },
+                    },
+                ),
+            ).handle({ message_id: 1 })
+        ).data;
+        expect(result?.file).toBe("nt_data/Ptt/gone.silk");
+        expect(result?.file_name).toBe("gone.silk");
+        expect(result?.file_size).toBe("10");
+    });
+
+    it("消息无 ptt → NOT_FOUND", async () => {
+        const result = await new GetRecordAction(
+            makeDeps(picMsg({}), { mediaBaseDir: tempDir("voice-nop") }),
+        ).handle({ message_id: 1 });
+        expect(result.status).toBe("failed");
+        expect(result.message).toContain("不包含语音");
     });
 });

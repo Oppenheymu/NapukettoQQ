@@ -16,6 +16,7 @@ import type {
     NodeIKernelMsgService,
     NodeIQQNTWrapperSession,
     Peer,
+    PttElement,
     RawElement,
     RawMessage,
     SendMessageElement,
@@ -57,6 +58,20 @@ const PTT_STORE_ID = 0;
 const PTT_AI_VOICE_TYPE = 0;
 /** 假波形数组（占位波形）：无真实振幅数据时发送的固定占位，silk v3 协议契约值。 */
 const PTT_WAVE_AMPLITUDES = [0, 18, 9, 23, 16, 17, 16, 15, 44, 17, 24, 20, 14, 15, 17];
+
+/** downloadRichMedia 契约值（2026-09-08 B1 实测：downloadType=2 可用 / thumbSize=0）。 */
+const DOWNLOAD_TYPE_COMMON = 2;
+const THUMB_SIZE_NONE = 0;
+/** 语音下载轮询参数（300ms × 34 ≈ 10s；返回 void 只能经重拉元素观察完成）。 */
+const PTT_POLL_INTERVAL_MS = 300;
+const PTT_POLL_TIMES = 34;
+
+/** sleep（下载轮询间隔）。 */
+function sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => {
+        setTimeout(resolve, ms);
+    });
+}
 
 /** 读文件 stat（富媒体发送预处理；文件不存在抛 INVALID_PARAM）。 */
 async function statFile(path: string): Promise<{ size: number }> {
@@ -415,6 +430,50 @@ export class MsgApi {
     async markRead(target: Peer): Promise<void> {
         const raw = await this.service.setMsgRead(target);
         unwrapResult("setMsgRead", raw);
+    }
+
+    /**
+     * 语音主动下载（get_record 本地未命中兜底，2026-09-08 B1）。
+     * downloadRichMedia 返回 void（实测），完成信号 = 重拉消息元素：
+     * 轮询（300ms × 34，约 10s）直到 filePath 非空且 transferStatus 进入
+     * 已下载态（2/4）；超时但 filePath 已有值则尽力返回（磁盘命中判断留给
+     * 调用方），完全无路径抛 NOT_FOUND。
+     */
+    async downloadPtt(msgId: string, target: Peer): Promise<PttElement> {
+        const msgs = await this.fetchMsgsByMsgId(target, [msgId]);
+        const el = findPttElement(msgs);
+        const ptt = el?.pttElement;
+        if (el === null || ptt === undefined) {
+            throw kernelError("消息中不包含语音", "NOT_FOUND");
+        }
+        const elemId = el.elementId ?? "";
+        await this.service.downloadRichMedia({
+            msgId,
+            elemId,
+            chatType: target.chatType,
+            downloadType: DOWNLOAD_TYPE_COMMON,
+            thumbSize: THUMB_SIZE_NONE,
+        });
+        for (let i = 0; i < PTT_POLL_TIMES; i++) {
+            await sleep(PTT_POLL_INTERVAL_MS);
+            const again = await this.fetchMsgsByMsgId(target, [msgId]);
+            const latest = findPttElement(again)?.pttElement;
+            if (latest === undefined) {
+                continue;
+            }
+            const done = latest.transferStatus === 2 || latest.transferStatus === 4;
+            if (latest.filePath !== undefined && latest.filePath !== "" && done) {
+                return latest;
+            }
+            if (
+                i === PTT_POLL_TIMES - 1 &&
+                latest.filePath !== undefined &&
+                latest.filePath !== ""
+            ) {
+                return latest;
+            }
+        }
+        throw kernelError("语音下载未完成（超时）", "TIMEOUT");
     }
 
     /** 发送输入状态（set_input_status；eventType=1 输入中，0 停止）。 */

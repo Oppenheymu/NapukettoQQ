@@ -61,9 +61,66 @@ IPC event 消息（koishi 插件消费）；协议模式由 adapter 订阅。
 wrapper 二进制字符串证据；未实证的字段标「待探测校准」注释。探测脚本在
 `src/wrapper/probe/`（probe.ts 入口）。
 
-## 5. 已知缺口（下一轮）
+## 5. downloadRichMedia 探测产物（2026-09-08 B1 实测，QQ 9.9.33-52230）
+
+探测方式：`scripts/probe-download-richmedia.mjs`（IPC 宿主 + diag.msgServiceCall /
+diag.richMediaCall；产物全文 `$TEMP/napuketto-probe/artifacts.json`）。
+
+### 5.1 方法面（运行时 `__methods` 枚举）
+
+- **NodeIKernelMsgService** 有 `downloadRichMedia` / `getRichMediaElement` /
+  `getLatestDbMsgs` / `getMsgsByMsgId`（`getMsgs` 需 4 参：peer, msgId, count, false——
+  fetchMessages 现有路径）。
+- **NodeIKernelRichMediaService** **无** 裸 `downloadRichMedia`，只有
+  `downloadRichMediaInVisit` + downloadFile 族（downloadFileForFileUuid /
+  downloadFileByUrl / downloadFileForFileInfo / downloadFile / onlyDownloadFile 等）。
+
+### 5.2 downloadRichMedia 签名（实测）
+
+```ts
+// NodeIKernelMsgService（单参数对象；二进制 assertion "needs 1 arguments"）
+downloadRichMedia(param: {
+    msgId: string;       // 消息 ID（msgId 字符串）
+    elemId: string;      // 元素 ID（elementId 字符串）
+    chatType: number;    // 2=群 1=C2C
+    downloadType: number;// 2 实测可用
+    thumbSize: number;   // 0
+}): Promise<void>        // ⚠️ resolve undefined——下载结果不从返回值拿
+```
+
+- 返回 void：下载完成信号只能经**重拉消息元素**（transferStatus/filePath）或事件观察。
+- 参数残缺（msgId/elemId undefined）时**不抛错**（内部静默 no-op）——调用方必须自证参数完整。
+- `richMediaService.downloadRichMediaInVisit` 同款参数抛
+  `Cannot convert undefined or null to object`（需额外未知字段，未深挖——MsgService 版已够用）。
+
+### 5.3 行为实测（挪文件实验）
+
+- `pttElement.filePath` 收向为**绝对路径**（`…\nt_qq\nt_data\Ptt\2026-08\Ori\<md5>.ogg`），
+  本地命中时 `existsSync(filePath)` 直接可用。
+- `transferStatus` 实测样本：**4 = 自己发送（已上传）**、**2 = 收到（数据库标记已下载）**。
+- **transferStatus=2 时调 downloadRichMedia 不重新落盘**（把本地文件挪走后调用，
+  12s 轮询文件不回来、transferStatus 恒 2）——wrapper 以数据库状态为准，不查磁盘。
+  结论：downloadRichMedia 的有效场景 = transferStatus ≠ 2 的未下载消息（如清理过
+  缓存后重收/其他端的消息）；已下载但磁盘缺失的场景无法用此方法恢复。
+- kernel 实现策略（apis/msg.ts `downloadPtt`）：调用后**轮询 getMsgsByMsgId**
+  （300ms 间隔，总超时 10s）直到 pttElement.filePath 存在且磁盘命中，超时回退
+  （由 adapter 层回退原始路径 + 元数据）。
+
+### 5.4 PttElement 完整字段（实测快照，2026-09-08）
+
+收向全字段（历史消息 getLatestDbMsgs 提取，比既有类型多出斜体字段）：
+fileName / filePath / md5HexStr / fileSize / duration / formatType / voiceType /
+autoConvertText / voiceChangeType / canConvert2Text / fileId / fileUuid / text /
+translateStatus / *transferStatus* / *progress* / *playState* / waveAmplitudes /
+*invalidState* / fileSubId / *fileBizId* / *import_rich_media_context* / storeID /
+otherBusinessInfo{aiVoiceInfo, aiVoiceType} / *isInApplicationDataPath*。
+（斜体 = 本轮补进 types/entities.ts 的字段。）
+
+## 6. 已知缺口（下一轮）
 
 - Buddy listener 回调 payload 形状（onBuddyReqChange/onBuddyListChange）——
-  adapter 侧 raw 日志积累中，真实事件到达后回填 narrow 函数。
-- downloadRichMedia 原生签名（语音主动下载）。
+  onBuddyListChange 已实测 = BuddyCategory[] 全量快照（T10，buddyList 明细含
+  uid/uin/coreInfo/baseInfo/status/vasInfo）；onBuddyReqChange 仍待校准。
 - poke 的 aioOpGrayTipElement 完整字段（adapter 侧翻译待校准）。
+- downloadRichMedia 对 transferStatus≠2 消息的真实下载行为（本机所有样本已下载，
+  无法自然构造未下载样本——签名已实证，行为按轮询策略防御）。

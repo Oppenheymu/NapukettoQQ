@@ -73,6 +73,17 @@ export interface PttElement {
     autoConvertText?: number;
     storeID?: number;
     otherBusinessInfo?: { aiVoiceType: number };
+    // 收向完整字段（2026-09-08 B1 实测快照，getLatestDbMsgs 历史消息提取）
+    fileId?: number;
+    fileUuid?: string;
+    translateStatus?: number;
+    /** 传输状态：实测 2=收到已下载（数据库态，此时挪走本地文件调 downloadRichMedia 不重下）、4=自己发送已上传。 */
+    transferStatus?: number;
+    progress?: number;
+    invalidState?: number;
+    fileBizId?: unknown;
+    import_rich_media_context?: unknown;
+    isInApplicationDataPath?: boolean | null;
 }
 
 /** 表情元素。 */

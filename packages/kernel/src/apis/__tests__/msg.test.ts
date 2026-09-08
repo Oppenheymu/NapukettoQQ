@@ -182,3 +182,99 @@ describe("fetchForwardMessage", () => {
         await expect(api.fetchForwardMessage(target, "m1")).rejects.toThrow(/不包含合并转发/);
     });
 });
+
+describe("downloadPtt（语音主动下载，2026-09-08 B1）", () => {
+    const pttMsg = {
+        msgId: "m1",
+        elements: [{ elementId: "e1", pttElement: { fileName: "a.amr" } }],
+    };
+
+    it("调 downloadRichMedia 后轮询到已完成态返回 ptt", async () => {
+        const downloaded = {
+            msgId: "m1",
+            elements: [
+                {
+                    elementId: "e1",
+                    pttElement: { fileName: "a.amr", filePath: "C:/x/a.amr", transferStatus: 2 },
+                },
+            ],
+        };
+        const downloadRichMedia = vi.fn(async () => undefined);
+        const { api } = makeApi({
+            downloadRichMedia,
+            getMsgsByMsgId: vi
+                .fn()
+                .mockResolvedValueOnce({ result: 0, msgList: [pttMsg] })
+                .mockResolvedValue({ result: 0, msgList: [downloaded] }),
+        });
+        await expect(api.downloadPtt("m1", target)).resolves.toMatchObject({
+            filePath: "C:/x/a.amr",
+            transferStatus: 2,
+        });
+        expect(downloadRichMedia).toHaveBeenCalledWith({
+            msgId: "m1",
+            elemId: "e1",
+            chatType: target.chatType,
+            downloadType: 2,
+            thumbSize: 0,
+        });
+    });
+
+    it("transferStatus=4（自己发送）也算完成", async () => {
+        const sent = {
+            msgId: "m1",
+            elements: [
+                {
+                    elementId: "e1",
+                    pttElement: { filePath: "C:/x/a.amr", transferStatus: 4 },
+                },
+            ],
+        };
+        const { api } = makeApi({
+            downloadRichMedia: vi.fn(async () => undefined),
+            getMsgsByMsgId: vi
+                .fn()
+                .mockResolvedValueOnce({ result: 0, msgList: [pttMsg] })
+                .mockResolvedValue({ result: 0, msgList: [sent] }),
+        });
+        await expect(api.downloadPtt("m1", target)).resolves.toMatchObject({ transferStatus: 4 });
+    });
+
+    it("消息无 ptt 抛 NOT_FOUND", async () => {
+        const { api } = makeApi({
+            getMsgsByMsgId: vi.fn(async () => ({
+                result: 0,
+                msgList: [{ msgId: "m1", elements: [{ textElement: { text: "x" } }] }],
+            })),
+        });
+        await expect(api.downloadPtt("m1", target)).rejects.toThrow(/不包含语音/);
+    });
+
+    it("轮询超时抛 TIMEOUT（fake timers 加速 34 轮）", async () => {
+        vi.useFakeTimers();
+        try {
+            const pending = {
+                msgId: "m1",
+                elements: [
+                    {
+                        elementId: "e1",
+                        pttElement: { fileName: "a.amr", transferStatus: 0 },
+                    },
+                ],
+            };
+            const { api } = makeApi({
+                downloadRichMedia: vi.fn(async () => undefined),
+                getMsgsByMsgId: vi.fn(async () => ({ result: 0, msgList: [pending] })),
+            });
+            const promise = api.downloadPtt("m1", target);
+            // expect(...).rejects 立即挂上 handler,先推进 fake timers 再断言
+            const assertion = expect(promise).rejects.toThrow(/语音下载未完成/);
+            for (let i = 0; i < 40; i++) {
+                await vi.advanceTimersByTimeAsync(300);
+            }
+            await assertion;
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+});

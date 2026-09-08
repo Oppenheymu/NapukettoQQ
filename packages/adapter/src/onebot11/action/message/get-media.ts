@@ -1,14 +1,15 @@
 /**
- * get_image / get_record 动作：获取图片/语音文件（P2-14；2026-09-08 T5 接主动下载）
+ * get_image / get_record 动作：获取图片/语音文件（P2-14；2026-09-08 T5 接主动下载；
+ * 2026-09-08 B1 语音接原生 downloadRichMedia）
  *
  * message_id 反查 → fetchMsgsByMsgId → 找 PIC/PTT 元素：
  *  - 本地文件解析：NT 相对路径（sourcePath/filePath）按 mediaBaseDir（QQ NT
  *    global 目录）解析为绝对路径，命中磁盘即返回 file
  *  - 图片主动下载：本地未命中且有 picUrl → @napuketto/media downloadUrl 落
  *    cacheDir/media/，返回 file（绝对路径）+ url + file_size/file_name
- *  - 语音下载缺口：原生 downloadRichMedia 签名未探测（wrapper 字符串证据仅
- *    方法名），本地未命中时返回原始 filePath（NT 相对）+ 元数据，待 T10 diag
- *    实测后接入
+ *  - 语音主动下载（B1）：本地未命中 → kernel MsgApi.downloadPtt（原生
+ *    downloadRichMedia + 轮询元素回查）→ filePath 落盘后返回绝对路径；
+ *    失败回退原始 filePath（NT 相对/绝对）+ 元数据，不抛错
  */
 
 import { randomUUID } from "node:crypto";
@@ -174,7 +175,7 @@ export class GetImageAction extends BaseAction<GetMediaPayload, MediaInfoResult>
     }
 }
 
-/** 获取语音信息（本地文件解析；主动下载缺口见文件头注释）。 */
+/** 获取语音信息（本地优先；未命中走原生 downloadRichMedia，失败回退原始路径）。 */
 export class GetRecordAction extends BaseAction<GetMediaPayload, MediaInfoResult> {
     readonly name = "get_record";
     readonly schema = getMediaSchema;
@@ -189,21 +190,46 @@ export class GetRecordAction extends BaseAction<GetMediaPayload, MediaInfoResult
 
     protected async _handle(payload: GetMediaPayload): Promise<MediaInfoResult> {
         const id = takeId(payload, "get_record");
-        return await resolveMedia(id, "语音", this.deps, (el) => {
-            const ptt = el.pttElement;
-            if (ptt === undefined || ptt.filePath === undefined) {
-                return undefined;
-            }
-            const out: MediaInfoResult = {};
-            if (ptt.fileSize !== undefined) {
-                out.file_size = ptt.fileSize;
-            }
-            if (ptt.fileName !== undefined) {
-                out.file_name = ptt.fileName;
-            }
-            const local = resolveLocalMediaFile(ptt.filePath, this.deps);
-            out.file = local ?? ptt.filePath;
-            return out;
+        const { msgId, peer } = resolveMsgIdAndPeer(id, this.deps.messageUnique);
+        const msgs = await this.deps.msgApi.fetchMsgsByMsgId(peer, [msgId]);
+        const [first] = msgs;
+        if (first === undefined) {
+            throw kernelError(`消息 ${id} 不存在或已被撤回`, "NOT_FOUND");
+        }
+        const el = first.elements.find((e) => e.pttElement !== undefined);
+        const ptt = el?.pttElement;
+        if (ptt === undefined || ptt.filePath === undefined) {
+            throw kernelError(`消息 ${id} 不包含语音`, "NOT_FOUND");
+        }
+        const meta = (): MediaInfoResult => ({
+            ...(ptt.fileSize !== undefined ? { file_size: ptt.fileSize } : {}),
+            ...(ptt.fileName !== undefined ? { file_name: ptt.fileName } : {}),
         });
+        const local = resolveLocalMediaFile(ptt.filePath, this.deps);
+        if (local !== null) {
+            return { ...meta(), file: local };
+        }
+        // 本地未命中 → 原生下载（downloadRichMedia + 元素回查；失败回退原始路径）
+        try {
+            const downloaded = await this.deps.msgApi.downloadPtt(msgId, peer);
+            const rel = downloaded.filePath;
+            if (rel !== undefined && rel !== "") {
+                const localAfter = resolveLocalMediaFile(rel, this.deps);
+                if (localAfter !== null) {
+                    return {
+                        ...(downloaded.fileSize !== undefined
+                            ? { file_size: downloaded.fileSize }
+                            : {}),
+                        ...(downloaded.fileName !== undefined
+                            ? { file_name: downloaded.fileName }
+                            : {}),
+                        file: localAfter,
+                    };
+                }
+            }
+        } catch {
+            // 下载失败：回退现状（原始路径 + 元数据，不抛错）
+        }
+        return { ...meta(), file: ptt.filePath };
     }
 }
