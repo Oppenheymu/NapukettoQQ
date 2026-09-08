@@ -273,10 +273,15 @@ msgService 299 方法**（addKernelMsgListener/sendMsg/fetchMsgList 全在）。
 - [x] **poke 实测**：本轮会话无真实 poke 事件到达，翻译口径仍待校准（raw 日志持续积累）
 - [ ] 多账号实测（本机 2 个有效账号段；未在本轮执行则遗留下一轮）
 
-### 协议能力对齐（下一轮）
-- [ ] 语音主动下载（原生 downloadRichMedia 签名探测，T10 diag 实测后接入）
-- [ ] friend_add 翻译（Buddy 列表变化 payload 校准后）
-- [ ] group_upload 报形式（message+file 段 → notice，待拍板）
+### 协议能力对齐（B 轮，2026-09-08 晚完成三项）
+- [x] 语音主动下载（B1）：downloadRichMedia 实测签名（msgService 单参数对象，
+  返回 void，轮询元素观察完成；transferStatus=2 已下载态为 no-op——详见
+  kernel design.md §5）+ MsgApi.downloadPtt + get_record 本地未命中原生下载
+- [x] friend_add 翻译（B2）：kernel BuddyCache（onBuddyListChange 快照维护 +
+  首帧 baseline 不发 + diff 归一化事件）→ adapter toFriendAdd
+- [x] group_upload 报形式开关（B4）：groupUploadAsNotice（默认 false =
+  message + file 段透出——修复此前 file 元素被静默丢弃；true = 改报 notice），
+  配置模板已同步；真下载行为（transferStatus≠2 样本）本机无法自然构造，待补
 - [x] ready 态原地软重登（koishi 面板不重启进程重登；2026-09-08 登录生命周期
   收尾轮 A2 完成——loader 相位机 + 重装配 + koishi 决策表/checkIdentity 补位，
   见 🌙 决策点与 loader design.md §10；跨账号真实切换实测待补）
