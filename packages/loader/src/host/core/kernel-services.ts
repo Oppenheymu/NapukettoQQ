@@ -68,19 +68,18 @@ export async function createKernelServices(
 ): Promise<KernelServices | null> {
     // IPC 模式关 console：子进程 stdout 专用于 JSON 行协议，pino-pretty 并发写
     // 会撕裂协议行（2026-09-06「能收不能发」事故根因，消息日志经此 logger 每
-    // 条消息都会污染）。落盘数据目录 logs/loader.log（消息纯文本另有
-    // napuketto-boot.log 兜底，见 msg-log.ts）；cli 模式 console 输出不变。
+    // 条消息都会污染）——此行为不可回退。两种模式统一落盘数据目录
+    // logs/loader.log（cli 模式 2026-09-10 起同样落盘：poke/Buddy 校准等诊断
+    // 数据此前仅 IPC 模式留存，cli 模式全丢）；cli 模式 console 输出保持不变。
+    // 消息纯文本另有 napuketto-boot.log 兜底（见 msg-log.ts）。
     const ipcMode = env.NAPUTO_IPC === "1";
+    const logFile =
+        env.NAPUTO_CFG_DIR !== undefined
+            ? join(env.NAPUTO_CFG_DIR, "logs", "loader.log")
+            : join(tmpdir(), "napuketto-loader.log");
     const logger = kernel.createLogger?.({
         console: !ipcMode,
-        ...(ipcMode
-            ? {
-                  file:
-                      env.NAPUTO_CFG_DIR !== undefined
-                          ? join(env.NAPUTO_CFG_DIR, "logs", "loader.log")
-                          : join(tmpdir(), "napuketto-loader.log"),
-              }
-            : {}),
+        file: logFile,
         base: { name: "loader" },
     });
     const session = ctx.session;
