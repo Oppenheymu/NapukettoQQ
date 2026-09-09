@@ -65,6 +65,9 @@ export class GroupBridge {
                 this.channel.emit("Group/onGroupSingleScreenNotifies", doubt, seq, notifies),
             onShutUpMemberListChanged: (groupCode, members) =>
                 this.channel.emit("Group/onShutUpMemberListChanged", groupCode, members),
+            // 2026-09-10 接线：群精华列表变化（方法名证据见 listeners/group.ts 注释）
+            onGroupEssenceListChange: (arg) =>
+                this.channel.emit("Group/onGroupEssenceListChange", arg),
         };
         this.listenerId = this.service.addKernelGroupListener(listener);
     }

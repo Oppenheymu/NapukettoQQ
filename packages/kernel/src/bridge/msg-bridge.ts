@@ -55,6 +55,10 @@ export class MsgBridge {
             onRecvMsgReceipt: (receipts) => this.channel.emit("Msg/onRecvMsgReceipt", receipts),
             // 2026-08-11 补齐：发送状态更新（sendMsg 结果以此为准，NapCat 同款）
             onMsgInfoListUpdate: (msgs) => this.channel.emit("Msg/onMsgInfoListUpdate", msgs),
+            // 2026-09-10 接线：离线文件 / sys msg（方法名证据见 listeners/msg.ts 头注释）
+            onRecvOfflineFileMsg: (arg) => this.channel.emit("Msg/onRecvOfflineFileMsg", arg),
+            onRecvOnlineFileMsg: (arg) => this.channel.emit("Msg/onRecvOnlineFileMsg", arg),
+            onRecvSysMsg: (arg) => this.channel.emit("Msg/onRecvSysMsg", arg),
         };
         this.listenerId = this.service.addKernelMsgListener(listener);
     }

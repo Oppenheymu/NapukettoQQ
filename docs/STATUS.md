@@ -6,6 +6,27 @@
 
 ---
 
+## 🔍 关键决策点（2026-09-10：c3 无源事件探测轮——五 notice 事件找源 + InVisit 参数破案）
+
+> 探测产物：`scripts/probe-scan-strings.mjs`（wrapper.node 字符串扫描，判定标尺 =
+> 小写回调名偏移同簇性 + RTTI + argc 断言）与 `scripts/probe-notice-sources.mjs`
+>（IPC 宿主动态验证）。证据矩阵详见 kernel design.md §1「c3 新接线」。
+
+1. **offline_file 源已接线**：`Msg/onRecvOfflineFileMsg`（RTTI 硬证据）→
+   adapter notice-extra.ts 防御性收窄翻译（payload 待真实事件校准）。
+2. **group_card / group_title / group_sign 载体已接线 = `Msg/onRecvSysMsg`**
+   （sys msg 总闸；**运行时实触**，90s 观测窗 2 次）——payload 是**原始
+   protobuf 字节**，解码器是下轮翻译前置。msg_emoji_like **无推送回调**
+   （仅 API 面 getMsgEmojiLikesList 7 参），无源可接。
+3. **清单外**：onGroupEssenceListChange 已接线（group_essence 候选源）；
+   poke API（sendNudge）/ typing（onInputStatusPush）/ honor 观测候选记录在案。
+4. **T4 破案**：downloadRichMediaInVisit 参数 = base 五字段 **+ elem 元素对象**
+   （实测加 elem 后 ok；MsgService 版已够用，不替换）。
+5. 附带发现：onRecvMsgReadReport/onRecvMsgReceipt 在 9.9.33-52230 无字符串
+   痕迹（疑版本差异死接线，无害）。
+
+---
+
 ## 🌙 关键决策点（2026-09-08：登录与装配链生命周期收尾轮，A1+A2）
 
 > loader design.md §10 为本轮完整设计书。核心：

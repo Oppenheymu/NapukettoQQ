@@ -75,16 +75,21 @@ describe("NapukettoOneBot11Adapter（IPC 桥面）", () => {
         const { channel, off } = fakeChannel();
         const adapter = makeAdapter(channel);
         await adapter.subscribeOnly();
-        expect(channel.on).toHaveBeenCalledTimes(1);
+        // msgChannel 订阅集：onRecvMsg + offline_file/sys msg/在线文件（c3，2026-09-10）
+        const msgSubs = 4;
+        expect(channel.on).toHaveBeenCalledTimes(msgSubs);
         expect(channel.on).toHaveBeenCalledWith("Msg/onRecvMsg", expect.any(Function));
+        expect(channel.on).toHaveBeenCalledWith("Msg/onRecvOfflineFileMsg", expect.any(Function));
+        expect(channel.on).toHaveBeenCalledWith("Msg/onRecvSysMsg", expect.any(Function));
+        expect(channel.on).toHaveBeenCalledWith("Msg/onRecvOnlineFileMsg", expect.any(Function));
         // 幂等：重复 subscribeOnly 不重复订阅
         await adapter.subscribeOnly();
-        expect(channel.on).toHaveBeenCalledTimes(1);
+        expect(channel.on).toHaveBeenCalledTimes(msgSubs);
         adapter.unsubscribeOnly();
-        expect(off).toHaveBeenCalledTimes(1);
+        expect(off).toHaveBeenCalledTimes(msgSubs);
         // 退订后可重新订阅
         await adapter.subscribeOnly();
-        expect(channel.on).toHaveBeenCalledTimes(2);
+        expect(channel.on).toHaveBeenCalledTimes(msgSubs * 2);
     });
 
     it("registry 公开且动作名平铺可枚举（IPC 桥整表挂载依赖）", () => {
@@ -259,14 +264,15 @@ describe("NapukettoOneBot11Adapter（reload 热更新，2026-09-08 T7）", () =>
         await adapter.start();
         const enables = () =>
             events.filter((e) => e.post_type === "meta_event" && e.sub_type === "enable").length;
+        // msgChannel 订阅集 4 个（onRecvMsg + c3 三通道，见 IPC 桥面用例）
         expect(enables()).toBe(1);
-        expect(onCalls).toHaveBeenCalledTimes(1);
+        expect(onCalls).toHaveBeenCalledTimes(4);
 
         // 配置变更 + reload → 传输重建（stop → start）
         writeFileSync(cfgPath, 'token = "changed"\n', "utf8");
         await adapter.reload();
         expect(enables()).toBe(2);
-        expect(onCalls).toHaveBeenCalledTimes(2);
+        expect(onCalls).toHaveBeenCalledTimes(8);
         await adapter.stop();
     });
 

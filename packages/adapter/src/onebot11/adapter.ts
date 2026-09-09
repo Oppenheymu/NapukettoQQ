@@ -40,6 +40,7 @@ import {
     toGroupUpload,
     toOb11NoticeEvent,
 } from "./helper/notice.js";
+import { narrowOfflineFiles, toOfflineFileNotice } from "./helper/notice-extra.js";
 import {
     narrowBuddyReqs,
     type RequestTranslateContext,
@@ -241,6 +242,35 @@ export class NapukettoOneBot11Adapter extends BaseProtocolAdapter<OB11Config> {
                 });
             }),
         );
+        // 离线文件（c3，2026-09-10）：Msg/onRecvOfflineFileMsg → OB11 offline_file
+        // notice（payload 形状待校准：防御性收窄，未知形状 raw 日志积累）
+        this.unsubscribes.push(
+            this.msgChannel.on("Msg/onRecvOfflineFileMsg", (arg) => {
+                const items = narrowOfflineFiles(arg);
+                if (items === null) {
+                    this.calibLogger?.warn(
+                        { raw: JSON.stringify(arg)?.slice(0, 2000) },
+                        "ob11: onRecvOfflineFileMsg 未知参数形状",
+                    );
+                    return;
+                }
+                for (const item of items) {
+                    this.broadcastEvent(toOfflineFileNotice(item, this.selfUin));
+                }
+            }),
+        );
+        // sys msg / 在线文件：raw 校准日志（card/title/sign 等 sysmsg 系统事件的
+        // 观测入口；真实 payload 到达后回填翻译，2026-09-10）
+        for (const evt of ["Msg/onRecvSysMsg", "Msg/onRecvOnlineFileMsg"] as const) {
+            this.unsubscribes.push(
+                this.msgChannel.on(evt, (arg) => {
+                    this.calibLogger?.info(
+                        { raw: JSON.stringify(arg)?.slice(0, 2000) },
+                        `ob11: ${evt} raw（sys msg 校准数据）`,
+                    );
+                }),
+            );
+        }
         // 群系统通知 → OB11 group request（仅未处理的邀请/申请；doubt 可疑通知跳过）
         if (this.groupChannel !== undefined) {
             this.unsubscribes.push(
@@ -249,6 +279,16 @@ export class NapukettoOneBot11Adapter extends BaseProtocolAdapter<OB11Config> {
                         return;
                     }
                     void this.broadcastGroupRequests(notifies);
+                }),
+            );
+            // 群精华列表变化（c3，2026-09-10）：raw 校准日志（OB11 group_essence
+            // 候选源；真实 payload 到达后回填翻译）
+            this.unsubscribes.push(
+                this.groupChannel.on("Group/onGroupEssenceListChange", (arg) => {
+                    this.calibLogger?.info(
+                        { raw: JSON.stringify(arg)?.slice(0, 2000) },
+                        "ob11: onGroupEssenceListChange raw（group_essence 校准数据）",
+                    );
                 }),
             );
         }

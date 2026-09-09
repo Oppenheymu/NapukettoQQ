@@ -13,6 +13,10 @@ Msg/onRecvMsg                    →  subscribe()                 →  message-e
 Group/onGroupNotifiesUpdated     →  subscribe()（2026-09-08）    →  request.ts               → request 事件（group_add/invite）
 Buddy/onBuddyReqChange           →  subscribe()（2026-09-08）    →  request.ts               → request 事件（friend）
 Buddy/onBuddyListChange(dV2)     →  subscribe()（2026-09-08）    →  仅 raw 校准日志（形状未知，不翻译）
+Msg/onRecvOfflineFileMsg         →  subscribe()（c3，2026-09-10）→  notice-extra.ts          → offline_file notice
+Msg/onRecvSysMsg                 →  subscribe()（c3，2026-09-10）→  仅 raw 校准日志（protobuf 字节，待解码）
+Msg/onRecvOnlineFileMsg          →  subscribe()（c3，2026-09-10）→  仅 raw 校准日志（OB11 无对应类型）
+Group/onGroupEssenceListChange   →  subscribe()（c3，2026-09-10）→  仅 raw 校准日志（group_essence 候选源）
 ```
 
 - **request 事件**（`helper/request.ts`）：
@@ -51,10 +55,26 @@ Buddy/onBuddyListChange(dV2)     →  subscribe()（2026-09-08）    →  仅 ra
     数据源积累入口）。
 - **校准 logger**：`OneBot11AdapterOptions.logger`（warn/info 最小面），
   装配方传 pino 实例；缺省静默。
+- **c3 扩展源（2026-09-10，`helper/notice-extra.ts`）**：五无源事件探测轮产物
+  （证据矩阵见 kernel design.md §1「c3 新接线」）：
+  - **offline_file**：源 = kernel `Msg/onRecvOfflineFileMsg`（字符串簇 + RTTI
+    强证据）。翻译 = `narrowOfflineFiles` 防御性收窄（RawMessage 型
+    elements[].fileElement / 专用实体型 fileName 顶层或 fileInfo 嵌套；未知
+    形状返回 null 打 raw 日志）→ `toOfflineFileNotice`（user_id + file
+    {name, size, url}）。payload 真实形状待校准——收窄口径固化在单测，
+    校准后回填。
+  - **group_card / group_title / group_sign**：载体 = `Msg/onRecvSysMsg`
+    （sys msg 总闸，运行时实触，payload = **原始 protobuf 字节**）。当前仅
+    raw 校准日志；protobuf 解码 + type/subType → notice 映射是下轮工作。
+  - **msg_emoji_like**：无推送回调（API 面 getMsgEmojiLikesList 存在），
+    无源可接，待观测（疑经 onMsgInfoListUpdate）。
+  - **group_essence（清单外）**：`Group/onGroupEssenceListChange` raw 校准
+    日志（精华事件的候选直达源，与 grayTip ESSENCE 子类型双路积累）。
 - **gap 清单**（源事件缺失或改报形式有风险，未翻译）：group_upload（文件消息
   现以 message 事件 + file 段透出，改 notice 影响现网 koishi 收向，待拍板）、
-  group_card / offline_file / group_sign / msg_emoji_like / group_title（无对应
-  kernel 事件源）、friend_add（源存在但 payload 未知，raw 日志积累中）。
+  group_card / group_title / group_sign（源已接线 = Msg/onRecvSysMsg，等
+  protobuf 解码）、msg_emoji_like（无推送源）、offline_file（已翻译，payload
+  待真实事件校准）、friend_add（源存在但 payload 未知，raw 日志积累中）。
 
 ## 2. onReload 热更新（2026-09-08 实现，P2-6 兑现）
 
@@ -95,9 +115,12 @@ Buddy/onBuddyListChange(dV2)     →  subscribe()（2026-09-08）    →  仅 ra
 adapter 依赖 `@napuketto/media`（encodePcmToSilk / decodeSilkToWav /
 transcodeVideo / downloadUrl / inferExtension）。kernel 不依赖 media。
 
-## 6. 已知缺口（2026-09-08 B 轮后）
+## 6. 已知缺口（2026-09-10 c3 轮后）
 
 - poke 翻译字段校准（首次真实事件后；手动触发指引见 §1）。
-- group_card / offline_file / group_sign / msg_emoji_like / group_title
-  （无对应 kernel 事件源）。
+- **onRecvSysMsg protobuf 解码**（group_card / group_title / group_sign 的
+  翻译前置；raw 字节日志已在 loader.log 积累）。
+- onRecvOfflineFileMsg payload 形状校准（翻译已上线，收窄口径待真实事件修正）。
+- onGroupEssenceListChange payload 形状（group_essence 翻译待校准）。
 - onBuddyReqChange payload 形状（BuddyReq 字段 words 等待真实事件校准）。
+- msg_emoji_like 无推送源（疑经 onMsgInfoListUpdate 或轮询，待观测）。

@@ -38,4 +38,26 @@ export type MsgListener = {
      *  2026-08-11 补齐：sendMsg 发送结果以此事件为准（NapCat 同款），
      *  sendMsg 返回值 result 可能非 0 但实际发送成功（异步确认）。 */
     onMsgInfoListUpdate: (msgs: RawMessage[]) => void;
+    /**
+     * 收到离线文件消息（OB11 offline_file 事件源，2026-09-10 接线）。
+     * 证据：wrapper.node 9.9.33-52230 字符串——小写名位于 listener 反射字符串簇
+     * （与 onRecvMsg 同页，offset 差 ~7KB）+ RTTI
+     * `OnRecvOfflineFileMsg@KernelMsgService@wrapper@nt`；API 族旁证
+     * getNewOfflineFileList。⚠️ 参数形状待真实事件校准（unknown 透传）。
+     */
+    onRecvOfflineFileMsg: (arg: unknown) => void;
+    /**
+     * 收到在线文件消息（onRecvOfflineFileMsg 同族，字符串簇相邻；
+     * OB11 无对应通知类型，仅作校准观测）。参数形状待校准。
+     */
+    onRecvOnlineFileMsg: (arg: unknown) => void;
+    /**
+     * 收到系统消息（sys msg 总闸，2026-09-10 接线）：群名片/头衔/精华/荣誉等
+     * 系统事件的根载体（二进制 55 个 OnSysMsg* 处理器；另有请求式
+     * registerSysMsgNotification(type, subType, ids, callback) 需 3 参）。
+     * 证据：小写名与 onRecvMsg 相邻（offset 差 ~1.4KB）+ 日志
+     * `OnRecvSysMsg msg_type=0x{:x} sub_type=0x{:x} is_online={}`。
+     * ⚠️ 参数形状待真实事件校准（unknown 透传，订阅方 raw 日志观测）。
+     */
+    onRecvSysMsg: (arg: unknown) => void;
 };

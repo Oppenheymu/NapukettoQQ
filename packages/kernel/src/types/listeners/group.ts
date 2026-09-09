@@ -65,4 +65,12 @@ export type GroupListener = {
     onGroupSingleScreenNotifies: (doubt: boolean, seq: string, notifies: GroupNotify[]) => void;
     /** 群禁言成员列表变化。 */
     onShutUpMemberListChanged: (groupCode: string, members: ShutUpGroupMember[]) => void;
+    /**
+     * 群精华列表变化（OB11 group_essence 候选源，2026-09-10 接线）。
+     * 证据：wrapper.node 9.9.33-52230 字符串——小写名位于 listener 反射字符串簇，
+     * 与已知 onMemberListChange/onBuddyReqChange 交错（同一字符串表页）；
+     * API 族旁证 addGroupEssence/getGroupLatestEssenceList。
+     * ⚠️ 参数形状待真实事件校准（unknown 透传，订阅方 raw 日志观测）。
+     */
+    onGroupEssenceListChange: (arg: unknown) => void;
 };
