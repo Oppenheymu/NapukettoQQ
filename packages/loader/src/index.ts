@@ -69,6 +69,8 @@ export {
     resolveQqFiles,
     resolveQqInstall,
 } from "./locate-qq.js";
+// 跨进程 cmdline 查询（instance-lock pid 复用校验的底层探针，诊断/工具可独立使用）
+export { readCmdlineForPid } from "./pid-cmdline.js";
 export type { DownloadOptions, DownloadResult } from "./qq-download.js";
 export { DownloadError, downloadFile } from "./qq-download.js";
 export type { ExtractOptions, SevenZipResult } from "./qq-extract.js";

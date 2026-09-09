@@ -123,16 +123,17 @@ export async function runSingleAccount(opts: BootOptions = {}): Promise<void> {
     const cfgDir = path.join(dataRoot, opts.qq ?? "default");
 
     // 单实例锁预检（2026-08-07 根治「多实例抢数据目录锁挂起」）：同一账号数据
-    // 目录只允许一个实例（QQ 原生层 MMKV/登录单例有锁，第二个实例抢不到会卡死）。
-    // 占用 → 快速失败并提示占用 PID；残留（PID 已死）→ self-host 会自动接管。
-    // 真正的锁由 self-host 子进程获取/释放（它才是数据目录的实际持有者），
-    // cli 这里只做 spawn 前预检，给用户友好提示（supervisor 等批量拉起同用）。
+    // 目录只允许一个实例（QQ 原生层 MMKV/登录单例有锁，第二个实例抢不到锁会卡死）。
+    // 占用 → 快速失败并提示占用 PID；残留（PID 已死 / PID 被复用，2026-09-10
+    // cmdline 校验根治）→ self-host 会自动接管。真正的锁由 self-host 子进程
+    // 获取/释放（它才是数据目录的实际持有者），cli 这里只做 spawn 前预检，
+    // 给用户友好提示（supervisor 等批量拉起同用）。
     const { occupied, pid: holderPid } = checkInstanceLock(cfgDir);
     if (occupied) {
         logger.error(
             { pid: holderPid, dataDir: cfgDir },
             "数据目录已被其他实例占用，拒绝启动（同一账号数据目录仅允许一个实例；" +
-                "如确认无实例在跑，请删除该目录下的 instance.lock）",
+                "占用校验已含 pid 复用检测，如仍误报请删除该目录下的 instance.lock）",
         );
         process.exitCode = 1;
         return;
