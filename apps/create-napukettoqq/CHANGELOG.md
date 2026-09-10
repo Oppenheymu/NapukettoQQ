@@ -1,5 +1,12 @@
 # create-napukettoqq
 
+## 0.2.38
+
+### Patch Changes
+
+- Updated dependencies [c36bac0]
+  - @napuketto/cli@0.1.15
+
 ## 0.2.37
 
 ### Patch Changes
