@@ -1,8 +1,30 @@
 # NapukettoQQ 项目现状（2026-09-08 更新：🔌 接线收尾轮——request 事件链 / control login / 媒体双向 / onReload / 运维命令；🌙 登录与装配链生命周期收尾轮——A1 竞态修复 + A2 ready 态软重登）
 
-> **新对话开场指引**：先读本文件（现状 + 关键决策点）→ `AGENTS.md`（工程指南 + 红线）→ `docs/architecture.md`（架构书）→ **`packages/loader/native/docs/HANDOVER-V11.md`（最终交接，闭源子仓库）** → 对应包 `docs/design.md`（loader / koishi-plugin-adapter / create-napukettoqq / **kernel（2026-09-08 新建）** / **adapter（2026-09-08 新建）**）。需要细节时再读 HANDOVER-V6~V10（子仓库 docs/）。需要了解路线演进背景时再读 `docs/DECISIONS.md`。
+> **新对话开场指引**：先读本文件（现状 + 关键决策点）→ `AGENTS.md`（工程指南 + 红线）→ `docs/architecture.md`（架构书）→ **`packages/loader/native/docs/HANDOVER-V11.md`（最终交接，闭源子仓库）** → 对应包 `docs/design.md`（loader / koishi-plugin-adapter / create-napukettoqq / **kernel（2026-09-08 新建）** / **adapter（2026-09-08 新建）**）。需要细节时再读 HANDOVER-V6~V10（子仓库 docs/）。需要了解路线演进背景时再读 `docs/DECISIONS.md`。涉及**登录 / 停启实例 / instance-lock / stderr 噪音排查**等实操时先读 `docs/OPERATIONS.md`（运维与实验规程，2026-09-10 固化）。
 >
 > **git 状态**：2026-09-08 晚已完成**全链补签 + 历史线性化**（rebase 重写：20 个提交全部 GPG 签名、纯线性无合并；并行会话推来的重复历史链已随改写移除，内容零损失）。HEAD = `4cdc19f`（pnpm-lock 同步）；**旧哈希全部作废**（3fa6425 / a1f8a2a / 9562829 / 7faed0f 等），引用旧哈希的文档与脚本以提交信息为准。登录生命周期收尾轮详见「🌙 关键决策点」。
+
+---
+
+## 📋 遗留清单现状（2026-09-10 核对快照，HEAD 08119ae）
+
+> **时点快照**：一轮并行修复正在推进（软重登挂起 / checkIdentity 单测 /
+> sysmsg 解码器），**并行修复轮落地合并后本节需刷新**。核对基准 =
+> 08119ae（c3 无源事件探测轮）；行号为该时点实测。
+
+| 遗留项 | 现状 | 出处（时点行号） |
+|---|---|---|
+| **软重登挂起**（quickLoginWithUin 永不 settle → qrFallback 接不住 → control release 不执行 → claim 互斥不释放） | **未修（修复进行中）**；现存唯一缓解 = login-race 相位抢占口，ready 态软重登无任何兜底 | `kernel/src/login/login-connect.ts:284`（裸 await）+ `kernel/src/core.ts:187`（qrFallback 靠 catch）+ `loader/src/host/core/relogin.ts:220-221`（finally release）+ `kernel/src/login/login.ts:162`（QR 兜底定时器只在 refresh 里启动，挂起则连超时都不计时） |
+| **checkIdentity 专属单测** | **进行中**（三分支齐全但现有测试零覆盖，直接单测需先调可见性） | `apps/koishi-plugin-adapter/src/bot/bot.ts:369` |
+| **onRecvSysMsg protobuf 解码器**（group_card / group_title / group_sign 翻译回填） | **进行中**（订阅后仅 raw 校准日志，仓内无解码器） | `packages/adapter/src/onebot11/adapter.ts:264` |
+| **msg_emoji_like** | **已结案**：wrapper 无推送回调（仅 API 面 getMsgEmojiLikesList 7 参），无源可接 | 2026-09-10 🔍 决策点第 2 条 |
+| **offline_file / group_essence** | **已接线，待自然事件校准**（防御性收窄翻译，payload 待真实事件回填） | c3 轮 08119ae |
+| **probe-scan-strings.mjs** | **已入库** | `scripts/probe-scan-strings.mjs` |
+| **旧锁保守占用 / cmdLine 残余差异** | **按设计自愈、已声明接受**（旧锁无 cmdline → 保守判占用，随新锁普及自愈；8.3 短路径 / 相对启动路径等残余差异源已在注释声明接受，误判方向 = 可恢复的误接管） | `loader/src/instance-lock.ts:96` + `loader/src/pid-cmdline.ts:17-21` 注释 |
+| **bot 级「造残留锁 → 启动自动接管」实机复核** | **待独占窗口**（单测完备 15 例、实机未跑；checklist 已固化 → `docs/OPERATIONS.md` §4，禁止并行会话执行） | `docs/OPERATIONS.md` §4 |
+
+> 同账号双实例互斥规程（先停常开树再登录、恢复终态核对）也已固化 →
+> `docs/OPERATIONS.md` §1。
 
 ---
 
