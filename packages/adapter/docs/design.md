@@ -14,7 +14,7 @@ Group/onGroupNotifiesUpdated     →  subscribe()（2026-09-08）    →  reques
 Buddy/onBuddyReqChange           →  subscribe()（2026-09-08）    →  request.ts               → request 事件（friend）
 Buddy/onBuddyListChange(dV2)     →  subscribe()（2026-09-08）    →  仅 raw 校准日志（形状未知，不翻译）
 Msg/onRecvOfflineFileMsg         →  subscribe()（c3，2026-09-10）→  notice-extra.ts          → offline_file notice
-Msg/onRecvSysMsg                 →  subscribe()（c3，2026-09-10）→  仅 raw 校准日志（protobuf 字节，待解码）
+Msg/onRecvSysMsg                 →  subscribe()（c3，2026-09-10）→  sysmsg.ts（§7 解码，识别表空=仅校准日志）
 Msg/onRecvOnlineFileMsg          →  subscribe()（c3，2026-09-10）→  仅 raw 校准日志（OB11 无对应类型）
 Group/onGroupEssenceListChange   →  subscribe()（c3，2026-09-10）→  仅 raw 校准日志（group_essence 候选源）
 ```
@@ -72,8 +72,8 @@ Group/onGroupEssenceListChange   →  subscribe()（c3，2026-09-10）→  仅 r
     日志（精华事件的候选直达源，与 grayTip ESSENCE 子类型双路积累）。
 - **gap 清单**（源事件缺失或改报形式有风险，未翻译）：group_upload（文件消息
   现以 message 事件 + file 段透出，改 notice 影响现网 koishi 收向，待拍板）、
-  group_card / group_title / group_sign（源已接线 = Msg/onRecvSysMsg，等
-  protobuf 解码）、msg_emoji_like（无推送源）、offline_file（已翻译，payload
+  group_card / group_title / group_sign（解码器已上线 §7，识别表待真实样本
+  校准）、msg_emoji_like（无推送源）、offline_file（已翻译，payload
   待真实事件校准）、friend_add（源存在但 payload 未知，raw 日志积累中）。
 
 ## 2. onReload 热更新（2026-09-08 实现，P2-6 兑现）
@@ -118,9 +118,81 @@ transcodeVideo / downloadUrl / inferExtension）。kernel 不依赖 media。
 ## 6. 已知缺口（2026-09-10 c3 轮后）
 
 - poke 翻译字段校准（首次真实事件后；手动触发指引见 §1）。
-- **onRecvSysMsg protobuf 解码**（group_card / group_title / group_sign 的
-  翻译前置；raw 字节日志已在 loader.log 积累）。
+- **onRecvSysMsg 识别表校准**（解码器已上线 = §7；group_card / group_title /
+  group_sign 的 (msgType, subType) 判别值无样本支撑，识别表为空 = 不广播，
+  等真实样本登记规则）。
 - onRecvOfflineFileMsg payload 形状校准（翻译已上线，收窄口径待真实事件修正）。
 - onGroupEssenceListChange payload 形状（group_essence 翻译待校准）。
 - onBuddyReqChange payload 形状（BuddyReq 字段 words 等待真实事件校准）。
 - msg_emoji_like 无推送源（疑经 onMsgInfoListUpdate 或轮询，待观测）。
+
+## 7. Msg/onRecvSysMsg protobuf 解码（2026-09-10，`helper/sysmsg.ts`）
+
+### 7.1 样本清单与证据边界
+
+- **真实样本 = 2 条**（c3 接线以来 onRecvSysMsg 全部实触），来源
+  `$TEMP/napuketto-probe/notice-sources.json` 观测窗（2026-09-09T16:32Z 起）
+  event-tally 步骤 `candidateSamples["Msg/onRecvSysMsg"]`；koishi-dev 全部
+  28 个日志文件 grep 0 命中（观测窗外未再实触，子会话全量复核过）。
+- 两样本均 **151 字节**、同一类型（msgType=528 / subType=382，见 7.3），
+  **都不是 card/title/sign**——因此识别表（7.5）为空：目前没有任何
+  (msgType, subType) → 事件种类的映射有样本支撑。fixture 入库前脱敏
+  （等长字节替换 uin/uid/群码/base64 尾部；528/382/时间戳/varint 边界等
+  结构字节保留原样，见 sysmsg.test.ts 头注释）。
+- **wrapper.node 二进制分类学**（strings 扫描，同 probe 目录
+  strings-ascii.txt）：56 个 `OnSysMsg*` 处理器。与 card/title 相关者 =
+  `OnSysMsgModifyGroupMemberInfo`（名片）、
+  `OnSysMsgModifyGroupMemberSpecialTitle`（个体头衔）、
+  `OnSysMsgGroupLevelTitleChange`（等级头衔）；**无 sign 处理器 →
+  group_sign 疑似不走 sysmsg 载体**（OB11 group_sign 保留表项，预期无源）。
+- **原生日志格式**（strings 同页）：`OnRecvSysMsg msg_type=0x{:x}
+  sub_type=0x{:x} is_online={}` 与 `Dispatcher sys msg cmd={} msg_type=…
+  sub_type=… size={}`——原生分发键 = (msgType, subType)，是识别表的主键依据。
+
+### 7.2 回调参数形状（实测）
+
+`onRecvSysMsg(arg)` 的 arg = **带符号字节数组的数组**（djinni int8 透传，
+JSON 序列化形如 `[[10,64,…]]`）：外层数组 = 批（两样本均单元素），内层 =
+单条 sysmsg 的 protobuf 字节。`narrowSysMsgBlobs` 防御性收窄：接受批数组 /
+单块裸数组 / TypedArray，逐项 `& 0xFF` 归一 Uint8Array；零有效块 → null
+（调用方打 raw 日志，与 narrowOfflineFiles 同模式）。
+
+### 7.3 字节布局（字段号依据 = 两样本观察，非任何第三方实现）
+
+顶层消息三字段（两样本一致）：
+
+| 字段 | 线型 | 观测内容 | 语义置信度 |
+|---|---|---|---|
+| f1 | msg(64) | `{f1: uin, f2: uid, f5: uin, f6: uid}` | 行为人/对象对；两样本两组相等（自身事件），f5/f6 语义待校准 |
+| f2.f1 | varint | 528 | msgType（分发键；样本值，非 card/title/sign） |
+| f2.f2 / f2.f3 | varint | 382 / 382 | subType（两字段观测恒等，subTypeAlt 备用） |
+| f2.f4 / f2.f5 | varint | 群标识对（观测恒相邻整数，如 0xAAAAAAAA 与 +1） | 群相关标识；两值语义待校准（疑 code/uin 双记法） |
+| f2.f6 | varint | 1788971533（= 2026-09-09T16:32:13Z，与观测窗吻合） | 事件时间戳（秒），高置信 |
+| f2.f12 | varint | `2^57 \| f4`（高 25 位恒 0x2000000） | 群标识重记（64 位），低置信 |
+| f2.f32 | varint | 64 位随机值 | 疑 msgRand，低置信 |
+| f3 | msg(32) | `{f1: 空 bytes, f2: base64 串(28 字符)}` | 不透明载荷；base64 内容非 protobuf（try-parse 失败即按字节透传） |
+
+### 7.4 解码器（`decodeProtoTree`，手写 wire-format，零依赖）
+
+- 支持 varint（wire 0，BigInt 累积保 64 位精度）与 length-delimited
+  （wire 2，递归 try-parse：子解析成功 → 嵌套树，失败 → 不透明 bytes）；
+  wire 1/5 定长跳过（8/4 字节），wire 3/4 → 整块判失败。
+- 防线上限：深度 16、每层 256 字段、varint ≤ 10 字节；截断 / field 0 → null。
+- 树节点 = 判别联合 `{no, kind:"varint", value: bigint} | {no, kind:"bytes",
+  value: Uint8Array, children: SysMsgField[] | null}`（children=null =
+  不透明）。try-parse 为启发式，ASCII 串偶发误判嵌套无实害（树仅用于观测
+  与未来白名单规则，不做无依据广播）。
+
+### 7.5 识别与降级策略（不得猜错还硬广播）
+
+- `recognizeSysMsg(msgType, subType, table = KIND_TABLE)`：查
+  `"${msgType}:${subType}"` 主键。**KIND_TABLE 当前为空**——card/title/sign
+  判别值无样本支撑，宁可漏报不错报。
+- 三态结果：`notice`（表命中且 rule.extract(tree, env) 提取成功 → 广播；
+  提取失败降级日志）/ `observed_unnamed`（528:382 已观测未命名 → 仅校准
+  日志）/ `unknown`（其余 → 校准日志）。
+- **校准日志 = 结构化摘要**（msgType/subType/群标识对/时间戳/actor/树内全部
+  可打印字符串/raw hex 截断），替代 c3 的整包字节 JSON——下一轮拿到
+  card/title 样本后只需往 KIND_TABLE 登记一条 extract 规则即可开始广播。
+- `extractSysMsgEnvelope` 按 7.3 布局逐字段软失败（全部可空），翻译保持
+  纯函数（ADR-008）。

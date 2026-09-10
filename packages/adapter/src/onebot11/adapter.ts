@@ -47,6 +47,13 @@ import {
     toOb11FriendRequestEvent,
     toOb11GroupRequestEvent,
 } from "./helper/request.js";
+import {
+    decodeProtoTree,
+    extractSysMsgEnvelope,
+    narrowSysMsgBlobs,
+    recognizeSysMsg,
+    toHex,
+} from "./helper/sysmsg.js";
 import type { Ob11TransportSet } from "./transport.js";
 import { assembleOb11Transports } from "./transport.js";
 
@@ -259,18 +266,33 @@ export class NapukettoOneBot11Adapter extends BaseProtocolAdapter<OB11Config> {
                 }
             }),
         );
-        // sys msg / 在线文件：raw 校准日志（card/title/sign 等 sysmsg 系统事件的
-        // 观测入口；真实 payload 到达后回填翻译，2026-09-10）
-        for (const evt of ["Msg/onRecvSysMsg", "Msg/onRecvOnlineFileMsg"] as const) {
-            this.unsubscribes.push(
-                this.msgChannel.on(evt, (arg) => {
-                    this.calibLogger?.info(
+        // sys msg 总闸（c3 接线；2026-09-10 解码回填，design.md §7）：
+        // 解码 → 识别 → 表命中才广播；未识别走结构化校准日志。
+        // ⚠️ 识别表当前为空（card/title/sign 判别值无样本支撑）= 全部校准日志。
+        this.unsubscribes.push(
+            this.msgChannel.on("Msg/onRecvSysMsg", (arg) => {
+                const blobs = narrowSysMsgBlobs(arg);
+                if (blobs === null) {
+                    this.calibLogger?.warn(
                         { raw: JSON.stringify(arg)?.slice(0, 2000) },
-                        `ob11: ${evt} raw（sys msg 校准数据）`,
+                        "ob11: onRecvSysMsg 未知参数形状",
                     );
-                }),
-            );
-        }
+                    return;
+                }
+                for (const blob of blobs) {
+                    this.handleSysMsgBlob(blob);
+                }
+            }),
+        );
+        // 在线文件：raw 校准日志（OB11 无对应通知类型）
+        this.unsubscribes.push(
+            this.msgChannel.on("Msg/onRecvOnlineFileMsg", (arg) => {
+                this.calibLogger?.info(
+                    { raw: JSON.stringify(arg)?.slice(0, 2000) },
+                    "ob11: onRecvOnlineFileMsg raw（校准数据）",
+                );
+            }),
+        );
         // 群系统通知 → OB11 group request（仅未处理的邀请/申请；doubt 可疑通知跳过）
         if (this.groupChannel !== undefined) {
             this.unsubscribes.push(
@@ -352,6 +374,46 @@ export class NapukettoOneBot11Adapter extends BaseProtocolAdapter<OB11Config> {
     unsubscribeOnly(): void {
         this.subscribedOnly = false;
         this.unsubscribeAll();
+    }
+
+    /**
+     * 单条 sysmsg 字节块：解码 → 识别 → 命中才广播，未识别打结构化校准日志
+     * （识别表为空时全部走日志路径，design.md §7.5）。
+     */
+    private handleSysMsgBlob(blob: Uint8Array): void {
+        const tree = decodeProtoTree(blob);
+        if (tree === null) {
+            this.calibLogger?.warn(
+                { raw: toHex(blob).slice(0, 1024) },
+                "ob11: onRecvSysMsg protobuf 解码失败",
+            );
+            return;
+        }
+        const env = extractSysMsgEnvelope(tree);
+        const rec = recognizeSysMsg(env.msgType, env.subType);
+        if (rec.kind === "notice") {
+            const event = rec.rule.extract(tree, env);
+            if (event !== null) {
+                this.broadcastEvent(event);
+                return;
+            }
+            // 提取失败：降级校准日志（不硬广播半成品事件）
+        }
+        this.calibLogger?.info(
+            {
+                verdict: rec.kind,
+                msgType: env.msgType,
+                subType: env.subType,
+                subTypeAlt: env.subTypeAlt,
+                groupCodes: env.groupCodes,
+                time: env.time,
+                actorUin: env.actorUin,
+                actorUid: env.actorUid,
+                strings: env.strings,
+                raw: toHex(blob).slice(0, 1024),
+            },
+            "ob11: onRecvSysMsg 校准数据（未识别，不广播）",
+        );
     }
 
     /**

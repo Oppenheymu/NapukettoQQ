@@ -382,3 +382,90 @@ describe("NapukettoOneBot11Adapter（group_upload 报形式开关，B4）", () =
         expect((events[0] as { post_type: string }).post_type).toBe("message");
     });
 });
+
+describe("NapukettoOneBot11Adapter（sysmsg 解码链，design.md §7）", () => {
+    /** varint 编码（合成 sysmsg 用）。 */
+    function encVarint(v: number): number[] {
+        const out: number[] = [];
+        while (true) {
+            const b = v & 0x7f;
+            v >>>= 7;
+            if (v === 0) {
+                out.push(b);
+                return out;
+            }
+            out.push(b | 0x80);
+        }
+    }
+
+    /** 合成 528/382 sysmsg 字节（已观测未命名类型；顶层 f2{f1,f2,f3}）。 */
+    function blob528(): number[] {
+        const f2 = [
+            0x08,
+            ...encVarint(528), // f1: msgType
+            0x10,
+            ...encVarint(382), // f2: subType
+            0x18,
+            ...encVarint(382), // f3: subTypeAlt
+        ];
+        return [0x12, ...encVarint(f2.length), ...f2]; // 顶层 f2（length-delimited）
+    }
+
+    function makeSysMsgHarness(): {
+        adapter: NapukettoOneBot11Adapter;
+        msg: ReturnType<typeof captureChannel>;
+        events: unknown[];
+        warn: ReturnType<typeof vi.fn>;
+        info: ReturnType<typeof vi.fn>;
+    } {
+        const msg = captureChannel();
+        const events: unknown[] = [];
+        const warn = vi.fn();
+        const info = vi.fn();
+        const adapter = new NapukettoOneBot11Adapter({
+            ...stubOptions(),
+            config: new ProtocolConfig({
+                path: "ob11-test.toml",
+                schema: ob11ConfigSchema,
+                defaults: ob11ConfigSchema.parse({}),
+                seed: ob11ConfigSchema.parse({}),
+            }),
+            broadcaster: { emit: (e: unknown) => events.push(e) } as unknown as EventBroadcaster,
+            msgChannel: msg.channel,
+            logger: { warn, info },
+        });
+        return { adapter, msg, events, warn, info };
+    }
+
+    it("528/382 sysmsg 批：解码成功但不广播，打结构化校准日志（识别表空）", async () => {
+        const { adapter, msg, events, warn, info } = makeSysMsgHarness();
+        await adapter.subscribeOnly();
+        msg.handlers.get("Msg/onRecvSysMsg")?.([[...blob528()]]);
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        expect(events).toHaveLength(0);
+        expect(warn).not.toHaveBeenCalled();
+        expect(info).toHaveBeenCalledTimes(1);
+        const payload = info.mock.calls[0]?.[0] as { verdict?: string; msgType?: number };
+        expect(payload.verdict).toBe("observed_unnamed");
+        expect(payload.msgType).toBe(528);
+    });
+
+    it("未知参数形状 → warn 且不广播", async () => {
+        const { adapter, msg, events, warn } = makeSysMsgHarness();
+        await adapter.subscribeOnly();
+        msg.handlers.get("Msg/onRecvSysMsg")?.({ unexpected: true });
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        expect(warn).toHaveBeenCalledTimes(1);
+        expect(events).toHaveLength(0);
+    });
+
+    it("合法字节块但 wire 畸形 → 解码失败 warn 且不广播", async () => {
+        const { adapter, msg, events, warn, info } = makeSysMsgHarness();
+        await adapter.subscribeOnly();
+        msg.handlers.get("Msg/onRecvSysMsg")?.([[0x00]]); // field 0 顶层非法
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        expect(warn).toHaveBeenCalledTimes(1);
+        expect(info).not.toHaveBeenCalled();
+        expect(events).toHaveLength(0);
+    });
+});
