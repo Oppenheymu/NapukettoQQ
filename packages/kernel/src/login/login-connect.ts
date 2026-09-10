@@ -3,7 +3,8 @@
  *
  * - waitForNetworkConnection：等 MSF 网络连接就绪（getMsfStatus() === 3）
  * - ensureLoginConnected：connect() → 等 onLoginConnected（自建宿主必需）
- * - quickLogin：历史账号快速登录（网络异常 1006511 等就绪后重试）
+ * - quickLogin：历史账号快速登录（网络异常 1006511 等就绪后重试；
+ *   T3 单步超时兜底——底层 promise 永久挂起时按登录失败抛出）
  */
 
 import { kernelError } from "../infra/index.js";
@@ -56,6 +57,17 @@ const NETWORK_READY_POLL_MS = 1000;
 
 /** 连接稳定缓冲（毫秒，p0-kernel-flow 实证值）。 */
 const CONNECTION_SETTLE_MS = 3000;
+
+/**
+ * 快速登录单步超时（毫秒，T3：软重登挂起兜底）。
+ * 服务端已有同账号会话时底层 quickLoginWithUin / getLoginList 永不 settle——
+ * 裸 await 会让 core.login 的 catch/qrFallback、loader 的 control.release 全部
+ * 永久等待。底层 promise 无法取消：超时后悬挂丢弃即可。
+ */
+export const QUICK_LOGIN_TIMEOUT_MS = 20_000;
+
+/** 快速登录超时文案（按登录失败处理；不含网络错误特征，不触发 1006511 重试叠挂）。 */
+export const QUICK_LOGIN_TIMEOUT_MESSAGE = "快速登录超时";
 
 /**
  * 等待网络连接就绪（loginService.getMsfStatus() === 3）。
@@ -197,19 +209,55 @@ export function pickLoginTarget(
     return first;
 }
 
+/** 单次快速登录尝试的结果（成功带结果，失败带错误消息）。 */
+type AttemptResult = { ok: true; result: LoginResult } | { ok: false; errMsg: string };
+
+/**
+ * 底层 NAPI promise 超时竞速（T3）：promise 先 settle 用其结果，超时先到用
+ * onTimeout 产物（可抛错 → 整体 reject）。底层 promise 无法取消，超时后
+ * 悬挂丢弃——勿做清理动作引发二次问题；败者的迟到 settle 由 race 吞掉。
+ */
+function raceWithTimeout<T>(
+    promise: Promise<T>,
+    timeoutMs: number,
+    onTimeout: () => T,
+): Promise<T> {
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const timeout = new Promise<T>((resolve, reject) => {
+        timer = setTimeout(() => {
+            try {
+                resolve(onTimeout());
+            } catch (err) {
+                reject(err);
+            }
+        }, timeoutMs);
+    });
+    return Promise.race([promise, timeout]).finally(() => {
+        if (timer !== null) {
+            clearTimeout(timer);
+        }
+    });
+}
+
 /**
  * 带网络重试的快速登录（P2-1）。
  * 重试语义：仅当失败为网络异常（1006511）且未达上限时，等网络就绪后重试。
+ * T3：每次尝试包超时竞速，挂起按登录失败处理（超时文案非网络错误 → 不重试）。
  */
 async function loginWithNetworkRetry(
     ctx: WrapperContext,
     loginService: LoginServiceShape,
     target: LoginAccountInfo,
     opts: { uin?: string; timeoutMs?: number },
+    quickTimeoutMs: number,
 ): Promise<LoginResult> {
     let lastErrMsg = "";
     for (let attempt = 1; attempt <= NETWORK_RETRY_MAX; attempt += 1) {
-        const attemptResult = await attemptQuickLogin(loginService, target);
+        const attemptResult = await raceWithTimeout(
+            attemptQuickLogin(loginService, target),
+            quickTimeoutMs,
+            (): AttemptResult => ({ ok: false, errMsg: QUICK_LOGIN_TIMEOUT_MESSAGE }),
+        );
         if (attemptResult.ok) {
             return attemptResult.result;
         }
@@ -232,7 +280,7 @@ async function loginWithNetworkRetry(
 async function attemptQuickLogin(
     loginService: LoginServiceShape,
     target: LoginAccountInfo,
-): Promise<{ ok: true; result: LoginResult } | { ok: false; errMsg: string }> {
+): Promise<AttemptResult> {
     const result = await loginService.quickLoginWithUin(target.uin);
     const { errMsg } = result.loginErrorInfo;
     if (errMsg) {
@@ -253,28 +301,44 @@ export function isNetworkError(errMsg: string): boolean {
     return errMsg.includes(NETWORK_ERROR_CODE) || errMsg.includes(CONNECTION_ERROR_HINT);
 }
 
+/** quickLogin 参数（uin 指定账号；timeoutMs 网络就绪等待；quickLoginTimeoutMs 单步超时）。 */
+export interface QuickLoginOptions {
+    /** 指定快速登录账号（缺省遍历历史列表，优先 isQuickLogin）。 */
+    uin?: string;
+    /** 网络就绪等待超时（毫秒，P2-1 既有语义），默认 15s。 */
+    timeoutMs?: number;
+    /** 单步快速登录超时（毫秒，T3 挂起兜底），默认 {@link QUICK_LOGIN_TIMEOUT_MS}。 */
+    quickLoginTimeoutMs?: number;
+}
+
 /**
  * 快速登录：遍历历史登录列表尝试。
  * P2-1：失败且错误为网络异常（1006511）时，等网络就绪后重试（最多 NETWORK_RETRY_MAX 次）。
+ * T3：getLoginList 与每次 quickLoginWithUin 均包超时竞速（默认 20s）——服务端
+ * 已有会话时底层 promise 永久挂起，超时按登录失败（「快速登录失败: 快速登录超时」）
+ * 抛出，上层 catch/qrFallback 语义自动生效。
  */
 export async function quickLogin(
     ctx: WrapperContext,
-    opts: { uin?: string; timeoutMs?: number },
+    opts: QuickLoginOptions = {},
 ): Promise<LoginResult> {
     const raw = ctx.loginService as unknown as LoginServiceShape | null;
     if (raw === null) {
         throw kernelError("loginService 无效（缺 getLoginList）", "INVALID_STATE");
     }
     const loginService = raw;
+    const quickTimeoutMs = opts.quickLoginTimeoutMs ?? QUICK_LOGIN_TIMEOUT_MS;
     // 连接登录服务（自建宿主必需：不 connect 则「登录系统连接异常」）
     await ensureLoginConnected(ctx, {
         ...(opts.timeoutMs !== undefined ? { timeoutMs: opts.timeoutMs } : {}),
     });
-    const list = await loginService.getLoginList();
+    const list = await raceWithTimeout(loginService.getLoginList(), quickTimeoutMs, () => {
+        throw kernelError(`快速登录失败: ${QUICK_LOGIN_TIMEOUT_MESSAGE}`, "NOT_LOGIN");
+    });
     const items = list.LocalLoginInfoList;
     if (items.length === 0) {
         throw kernelError("无历史登录账号", "NOT_LOGIN");
     }
     const target = pickLoginTarget(items, opts.uin);
-    return loginWithNetworkRetry(ctx, loginService, target, opts);
+    return loginWithNetworkRetry(ctx, loginService, target, opts, quickTimeoutMs);
 }

@@ -186,6 +186,7 @@ export function createLoginControlHandler(
         const opts: Record<string, unknown> = {
             appid: String(Appid),
             initTimeoutMs: 20000,
+            quickLoginTimeoutMs: 20000,
             qrFallback: true,
             ...(payload.uin !== undefined ? { quickUin: payload.uin } : {}),
             ...(payload.qr === true ? { qrOnly: true } : {}),

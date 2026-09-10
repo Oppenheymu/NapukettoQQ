@@ -177,3 +177,35 @@ otherBusinessInfo{aiVoiceInfo, aiVoiceType} / *isInApplicationDataPath*。
   getMsgEmojiLikesList（7 参），待观测。
 - downloadRichMedia 对 transferStatus≠2 消息的真实下载行为（本机所有样本已下载，
   无法自然构造未下载样本——签名已实证，行为按轮询策略防御）。
+
+## 7. 登录域：快速登录超时兜底（T3，2026-09-10）
+
+**缺陷**（软重登挂起，2026-09 审计确认）：服务端已有同账号会话时，底层
+`quickLoginWithUin` / `getLoginList` NAPI promise **永不 settle**。此前裸 await：
+
+- `quickLogin`（login-connect.ts）挂起 → `NapukettoCore.login` 的
+  catch/qrFallback 永不触发（promise 不 reject，catch 无从谈起）。
+- `QrLoginSession.start` quickUin 路径挂起 → `refresh()` 不执行，而 120s 超时
+  定时器只在 `refresh()` 里启动——挂起时连兜底计时都不存在。
+- loader control login 挂起 → `.finally` 的 `control.release()` 不执行，
+  登录互斥永不释放，面板无任何反馈。
+
+**设计**：超时竞速 + 失败语义复用，不引入取消机制。
+
+- `quickLogin`（login-connect.ts）：`QUICK_LOGIN_TIMEOUT_MS = 20s` 默认，
+  `QuickLoginOptions.quickLoginTimeoutMs` 可配；`getLoginList` 与每次
+  `attemptQuickLogin` 经 `raceWithTimeout` 包裹，超时按登录失败处理
+  （`快速登录失败: 快速登录超时`，NOT_LOGIN）→ 现有 catch/qrFallback 语义
+  自动生效。**超时文案不含网络错误特征**（非 1006511/连接异常）→ 不进重试
+  循环（避免 3 次重试 × 20s 叠挂 60s+）。
+- **悬挂丢弃原则**：底层 NAPI promise 无法取消，超时后原 promise 悬挂
+  丢弃（race 败者的迟到 settle 由 race 内部吞掉）——不做任何清理动作
+  （removeListener/中断底层），避免二次问题。
+- `QrLoginSession.start`（login.ts）：quickUin 路径在 `quickLoginWithUin`
+  **之前**先 `restartTimeout()`（挂起 → 120s 超时 failed）；失败/异常路径
+  维持 refresh 回退，但仅限 idle 态（`refreshAfterQuickLogin`）——超时 failed
+  后悬挂 promise 的迟到结果不得复活会话/重复出码。
+- 透传链：`CoreLoginOptions.quickLoginTimeoutMs` → `quickLogin`；loader
+  relogin.ts 显式传 20000（与 initTimeoutMs 同值，固化软重登口径）。
+- 已知边界：登录期（login-race 相位）的快速登录挂起本就有抢占口兜底
+  （T2），本机制与其正交——抢占后悬挂 promise 照旧丢弃。

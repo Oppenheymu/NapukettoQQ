@@ -124,6 +124,10 @@ export class QrLoginSession {
         this.listenerId = this.loginService.addKernelLoginListener(this.buildListener());
         this.loginService.connect();
         if (opts.quickUin !== undefined && opts.quickUin !== "") {
+            // T3：快速登录可能永久挂起（服务端已有同账号会话）——先启动超时计时，
+            // 挂起 → 超时 failed。此前挂起时连兜底计时都不启动（定时器只在 refresh
+            // 里重启），ready 态软重登完全无兜底。
+            this.restartTimeout();
             this.loginService
                 .quickLoginWithUin(opts.quickUin)
                 .then((result) => {
@@ -132,14 +136,24 @@ export class QrLoginSession {
                     // 会永不触发 → 无凭据环境（WSL 扫码）永不 refresh → 二维码永不
                     // 产生，完全静默阻塞（2026-08-13 WSL 扫码卡死根因）。
                     if (result.loginErrorInfo.errMsg !== "") {
-                        this.refresh();
+                        this.refreshAfterQuickLogin();
                     }
                 })
                 .catch(() => {
                     // reject（异常路径）同样回退二维码
-                    this.refresh();
+                    this.refreshAfterQuickLogin();
                 });
         } else {
+            this.refresh();
+        }
+    }
+
+    /**
+     * 快速登录失败回退二维码。仅 idle 态生效：超时 failed 后悬挂 promise 的
+     * 迟到结果（含登录成功后 stop 之后的迟到 settle）不得复活会话/重复出码。
+     */
+    private refreshAfterQuickLogin(): void {
+        if (this.state === "idle") {
             this.refresh();
         }
     }

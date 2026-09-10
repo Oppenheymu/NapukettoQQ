@@ -29,6 +29,7 @@ import {
     type LoginState,
     type QrCodeData,
     QrLoginSession,
+    type QuickLoginOptions,
     quickLogin,
     type SelfInfo,
 } from "./login/index.js";
@@ -74,6 +75,12 @@ export interface CoreLoginOptions {
     initTimeoutMs?: number;
     /** 指定快速登录账号（缺省遍历历史列表）。 */
     quickUin?: string;
+    /**
+     * 单步快速登录超时（毫秒，T3 软重登挂起兜底），默认 20s。服务端已有同账号
+     * 会话时底层 quickLoginWithUin/getLoginList 永久挂起，超时按登录失败抛出
+     * （qrFallback 可接）。底层 promise 无法取消：超时后悬挂丢弃。
+     */
+    quickLoginTimeoutMs?: number;
     /** 快速登录失败时回退 QR 登录（二维码写缓存目录），默认 false。 */
     qrFallback?: boolean;
     /** 强制扫码：跳过快速登录，直接走 QR 登录（koishi 强制扫码 / 切账号）。默认 false。 */
@@ -167,9 +174,12 @@ export class NapukettoCore {
         // 2. 登录：快速登录（优先）→ QR 回退。登录成功前不碰 session。
         let loginResult: LoginResult;
         try {
-            const quickOpts: { uin?: string } = {};
+            const quickOpts: QuickLoginOptions = {};
             if (opts.quickUin !== undefined) {
                 quickOpts.uin = opts.quickUin;
+            }
+            if (opts.quickLoginTimeoutMs !== undefined) {
+                quickOpts.quickLoginTimeoutMs = opts.quickLoginTimeoutMs;
             }
             loginResult = await quickLogin(wrapper, quickOpts);
             this.ctx.logger.info({ uin: loginResult.uin, uid: loginResult.uid }, "快速登录成功");

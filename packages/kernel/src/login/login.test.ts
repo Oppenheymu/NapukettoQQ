@@ -134,3 +134,74 @@ describe("QrLoginSession 超时与手动刷新", () => {
         }
     });
 });
+
+describe("QrLoginSession quickUin 挂起兜底（T3 软重登挂起）", () => {
+    it("quickLoginWithUin 永不 settle → 超时定时器兜底 failed；迟到结果不复活会话", async () => {
+        vi.useFakeTimers();
+        try {
+            let settle!: (v: { result: string; loginErrorInfo: { errMsg: string } }) => void;
+            const svc = createFakeLoginService({
+                quickLoginWithUin: vi.fn(
+                    () =>
+                        new Promise<{ result: string; loginErrorInfo: { errMsg: string } }>(
+                            (resolve) => {
+                                settle = resolve;
+                            },
+                        ),
+                ),
+            });
+            const session = new QrLoginSession(svc);
+            let state: string | null = null;
+            session.onStateChange((s) => (state = s));
+
+            session.start({ quickUin: "123456" });
+            // 挂起期间：无状态推进、不出码（此前挂起时兜底计时根本不启动）
+            expect(state).toBeNull();
+            expect(svc.getQRCodePicture).not.toHaveBeenCalled();
+
+            vi.advanceTimersByTime(QR_LOGIN_TIMEOUT_MS);
+            expect(state).toBe("failed");
+            expect(session.failureReason).toBe(QR_LOGIN_TIMEOUT_MESSAGE);
+
+            // 悬挂 promise 迟到的失败结果不得复活会话（failed 后不再 refresh）
+            settle({ result: "0", loginErrorInfo: { errMsg: "无登录凭据" } });
+            await Promise.resolve();
+            await Promise.resolve();
+            expect(state).toBe("failed");
+            expect(svc.getQRCodePicture).not.toHaveBeenCalled();
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it("quickLoginWithUin 快速失败（errMsg）→ 维持 refresh 回退并重启计时", async () => {
+        vi.useFakeTimers();
+        try {
+            const svc = createFakeLoginService({
+                quickLoginWithUin: vi.fn(async () => ({
+                    result: "0",
+                    loginErrorInfo: { errMsg: "无登录凭据" },
+                })),
+            });
+            const session = new QrLoginSession(svc);
+            let state: string | null = null;
+            session.onStateChange((s) => (state = s));
+
+            session.start({ quickUin: "123456" });
+            // 假定时器只劫持宏任务，微任务链（async fn → .then → refresh）需手动 flush
+            await Promise.resolve();
+            await Promise.resolve();
+            await Promise.resolve();
+            expect(svc.getQRCodePicture).toHaveBeenCalledTimes(1);
+            expect(state).toBe("waiting_scan");
+
+            // refresh 已重启计时：距 start 120s 时不超时，距 refresh 120s 才超时
+            vi.advanceTimersByTime(QR_LOGIN_TIMEOUT_MS - 1);
+            expect(state).toBe("waiting_scan");
+            vi.advanceTimersByTime(1);
+            expect(state).toBe("failed");
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+});

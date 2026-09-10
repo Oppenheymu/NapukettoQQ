@@ -4,7 +4,7 @@
  * 登录生命周期（lifecycle / login-connect）+ 扫码登录器（login）。
  * wait.ts 为域内私有工具，不对外暴露。
  */
-export type { LoginAccountInfo, LoginResult } from "./lifecycle.js";
+export type { LoginAccountInfo, LoginResult, QuickLoginOptions } from "./lifecycle.js";
 export {
     initAndStartSession,
     listLoginAccounts,

@@ -110,7 +110,10 @@
             }
         },
         {
-            "includes": ["packages/kernel/src/login/login.test.ts"],
+            "includes": [
+                "packages/kernel/src/login/login.test.ts",
+                "packages/kernel/src/login/login-connect.test.ts"
+            ],
             "linter": {
                 "rules": {
                     "style": {

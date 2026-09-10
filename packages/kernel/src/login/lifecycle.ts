@@ -26,7 +26,7 @@ import { DependsAdapter, DispatcherAdapter } from "../wrapper/wrapper-adapters.j
 import type { WrapperContext } from "../wrapper/wrapper-loader.js";
 import { waitFor } from "./wait.js";
 
-export type { LoginAccountInfo, LoginResult } from "./login-connect.js";
+export type { LoginAccountInfo, LoginResult, QuickLoginOptions } from "./login-connect.js";
 export { listLoginAccounts, quickLogin, waitForNetworkConnection } from "./login-connect.js";
 
 /** session init 默认超时（毫秒）。 */
