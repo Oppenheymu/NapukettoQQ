@@ -20,7 +20,7 @@ import { spawn } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import process from "node:process";
-import { cancel, confirm, intro, isCancel, log, outro, spinner, text } from "@clack/prompts";
+import { cancel, confirm, intro, log, outro, spinner, text } from "@clack/prompts";
 import pc from "picocolors";
 import type { PackageManager, ScaffoldResult } from "./scaffold.js";
 import {
@@ -141,7 +141,10 @@ async function askProjectName(yes: boolean): Promise<string> {
             }
         },
     });
-    if (isCancel(name)) {
+    // 不用 isCancel：@clack/prompts 1.8 起类型守卫收窄为 `value is typeof CANCEL_SYMBOL`
+    // （unique symbol），无法把 `string | symbol` 里的 symbol 排除掉，收窄失效。
+    // 这里按运行期类型判定，语义等价且不依赖上游类型细节。
+    if (typeof name !== "string") {
         cancel("操作已取消");
         process.exit(0);
     }
@@ -191,7 +194,7 @@ async function confirmRemove(dirName: string): Promise<boolean> {
         message: `目录 "${dirName}" 已存在且非空，移除现有文件并继续？`,
         initialValue: false,
     });
-    if (isCancel(ok)) {
+    if (typeof ok !== "boolean") {
         cancel("操作已取消");
         process.exit(0);
     }
